@@ -249,23 +249,28 @@ app.post("/api/vendors/apply",async(req,res)=>{
   if(!/^\d{4,5}$/.test(pin))return res.status(400).json({error:"Vendor PIN must be exactly 4 or 5 digits."});
   if(pin!==confirm)return res.status(400).json({error:"PINs do not match."});
   const variants=phoneVariants(b.whatsapp);
-  const exists=db.prepare(`SELECT id,status FROM vendors WHERE whatsapp IN (${variants.map(()=>"?").join(",")}) AND status!='REJECTED' LIMIT 1`).get(...variants);
-  if(exists)return res.status(409).json({error:`A vendor application already exists for this number (${exists.status}). If this is your application, wait for Admin approval or ask Admin to reset/reopen it.`});
-  const code=String(crypto.randomInt(100000,1000000)),otpHash=hashSecret(code),expires=Date.now()+10*60*1000;
+  const exists=db.prepare(`SELECT id,status FROM vendors WHERE whatsapp IN (${variants.map(()=>"?").join(",")}) ORDER BY id DESC LIMIT 1`).get(...variants);
+  if(exists && exists.status==='APPROVED')return res.status(409).json({error:"This WhatsApp number already has an approved vendor account. Use Vendor Login instead."});
+  if(exists && exists.status==='SUSPENDED')return res.status(409).json({error:"This vendor account is suspended. Contact BASSE ONLINE SHOP Admin."});
+  let vendorId;
   try{
-    const x=db.prepare("INSERT INTO vendors(full_name,business_name,whatsapp,location,category,description,password_hash,status,email,email_verified,otp_hash,otp_expires_at,otp_attempts) VALUES(?,?,?,?,?,?,?,'PENDING',?,0,?,?,0)").run(String(b.fullName).trim(),String(b.businessName).trim(),"220"+phone,String(b.location||""),String(b.category||""),String(b.description||""),hashSecret(pin),email || null,email ? otpHash : null,email ? expires : null);
-    let verificationRequired=false, message="Application submitted successfully. Your PIN has been saved securely and your application is waiting for Admin approval.";
-    if(email){
-      try{await sendVendorOtp(email,code);verificationRequired=true;message="Application submitted. A verification code was sent to your email. Email verification is optional for Admin approval.";}
-      catch(mailErr){message="Application submitted successfully, but the verification email could not be sent. Admin can still approve your vendor account.";}
+    if(exists && exists.status==='PENDING'){
+      // Re-submit the pending application: update its details and, importantly, save the new PIN.
+      db.prepare("UPDATE vendors SET full_name=?,business_name=?,whatsapp=?,location=?,category=?,description=?,password_hash=?,email=?,email_verified=1,otp_hash=NULL,otp_expires_at=NULL,otp_attempts=0,status='PENDING' WHERE id=?")
+        .run(String(b.fullName).trim(),String(b.businessName).trim(),"220"+phone,String(b.location||""),String(b.category||""),String(b.description||""),hashSecret(pin),email||null,exists.id);
+      vendorId=exists.id;
+    }else{
+      const x=db.prepare("INSERT INTO vendors(full_name,business_name,whatsapp,location,category,description,password_hash,status,email,email_verified,otp_hash,otp_expires_at,otp_attempts) VALUES(?,?,?,?,?,?,?,'PENDING',?,1,NULL,NULL,0)").run(String(b.fullName).trim(),String(b.businessName).trim(),"220"+phone,String(b.location||""),String(b.category||""),String(b.description||""),hashSecret(pin),email || null);
+      vendorId=Number(x.lastInsertRowid);
     }
-    broadcastLive("vendors",{vendorId:Number(x.lastInsertRowid)});
+    const message=exists ? "Application updated successfully. Your PIN has been saved securely and the application is waiting for Admin approval." : "Application submitted successfully. Your PIN has been saved securely and the application is waiting for Admin approval.";
+    broadcastLive("vendors",{vendorId:Number(vendorId)});
     const waText=[
       "BASSE ONLINE SHOP – VENDOR APPLICATION",
       "",
       `Hello, I have applied to become a vendor/member on BASSE ONLINE SHOP.`,
       "",
-      `Application ID: ${Number(x.lastInsertRowid)}`,
+      `Application ID: ${Number(vendorId)}`,
       `Owner Name: ${String(b.fullName).trim()}`,
       `Business/Shop: ${String(b.businessName).trim()}`,
       `WhatsApp Number: +220 ${phone}`,
@@ -277,7 +282,7 @@ app.post("/api/vendors/apply",async(req,res)=>{
       "Please review my application and approve my vendor account. Thank you."
     ].join("\n");
     const whatsappUrl=`https://wa.me/${SHOP_WHATSAPP}?text=${encodeURIComponent(waText)}`;
-    res.json({ok:true,id:x.lastInsertRowid,verificationRequired,email,message,whatsappUrl});
+    res.json({ok:true,id:Number(vendorId),verificationRequired:false,email,message,whatsappUrl});
   }catch(e){res.status(500).json({error:"Unable to create vendor account."})}
 });
 app.post("/api/vendors/verify-email",(req,res)=>{

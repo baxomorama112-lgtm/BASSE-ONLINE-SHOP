@@ -1,7 +1,8 @@
-let category="All",selected=null,searchTimer=null,searchIndex=[];
+let category="All",selected=null,searchTimer=null,searchIndex=[],productCache=new Map();
 const $=id=>document.getElementById(id),money=n=>"D"+Number(n||0).toLocaleString();
 
 function renderProductGrid(ps, silent=false){
+  productCache=new Map(ps.map(p=>[String(p.id),p]));
   const grid=$("grid");
   const ids=ps.map(p=>String(p.id));
   const existing=[...grid.querySelectorAll(".product")];
@@ -42,41 +43,51 @@ function runSearch(){clearTimeout(searchTimer);searchTimer=setTimeout(loadProduc
 function clearSearch(){$("search").value="";$('searchSuggestions').classList.remove("show");loadProducts();$('search').focus()}
 function setCat(c,b){category=c;document.querySelectorAll(".cats button").forEach(x=>x.classList.remove("active"));b.classList.add("active");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"smooth",block:"start"})}
 
-async function buy(id){
-  try{
-    let r=await fetch("/api/products/"+id,{cache:"no-store"});
-    selected=await r.json();
-    if(!r.ok)throw new Error(selected.error||"Product unavailable");
-    let imgs=[];
-    try{imgs=JSON.parse(selected.images||"[]")}catch(e){}
-    if(!Array.isArray(imgs))imgs=[];
-    if(selected.image&&!imgs.includes(selected.image))imgs.unshift(selected.image);
-    if(!imgs.length)imgs=[""];
-
-    const thumbs=imgs.length>1?`<div class="thumbs" aria-label="Product photos">${imgs.map((im,i)=>`<button type="button" class="${i===0?'active':''}" onclick="pickImage(${i})" aria-label="View photo ${i+1}"><img src="${im}" alt=""></button>`).join("")}</div>`:"";
-    $("modal").innerHTML=`<div class="sheet product-sheet product-sheet-modern">
-      <button class="close modern-close" onclick="closeModal()" aria-label="Close">×</button>
-      <div class="product-detail">
-        <div class="gallery">
-          <div class="main-photo-wrap"><img id="mainProductImage" src="${imgs[0]}" alt="${esc(selected.name)}"></div>
-          ${thumbs}
-        </div>
-        <div class="detail-info modern-detail-info">
-          <span class="tagline">${esc(selected.category)}</span>
-          <h2>${esc(selected.name)}</h2>
-          <div class="detail-price">${money(selected.price)}</div>
-          <p class="muted">${esc(selected.description||"Quality product from BASSE MARKET.")}</p>
-          <div class="stock-note ${selected.stock<1?'out':''}">${selected.stock>0?`✓ ${selected.stock} available`:"Out of stock"}</div>
-          <div class="detail-actions">
-            <button class="pay buy-now-modern" ${selected.stock<1?"disabled":""} onclick="openCheckout()"><span>🛒</span><b>BUY NOW</b><span class="arrow">→</span></button>
-          </div>
-          <div class="product-hint">Secure checkout · Pay with Waychit</div>
-        </div>
+function renderProductDetail(){
+  let imgs=[];
+  try{imgs=JSON.parse(selected.images||"[]")}catch(e){}
+  if(!Array.isArray(imgs))imgs=[];
+  if(selected.image&&!imgs.includes(selected.image))imgs.unshift(selected.image);
+  if(!imgs.length)imgs=[""];
+  const thumbs=imgs.length>1?`<div class="thumbs" aria-label="Product photos">${imgs.map((im,i)=>`<button type="button" class="${i===0?'active':''}" onclick="pickImage(${i})" aria-label="View photo ${i+1}"><img src="${im}" alt=""></button>`).join("")}</div>`:"";
+  $("modal").innerHTML=`<div class="sheet product-sheet product-sheet-modern">
+    <button class="close modern-close" onclick="closeModal()" aria-label="Close">×</button>
+    <div class="product-detail">
+      <div class="gallery">
+        <div class="main-photo-wrap"><img id="mainProductImage" src="${imgs[0]}" alt="${esc(selected.name)}"></div>
+        ${thumbs}
       </div>
-    </div>`;
-    window.__productImages=imgs;
-    $("modal").classList.add("show");
-  }catch(e){toast(e.message)}
+      <div class="detail-info modern-detail-info">
+        <span class="tagline">${esc(selected.category)}</span>
+        <h2>${esc(selected.name)}</h2>
+        <div class="detail-price">${money(selected.price)}</div>
+        <p class="muted">${esc(selected.description||"Quality product from BASSE MARKET.")}</p>
+        <div class="stock-note ${selected.stock<1?'out':''}">${selected.stock>0?`✓ ${selected.stock} available`:"Out of stock"}</div>
+        <div class="detail-actions">
+          <button class="pay buy-now-modern" ${selected.stock<1?"disabled":""} onclick="openCheckout()"><span>🛒</span><b>BUY NOW</b><span class="arrow">→</span></button>
+        </div>
+        <div class="product-hint">Secure checkout · Pay with Waychit</div>
+      </div>
+    </div>
+  </div>`;
+  window.__productImages=imgs;
+  $("modal").classList.add("show");
+}
+function buy(id){
+  const cached=productCache.get(String(id));
+  if(cached){
+    // Open immediately from the product already loaded on the page. No second click and no extra request.
+    selected=cached;
+    renderProductDetail();
+    // Refresh details silently in case stock/images changed since the catalog was loaded.
+    fetch("/api/products/"+id,{cache:"no-store"}).then(r=>r.ok?r.json():null).then(p=>{if(p){productCache.set(String(id),p);if(selected&&String(selected.id)===String(id))selected=p;}}).catch(()=>{});
+    return;
+  }
+  fetch("/api/products/"+id,{cache:"no-store"}).then(async r=>{
+    const p=await r.json();
+    if(!r.ok)throw new Error(p.error||"Product unavailable");
+    productCache.set(String(id),p);selected=p;renderProductDetail();
+  }).catch(e=>toast(e.message));
 }
 function pickImage(i){let im=window.__productImages?.[i];if(im){$("mainProductImage").src=im;document.querySelectorAll(".thumbs button").forEach((b,n)=>b.classList.toggle("active",n===i))}}
 function openCheckout(){
@@ -91,20 +102,43 @@ async function placeOrder(){
   let q=Math.max(1,Math.min(selected.stock,+$("qty").value||1)),phone=$("phone").value.replace(/\D/g,"").replace(/^220/,"");
   if(!$('name').value.trim())return toast("Please enter your full name.");
   if(phone.length<6)return toast("Please enter a valid WhatsApp number.");
-  let btn=document.querySelector('.pay');if(btn){btn.disabled=true;btn.innerHTML="⏳ CONNECTING TO WAYCHIT…"}
+
+  // Open a payment tab immediately from the user's tap, before the server request.
+  // This prevents the user from waiting on the Waychit API before seeing the payment page.
+  let paymentTab=null;
+  try{ paymentTab=window.open("about:blank","bassePayment","noopener"); }catch{}
+
+  let btn=document.querySelector('.pay');
+  if(btn){btn.disabled=true;btn.innerHTML="⏳ PREPARING PAYMENT…"}
+
   try{
-    let r=await fetch("/api/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({productId:selected.id,quantity:q,name:$('name').value.trim(),whatsapp:phone,location:$('loc').value})});
+    let r=await fetch("/api/orders",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({productId:selected.id,quantity:q,name:$('name').value.trim(),whatsapp:phone,location:$('loc').value})
+    });
     let d=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(d.error||"Could not create your order.");
+
     localStorage.setItem("basseLastOrder",JSON.stringify(d.order));
     if(d.paymentUrl){
       localStorage.setItem("bassePaymentMode",d.paymentMode||"dynamic");
-      if(d.paymentMode==="fallback") toast("Opening Waychit checkout…");
-      setTimeout(()=>window.location.href=d.paymentUrl,120);
+      if(paymentTab && !paymentTab.closed){
+        paymentTab.location.replace(d.paymentUrl);
+        try{paymentTab.focus()}catch{}
+      }else{
+        // Popup blockers: fall back to the current tab.
+        window.location.href=d.paymentUrl;
+      }
       return;
     }
+    if(paymentTab && !paymentTab.closed)paymentTab.close();
     throw new Error(d.paymentError||"Waychit payment could not be started.");
-  }catch(e){if(btn){btn.disabled=false;btn.innerHTML="💳 PAY WITH WAYCHIT <span>→</span>"}showReturn({id:"",total:selected.price*q,whatsappSupport:""},"",false,"",e.message||"Payment could not be started.")}
+  }catch(e){
+    if(paymentTab && !paymentTab.closed)paymentTab.close();
+    if(btn){btn.disabled=false;btn.innerHTML="💳 PAY WITH WAYCHIT <span>→</span>"}
+    showReturn({id:"",total:selected.price*q,whatsappSupport:""},"",false,"",e.message||"Payment could not be started.")
+  }
 }
 function receiptMessage(o){return `Hello BASSE ONLINE SHOP 👋\n\nI have paid for my order.\n\nOrder: ${o.id}\nProduct: ${o.product_name} × ${o.quantity}\nTotal: ${money(o.total)}\nLocation: ${o.location}\nCustomer WhatsApp: +${o.whatsapp}\nPayment: PAID\n\nPlease confirm my order. Thank you.`}
 function showReturn(o,msg,paid,adminWhatsApp,note=""){

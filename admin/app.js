@@ -1,8 +1,28 @@
 let token=localStorage.getItem("basseAdminToken")||"";
 const H=()=>({Authorization:"Bearer "+token}),$=id=>document.getElementById(id),money=n=>"D"+Number(n||0).toLocaleString();
 async function login(){try{let r=await fetch("/api/admin/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:$("email").value,password:$("password").value})}),d=await r.json();if(!r.ok)throw new Error(d.error||"Invalid login");token=d.token;localStorage.setItem("basseAdminToken",token);start()}catch(e){notify(e.message,true)}}
-function start(){$("login").classList.add("hidden");$("app").classList.remove("hidden");refresh();clearInterval(window.__refresh);window.__refresh=setInterval(refresh,5000);connectLive()}
-function connectLive(){try{const es=new EventSource("/api/live");es.addEventListener("refresh",()=>refresh());es.addEventListener("catalog",()=>refresh());es.addEventListener("orders",()=>refresh());es.addEventListener("vendors",()=>refresh());es.onerror=()=>{es.close();setTimeout(connectLive,3000)}}catch{setTimeout(connectLive,3000)}}
+function start(){$("login").classList.add("hidden");$("app").classList.remove("hidden");refresh();clearInterval(window.__refresh);window.__refresh=null;connectLive()}
+function connectLive(){
+  try{
+    const es=new EventSource("/api/live");
+    window.__adminLive=es;
+    es.addEventListener("refresh",()=>refresh());
+    es.addEventListener("catalog",()=>refresh());
+    es.addEventListener("orders",()=>refresh());
+    es.addEventListener("vendors",()=>refresh());
+    es.onopen=()=>{window.__adminLiveConnected=true;clearInterval(window.__adminFallback);window.__adminFallback=null};
+    es.onerror=()=>{
+      window.__adminLiveConnected=false;
+      es.close();
+      clearTimeout(window.__adminReconnect);
+      window.__adminReconnect=setTimeout(connectLive,5000);
+      if(!window.__adminFallback) window.__adminFallback=setInterval(()=>{if(document.visibilityState==="visible")refresh()},30000);
+    };
+  }catch{
+    if(!window.__adminFallback) window.__adminFallback=setInterval(()=>{if(document.visibilityState==="visible")refresh()},30000);
+    setTimeout(connectLive,5000);
+  }
+}
 function logout(){localStorage.removeItem("basseAdminToken");location.reload()}
 function show(id,btn){["dashboard","products","orders","vendors"].forEach(x=>$(x).classList.add("hidden"));$(id).classList.remove("hidden");$("title").textContent=id[0].toUpperCase()+id.slice(1);document.querySelectorAll(".nav").forEach(x=>x.classList.remove("active"));if(btn)btn.classList.add("active");refresh()}
 async function api(url,opt={}){let r=await fetch(url,{...opt,headers:{...H(),...(opt.headers||{})}});let d=await r.json().catch(()=>({}));if(r.status===401){logout();throw new Error("Admin session expired.")}if(!r.ok)throw new Error(d.error||"Request failed");return d}
