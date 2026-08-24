@@ -17,8 +17,16 @@ let token=localStorage.getItem("basseVendorToken")||"";const $=x=>document.getEl
    const r=await fetch("/api/vendors/apply",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
    const d=await r.json().catch(()=>({}));
    if(!r.ok)throw Error(d.error||"Unable to submit application.");
-   showVendorOtp(d.email||String(f.get("email")||"").trim().toLowerCase());
+   showApplicationSubmitted(d);
   }catch(err){alert(err.message)}
+ }
+ function showApplicationSubmitted(d){
+   const url=d.whatsappUrl||"";
+   $("form").innerHTML=`<div class="success-box"><div class="success-icon">✓</div><h2>Application Submitted</h2><p>Your vendor application has been saved successfully. Your PIN is saved securely on the server.</p><p>We will now open WhatsApp with your application details so you can send the application to BASSE ONLINE SHOP Admin.</p><button id="openVendorWhatsApp" ${url?"":"disabled"}>OPEN WHATSAPP</button><button class="secondary" type="button" onclick="closeModal()">DONE</button></div>`;
+   if(url){
+     $("openVendorWhatsApp").onclick=()=>{ window.location.href=url; };
+     setTimeout(()=>{ try{window.location.href=url;}catch(e){} },500);
+   }
  }
  function showVendorOtp(email){
    $("form").innerHTML=`<div class="success-box"><div class="success-icon">✉️</div><h2>Check your email</h2><p>We sent a 6-digit verification code to <b>${esc(email)}</b>.</p><input id="vendorOtp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code" style="width:100%;padding:14px;margin:12px 0;border:1px solid #d8deea;border-radius:12px"><button id="verifyVendorOtp">VERIFY EMAIL</button><button class="secondary" id="resendVendorOtp" type="button">RESEND CODE</button><p id="otpStatus" class="form-note">Code expires in 10 minutes.</p></div>`;

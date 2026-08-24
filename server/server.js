@@ -248,7 +248,24 @@ app.post("/api/vendors/apply",async(req,res)=>{
       catch(mailErr){message="Application submitted successfully, but the verification email could not be sent. Admin can still approve your vendor account.";}
     }
     broadcastLive("vendors",{vendorId:Number(x.lastInsertRowid)});
-    res.json({ok:true,id:x.lastInsertRowid,verificationRequired,email,message});
+    const waText=[
+      "BASSE ONLINE SHOP – VENDOR APPLICATION",
+      "",
+      `Hello, I have applied to become a vendor/member on BASSE ONLINE SHOP.`,
+      "",
+      `Application ID: ${Number(x.lastInsertRowid)}`,
+      `Owner Name: ${String(b.fullName).trim()}`,
+      `Business/Shop: ${String(b.businessName).trim()}`,
+      `WhatsApp Number: +220 ${phone}`,
+      `Email: ${email || "Not provided"}`,
+      `Category: ${String(b.category||"").trim() || "Not provided"}`,
+      `Location: ${String(b.location||"").trim() || "Not provided"}`,
+      `Description: ${String(b.description||"").trim() || "Not provided"}`,
+      "",
+      "Please review my application and approve my vendor account. Thank you."
+    ].join("\n");
+    const whatsappUrl=`https://wa.me/${SHOP_WHATSAPP}?text=${encodeURIComponent(waText)}`;
+    res.json({ok:true,id:x.lastInsertRowid,verificationRequired,email,message,whatsappUrl});
   }catch(e){res.status(500).json({error:"Unable to create vendor account."})}
 });
 app.post("/api/vendors/verify-email",(req,res)=>{
