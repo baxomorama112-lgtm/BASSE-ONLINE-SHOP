@@ -173,7 +173,15 @@ async function sendVerificationEmail(to,code,businessName){
       html:`<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:24px"><h2>BASSE MARKET</h2><p>Verify the email for <b>${String(businessName||"your shop").replace(/[<>&"]/g,"")}</b>.</p><div style="font-size:32px;font-weight:800;letter-spacing:8px;padding:18px;background:#f3f6fb;text-align:center">${code}</div><p>This code expires in 10 minutes.</p><p>If you did not apply to become a vendor, you can ignore this email.</p></div>`
     })
   });
-  if(!r.ok) return {sent:false,reason:await r.text()};
+  if(!r.ok){
+    const raw=await r.text();
+    let detail=raw;
+    try{detail=JSON.parse(raw)}catch(e){}
+    if(r.status===403 && String(raw).includes('can only send testing emails to your own email address')){
+      return {sent:false,reason:'Resend test mode only allows email to the Resend account owner. Verify a sending domain in Resend, then set RESEND_FROM_EMAIL to an address on that verified domain.'};
+    }
+    return {sent:false,reason:typeof detail==='string'?detail:JSON.stringify(detail)};
+  }
   return {sent:true};
 }
 function hashPin(pin){return crypto.createHash("sha256").update(String(pin)).digest("hex")}

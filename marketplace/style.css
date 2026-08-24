@@ -192,3 +192,17 @@ button,a{transition:transform .16s ease,box-shadow .16s ease,opacity .16s ease}b
 
 .vendor-pending-sheet .pay{margin-top:10px}
 .pending-box{display:flex;align-items:center;justify-content:space-between;gap:12px}
+
+/* Mobile stability: prevent iOS input zoom and modal/layout jumping. */
+html{width:100%;overflow-x:hidden;-webkit-text-size-adjust:100%;text-size-adjust:100%;}
+body{width:100%;min-width:0;overflow-x:hidden;overscroll-behavior-x:none;}
+input,select,textarea,button{font-family:inherit;}
+input,select,textarea{font-size:16px;}
+.modal{overscroll-behavior:contain;touch-action:pan-y;}
+.sheet{overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
+@media(max-width:720px){
+  .modal{padding:10px 10px calc(10px + env(safe-area-inset-bottom));align-items:flex-end;}
+  .sheet{width:100%;max-width:600px;max-height:calc(100dvh - 20px);padding:20px 16px;overflow-y:auto;}
+  .form input,.form select,.form textarea,.vendor-login-sheet input{font-size:16px;line-height:1.25;}
+  .close{width:42px;height:42px;font-size:24px;}
+}

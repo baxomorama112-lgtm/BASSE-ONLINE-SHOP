@@ -188,7 +188,7 @@ function showVendorVerification(id,phone,pin,email,businessName,emailSent,emailN
     <h2>Verify Your Email</h2>
     <p class="muted">We sent a 6-digit code to <b>${esc(email)}</b>. The code expires in 10 minutes.</p>
     ${emailSent?`<div class="form"><label>Verification Code</label><input id="vendorVerifyCode" inputmode="numeric" maxlength="6" placeholder="6-digit code"><button class="pay" type="button" id="verifyVendorEmail">VERIFY EMAIL</button><button class="secondary-btn" type="button" id="resendVendorEmail">RESEND CODE</button></div>`:
-    `<div class="pending-box"><strong>Email not sent</strong><span>Server setup required</span></div><p class="muted">${esc(emailNotice||"Email service is not configured.")}</p><button class="secondary-btn" type="button" id="resendVendorEmail">TRY AGAIN</button>`}
+    `<div class="pending-box"><strong>Email not sent</strong><span>Resend setup</span></div><p class="muted">${esc(emailNotice||"Email could not be sent yet.")}</p><p class="muted">You can still contact Admin on WhatsApp. Once the email sending domain is verified, use TRY AGAIN to resend the code.</p><button class="secondary-btn" type="button" id="resendVendorEmail">TRY AGAIN</button>`}
   </div>`;
   $("modal").classList.add("show");
   $("resendVendorEmail").onclick=async()=>{
