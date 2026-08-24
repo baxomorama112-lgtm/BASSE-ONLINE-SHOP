@@ -159,17 +159,28 @@ app.get("/api/vendor/products",vendorGuard,(req,res)=>res.json(db.prepare("SELEC
 // Vendor applications: public application, admin approval, isolated vendor data
 app.post("/api/vendors/apply",(req,res)=>{
   const b=req.body||{};
+  const pin=String(b.password||"");
   if(!String(b.fullName||"").trim()||!String(b.businessName||"").trim()||String(b.whatsapp||"").replace(/\D/g,"").length<6)return res.status(400).json({error:"Please complete your name, business name and WhatsApp number."});
+  if(!/^\d{4,5}$/.test(pin))return res.status(400).json({error:"Vendor PIN must be exactly 4 or 5 digits."});
   const phone=String(b.whatsapp).replace(/\D/g,"").replace(/^220/,"");
   const exists=db.prepare("SELECT id FROM vendors WHERE whatsapp=? AND status!='REJECTED'").get("220"+phone);
   if(exists)return res.status(409).json({error:"A vendor application already exists for this number."});
-  const x=db.prepare("INSERT INTO vendors(full_name,business_name,whatsapp,location,category,description,password_hash) VALUES(?,?,?,?,?,?,?)").run(String(b.fullName).trim(),String(b.businessName).trim(),"220"+phone,String(b.location||""),String(b.category||""),String(b.description||""),crypto.createHash("sha256").update(String(b.password||"")).digest("hex"));
+  const x=db.prepare("INSERT INTO vendors(full_name,business_name,whatsapp,location,category,description,password_hash) VALUES(?,?,?,?,?,?,?)").run(String(b.fullName).trim(),String(b.businessName).trim(),"220"+phone,String(b.location||""),String(b.category||""),String(b.description||""),crypto.createHash("sha256").update(pin).digest("hex"));
   broadcastLive("vendors",{vendorId:Number(x.lastInsertRowid)});res.json({ok:true,id:x.lastInsertRowid,message:"Application submitted. Wait for admin approval."});
 });
 app.get("/api/admin/vendors",guard,(req,res)=>res.json(db.prepare("SELECT * FROM vendors ORDER BY datetime(created_at) DESC").all()));
 app.post("/api/admin/vendors/:id/approve",guard,(req,res)=>{db.prepare("UPDATE vendors SET status='APPROVED' WHERE id=?").run(req.params.id);broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true})});
 app.post("/api/admin/vendors/:id/reject",guard,(req,res)=>{db.prepare("UPDATE vendors SET status='REJECTED' WHERE id=?").run(req.params.id);broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true})});
 app.post("/api/admin/vendors/:id/suspend",guard,(req,res)=>{db.prepare("UPDATE vendors SET status='SUSPENDED' WHERE id=?").run(req.params.id);broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true})});
+app.post("/api/admin/vendors/:id/reset-pin",guard,(req,res)=>{
+  const pin=String(req.body?.pin||"");
+  if(!/^\d{4,5}$/.test(pin))return res.status(400).json({error:"PIN must be exactly 4 or 5 digits."});
+  const v=db.prepare("SELECT id FROM vendors WHERE id=?").get(req.params.id);
+  if(!v)return res.status(404).json({error:"Vendor not found"});
+  db.prepare("UPDATE vendors SET password_hash=? WHERE id=?").run(crypto.createHash("sha256").update(pin).digest("hex"),req.params.id);
+  broadcastLive("vendors",{vendorId:Number(req.params.id),pinReset:true});
+  res.json({ok:true});
+});
 app.get("/api/vendor/:id/products",(req,res)=>{let v=db.prepare("SELECT id FROM vendors WHERE id=? AND status='APPROVED'").get(req.params.id);if(!v)return res.status(403).json({error:"Vendor not approved"});res.json(db.prepare("SELECT * FROM products WHERE vendor_id=? ORDER BY id DESC").all(v.id))});
 app.post("/api/admin/products/:id/approve",guard,(req,res)=>{db.prepare("UPDATE products SET active=1 WHERE id=?").run(req.params.id);db.prepare("UPDATE vendor_products SET status='APPROVED' WHERE product_id=?").run(req.params.id);broadcastLive("catalog",{productId:Number(req.params.id)});res.json({ok:true})});
 app.post("/api/admin/products/:id/reject",guard,(req,res)=>{db.prepare("UPDATE products SET active=0 WHERE id=?").run(req.params.id);db.prepare("UPDATE vendor_products SET status='REJECTED' WHERE product_id=?").run(req.params.id);broadcastLive("catalog",{productId:Number(req.params.id)});res.json({ok:true})});
