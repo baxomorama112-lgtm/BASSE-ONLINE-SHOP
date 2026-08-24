@@ -4,16 +4,16 @@
 <header class="top">
 <a class="brand" href="#"><span class="mark">B</span><span><b>BASSE</b><small>ONLINE SHOP</small></span></a>
 <div class="search-wrap"><div class="search"><input id="search" autocomplete="off" placeholder="Search products, phones, fashion, beauty..." aria-label="Search products"><button id="searchBtn" type="button" aria-label="Search">⌕</button><button id="clearSearch" class="clear-search" type="button" aria-label="Clear search">×</button></div><div id="searchSuggestions" class="search-suggestions"></div></div>
-<a class="support" href="https://wa.me/2208780003" target="_blank">💬 Support</a><button class="cart" onclick="openCart()">🛒<i id="cartCount">0</i></button>
+<button class="account-top" onclick="openAccount()">👤</button><a class="support" href="https://wa.me/2206963349" target="_blank">💬 Support</a><button class="cart" onclick="openCart()">🛒<i id="cartCount">0</i></button>
 </header>
 <main>
 <section class="hero"><div><label>BASSE MARKET • BASSE & SURROUNDING AREAS</label><h1>Stay home.<br><em>Make order.</em></h1><p>Shop fashion, phones, electronics, beauty, home & living and accessories from one trusted marketplace.</p><button onclick="document.querySelector('#products').scrollIntoView({behavior:'smooth'})">SHOP NOW <b>→</b></button></div><div class="hero-art"><div>🛍️</div><b>SHOP LOCAL</b><span>Fast. Simple. Trusted.</span></div></section>
-<section class="categories"><div class="section-title"><h2>Shop by category</h2><span>Explore what you need</span></div><div class="cats">
+<section id="categories" class="categories"><div class="section-title"><h2>Shop by category</h2><span>Explore what you need</span></div><div class="cats">
 <button class="active" onclick="setCat('All',this)">All</button><button onclick="setCat('Fashion',this)">👕 Fashion</button><button onclick="setCat('Electronics',this)">🎧 Electronics</button><button onclick="setCat('Phones',this)">📱 Phones</button><button onclick="setCat('Beauty',this)">💄 Beauty</button><button onclick="setCat('Home & Living',this)">🏠 Home & Living</button><button onclick="setCat('Accessories',this)">👜 Accessories</button>
 </div></section>
 <section id="products"><div class="section-title"><div><h2>Featured products</h2><span>Fresh products from BASSE ONLINE SHOP</span></div><small id="count"></small></div><div id="grid"></div></section>
 <section class="trust"><div>🔒<b>Secure payment</b><span>Pay with Waychit</span></div><div>💬<b>WhatsApp support</b><span>+220 8780003</span></div><div>🚚<b>Local delivery</b><span>Delivery based on location</span></div></section>
 </main>
-<nav class="bottom"><a class="active" href="#">⌂<small>Home</small></a><a href="#products">▦<small>Categories</small></a><button onclick="openCart()">🛒<small>Cart</small></button><button onclick="openOrders()">📦<small>Orders</small></button><a href="https://wa.me/2208780003" target="_blank">💬<small>Support</small></a></nav>
+<nav class="bottom"><a class="active" href="#">⌂<small>Home</small></a><a href="#categories">◉<small>Categories</small></a><button onclick="openCart()">🛒<small>Cart</small></button><a href="https://wa.me/2206963349" target="_blank">🛟<small>Support</small></a><button onclick="openAccount()">👤<small>Account</small></button></nav>
 <div id="modal" class="modal"></div><div id="toast" class="toast"></div><script src="app.js"></script>
 </body></html>
