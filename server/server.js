@@ -233,18 +233,22 @@ app.post("/api/vendors/apply",async(req,res)=>{
   const pin=String(b.password||"").trim(), confirm=String(b.confirmPin||pin).trim();
   const email=String(b.email||"").trim().toLowerCase();
   const phone=normalizePhone(b.whatsapp);
-  if(!String(b.fullName||"").trim()||!String(b.businessName||"").trim()||phone.length<6||!email)return res.status(400).json({error:"Please complete your name, business name, WhatsApp number and email."});
-  if(!/^\S+@\S+\.\S+$/.test(email))return res.status(400).json({error:"Enter a valid email address."});
+  if(!String(b.fullName||"").trim()||!String(b.businessName||"").trim()||phone.length<6)return res.status(400).json({error:"Please complete your name, business name and WhatsApp number."});
+  if(email && !/^\S+@\S+\.\S+$/.test(email))return res.status(400).json({error:"Enter a valid email address."});
   if(!/^\d{4,5}$/.test(pin))return res.status(400).json({error:"Vendor PIN must be exactly 4 or 5 digits."});
   if(pin!==confirm)return res.status(400).json({error:"PINs do not match."});
   const exists=db.prepare("SELECT id FROM vendors WHERE whatsapp=? AND status!='REJECTED'").get("220"+phone);
   if(exists)return res.status(409).json({error:"A vendor application already exists for this number."});
   const code=String(crypto.randomInt(100000,1000000)),otpHash=hashSecret(code),expires=Date.now()+10*60*1000;
   try{
-    const x=db.prepare("INSERT INTO vendors(full_name,business_name,whatsapp,location,category,description,password_hash,status,email,email_verified,otp_hash,otp_expires_at,otp_attempts) VALUES(?,?,?,?,?,?,?,'PENDING',?,0,?,?,0)").run(String(b.fullName).trim(),String(b.businessName).trim(),"220"+phone,String(b.location||""),String(b.category||""),String(b.description||""),hashSecret(pin),email,otpHash,expires);
-    try{await sendVendorOtp(email,code)}catch(mailErr){db.prepare("DELETE FROM vendors WHERE id=?").run(x.lastInsertRowid);return res.status(503).json({error:mailErr.message});}
+    const x=db.prepare("INSERT INTO vendors(full_name,business_name,whatsapp,location,category,description,password_hash,status,email,email_verified,otp_hash,otp_expires_at,otp_attempts) VALUES(?,?,?,?,?,?,?,'PENDING',?,0,?,?,0)").run(String(b.fullName).trim(),String(b.businessName).trim(),"220"+phone,String(b.location||""),String(b.category||""),String(b.description||""),hashSecret(pin),email || null,email ? otpHash : null,email ? expires : null);
+    let verificationRequired=false, message="Application submitted successfully. Your PIN has been saved securely and your application is waiting for Admin approval.";
+    if(email){
+      try{await sendVendorOtp(email,code);verificationRequired=true;message="Application submitted. A verification code was sent to your email. Email verification is optional for Admin approval.";}
+      catch(mailErr){message="Application submitted successfully, but the verification email could not be sent. Admin can still approve your vendor account.";}
+    }
     broadcastLive("vendors",{vendorId:Number(x.lastInsertRowid)});
-    res.json({ok:true,id:x.lastInsertRowid,verificationRequired:true,email,message:"Verification code sent to your email."});
+    res.json({ok:true,id:x.lastInsertRowid,verificationRequired,email,message});
   }catch(e){res.status(500).json({error:"Unable to create vendor account."})}
 });
 app.post("/api/vendors/verify-email",(req,res)=>{
@@ -269,7 +273,7 @@ app.post("/api/vendors/resend-otp",async(req,res)=>{
   catch(e){res.status(503).json({error:e.message})}
 });
 app.get("/api/admin/vendors",guard,(req,res)=>res.json(db.prepare("SELECT * FROM vendors ORDER BY datetime(created_at) DESC").all()));
-app.post("/api/admin/vendors/:id/approve",guard,(req,res)=>{const v=db.prepare("SELECT id,email,email_verified FROM vendors WHERE id=?").get(req.params.id);if(!v)return res.status(404).json({error:"Vendor not found"});if(v.email&&!v.email_verified)return res.status(400).json({error:"Vendor must verify the email address before approval."});db.prepare("UPDATE vendors SET status='APPROVED' WHERE id=?").run(req.params.id);broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true})});
+app.post("/api/admin/vendors/:id/approve",guard,(req,res)=>{const v=db.prepare("SELECT id,email,email_verified FROM vendors WHERE id=?").get(req.params.id);if(!v)return res.status(404).json({error:"Vendor not found"});db.prepare("UPDATE vendors SET status='APPROVED' WHERE id=?").run(req.params.id);broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true,message:"Vendor approved successfully. Email verification is optional."})});
 app.post("/api/admin/vendors/:id/reject",guard,(req,res)=>{db.prepare("UPDATE vendors SET status='REJECTED' WHERE id=?").run(req.params.id);broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true})});
 app.post("/api/admin/vendors/:id/suspend",guard,(req,res)=>{db.prepare("UPDATE vendors SET status='SUSPENDED' WHERE id=?").run(req.params.id);broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true})});
 app.post("/api/admin/vendors/:id/reset-pin",guard,(req,res)=>{
