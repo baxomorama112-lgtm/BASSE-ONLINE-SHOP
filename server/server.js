@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY,product_id INTEGER,product
 CREATE TABLE IF NOT EXISTS vendors(id INTEGER PRIMARY KEY AUTOINCREMENT,full_name TEXT,business_name TEXT,whatsapp TEXT,location TEXT,category TEXT,description TEXT,password_hash TEXT,status TEXT DEFAULT 'PENDING',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS vendor_products(id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER,vendor_id INTEGER,status TEXT DEFAULT 'PENDING',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS customer_accounts(id INTEGER PRIMARY KEY AUTOINCREMENT,full_name TEXT,whatsapp TEXT UNIQUE,password_hash TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS payout_requests(id INTEGER PRIMARY KEY AUTOINCREMENT,vendor_id INTEGER,amount INTEGER,status TEXT DEFAULT 'PENDING',created_at TEXT DEFAULT CURRENT_TIMESTAMP);`);
+CREATE TABLE IF NOT EXISTS payout_requests(id INTEGER PRIMARY KEY AUTOINCREMENT,vendor_id INTEGER,amount INTEGER,status TEXT DEFAULT 'PENDING',created_at TEXT DEFAULT CURRENT_TIMESTAMP);\nCREATE TABLE IF NOT EXISTS auth_sessions(token TEXT PRIMARY KEY,type TEXT NOT NULL,vendor_id INTEGER DEFAULT NULL,customer_id INTEGER DEFAULT NULL,expires_at INTEGER NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);`);
 try{db.exec("ALTER TABLE products ADD COLUMN images TEXT DEFAULT ''")}catch(e){}
 try{db.exec("ALTER TABLE products ADD COLUMN vendor_id INTEGER DEFAULT NULL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN vendor_id INTEGER DEFAULT NULL")}catch(e){}
@@ -27,7 +27,23 @@ if(!db.prepare("SELECT COUNT(*) c FROM products").get().c){let q=db.prepare("INS
 ["Leather Handbag","Accessories",1200,12,"Elegant everyday handbag.","https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=900&q=80"],
 ["Smart Watch Pro","Electronics",2200,9,"Smart everyday watch.","https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80"]].forEach(x=>q.run(...x))}
 const upload=multer({storage:multer.diskStorage({destination:path.join(DATA_DIR,"uploads"),filename:(r,f,cb)=>cb(null,crypto.randomBytes(8).toString("hex")+path.extname(f.originalname))}),limits:{fileSize:6e6}});
-const sessions=new Map();
+const sessions=new Map(); // short-lived cache; auth_sessions is the persistent source of truth
+const SESSION_DAYS=30;
+function createSession(type,fields={}){
+ const token=crypto.randomBytes(32).toString("hex"),expires=Date.now()+SESSION_DAYS*864e5;
+ db.prepare("INSERT INTO auth_sessions(token,type,vendor_id,customer_id,expires_at) VALUES(?,?,?,?,?)").run(token,type,fields.vendorId||null,fields.customerId||null,expires);
+ sessions.set(token,{expires,type,...fields}); return token;
+}
+function getSession(token){
+ if(!token)return null;
+ const cached=sessions.get(token);
+ if(cached&&cached.expires>Date.now())return cached;
+ const row=db.prepare("SELECT type,vendor_id,customer_id,expires_at FROM auth_sessions WHERE token=?").get(token);
+ if(!row||row.expires_at<=Date.now()){if(row)db.prepare("DELETE FROM auth_sessions WHERE token=?").run(token);sessions.delete(token);return null;}
+ const s={expires:row.expires_at,type:row.type,vendorId:row.vendor_id||undefined,customerId:row.customer_id||undefined};sessions.set(token,s);return s;
+}
+function deleteSession(token){if(token){sessions.delete(token);db.prepare("DELETE FROM auth_sessions WHERE token=?").run(token)}}
+db.prepare("DELETE FROM auth_sessions WHERE expires_at<=?").run(Date.now());
 // Live-update stream: browsers connected to the marketplace/admin/vendor receive an event
 // whenever products, vendors, orders or payments change. A short polling fallback remains
 // on the clients so the site still recovers automatically after a dropped connection.
@@ -44,11 +60,13 @@ app.get("/api/live",(req,res)=>{
   const heartbeat=setInterval(()=>{try{res.write(`: heartbeat ${Date.now()}\n\n`)}catch{clearInterval(heartbeat);liveClients.delete(res)}},25000);
   req.on("close",()=>{clearInterval(heartbeat);liveClients.delete(res)});
 });
-function guard(req,res,next){if(!sessions.has((req.headers.authorization||"").replace("Bearer ","")))return res.status(401).json({error:"Admin login required"});next()}
-function vendorGuard(req,res,next){let t=(req.headers.authorization||"").replace("Bearer ",""),s=sessions.get(t);if(!s||s.type!=="vendor")return res.status(401).json({error:"Vendor login required"});req.vendorId=s.vendorId;next()}
+function authToken(req){return String(req.headers.authorization||"").replace(/^Bearer\s+/i,"").trim()}
+function guard(req,res,next){const s=getSession(authToken(req));if(!s||s.type!=="admin")return res.status(401).json({error:"Admin login required"});next()}
+function vendorGuard(req,res,next){const s=getSession(authToken(req));if(!s||s.type!=="vendor")return res.status(401).json({error:"Vendor login required"});req.vendorId=s.vendorId;next()}
+function customerGuard(req,res,next){const s=getSession(authToken(req));if(!s||s.type!=="customer")return res.status(401).json({error:"Customer login required"});req.customerId=s.customerId;next()}
 app.get("/api/products",(req,res)=>{let p=db.prepare("SELECT * FROM products WHERE active=1 ORDER BY id DESC").all(),c=req.query.category||"All",q=(req.query.q||"").toLowerCase();if(c!=="All")p=p.filter(x=>x.category===c);if(q)p=p.filter(x=>(x.name+" "+x.category+" "+x.description).toLowerCase().includes(q));res.json(p)});
 app.get("/api/products/:id",(req,res)=>{let p=db.prepare("SELECT * FROM products WHERE id=? AND active=1").get(req.params.id);p?res.json(p):res.status(404).json({error:"Product not found"})});
-app.post("/api/admin/login",(req,res)=>{if(req.body.email===process.env.ADMIN_EMAIL&&req.body.password===process.env.ADMIN_PASSWORD){let t=crypto.randomBytes(32).toString("hex");sessions.set(t,{expires:Date.now()+432e5,type:"admin"});res.json({token:t})}else res.status(401).json({error:"Invalid admin login"})});
+app.post("/api/admin/login",(req,res)=>{if(req.body.email===process.env.ADMIN_EMAIL&&req.body.password===process.env.ADMIN_PASSWORD){let t=createSession("admin");res.json({token:t})}else res.status(401).json({error:"Invalid admin login"})});
 app.get("/api/admin/products",guard,(req,res)=>res.json(db.prepare("SELECT * FROM products ORDER BY id DESC").all()));
 app.post("/api/admin/products",guard,upload.array("images",8),(req,res)=>{let b=req.body,files=req.files||[],fileImgs=files.map(f=>"/uploads/"+f.filename),img=fileImgs[0]||b.imageUrl||"",imgs=JSON.stringify(fileImgs.length?fileImgs:(b.images?String(b.images).split(",").map(x=>x.trim()).filter(Boolean):[]));
 let x=db.prepare("INSERT INTO products(name,category,price,stock,description,image,images,vendor_id) VALUES(?,?,?,?,?,?,?,?)").run(b.name,b.category,+b.price,+b.stock||0,b.description||"",img,imgs,b.vendorId?+b.vendorId:null);let created=db.prepare("SELECT * FROM products WHERE id=?").get(x.lastInsertRowid);broadcastLive("catalog",{productId:created.id});res.json(created)});
@@ -132,12 +150,34 @@ app.post("/api/waychit/webhook",(req,res)=>{
 });
 
 
+app.post("/api/customer/signup",(req,res)=>{
+ const b=req.body||{},name=String(b.fullName||"").trim(),phone=String(b.whatsapp||"").replace(/\D/g,"").replace(/^220/,""),password=String(b.password||"");
+ if(!name||phone.length<6||password.length<6)return res.status(400).json({error:"Enter your name, valid WhatsApp number and a password of at least 6 characters."});
+ const hash=crypto.createHash("sha256").update(password).digest("hex");
+ try{const x=db.prepare("INSERT INTO customer_accounts(full_name,whatsapp,password_hash) VALUES(?,?,?)").run(name,"220"+phone,hash);const token=createSession("customer",{customerId:x.lastInsertRowid});res.json({token,customer:{id:x.lastInsertRowid,name,phone:"+220 "+phone}})}
+ catch(e){res.status(409).json({error:"An account already exists for this WhatsApp number."})}
+});
+app.post("/api/customer/login",(req,res)=>{
+ const phone=String(req.body.whatsapp||"").replace(/\D/g,"").replace(/^220/,""),password=String(req.body.password||"");
+ const c=db.prepare("SELECT * FROM customer_accounts WHERE whatsapp=?").get("220"+phone),hash=crypto.createHash("sha256").update(password).digest("hex");
+ if(!c||hash!==c.password_hash)return res.status(401).json({error:"Invalid WhatsApp number or password."});
+ const token=createSession("customer",{customerId:c.id});res.json({token,customer:{id:c.id,name:c.full_name,phone:"+220 "+phone}});
+});
+app.get("/api/customer/me",customerGuard,(req,res)=>{
+ const c=db.prepare("SELECT id,full_name,whatsapp,created_at FROM customer_accounts WHERE id=?").get(req.customerId);
+ c?res.json({id:c.id,name:c.full_name,phone:"+"+c.whatsapp,created_at:c.created_at}):res.status(404).json({error:"Customer account not found"});
+});
+app.post("/api/customer/logout",(req,res)=>{deleteSession(authToken(req));res.json({ok:true})});
+
 app.post("/api/vendor/login",(req,res)=>{
- const phone=String(req.body.whatsapp||"").replace(/\D/g,"").replace(/^220/,""),pin=String(req.body.pin||"");
+ const phone=String(req.body.whatsapp||req.body.phone||"").replace(/\D/g,"").replace(/^220/,""),pin=String(req.body.pin||"");
  const v=db.prepare("SELECT * FROM vendors WHERE whatsapp=? AND status='APPROVED'").get("220"+phone);
  if(!v||crypto.createHash("sha256").update(pin).digest("hex")!==v.password_hash)return res.status(401).json({error:"Invalid vendor login or account not approved."});
- const t=crypto.randomBytes(32).toString("hex");sessions.set(t,{expires:Date.now()+432e5,type:"vendor",vendorId:v.id});res.json({token:t,vendor:{id:v.id,business_name:v.business_name,full_name:v.full_name}});
+ const t=createSession("vendor",{vendorId:v.id});
+ res.json({token:t,vendor:{id:v.id,business_name:v.business_name,full_name:v.full_name}});
 });
+app.post("/api/vendor/logout",(req,res)=>{deleteSession(authToken(req));res.json({ok:true})});
+
 app.get("/api/vendor/me",vendorGuard,(req,res)=>{let v=db.prepare("SELECT id,full_name,business_name,whatsapp,location,category,status FROM vendors WHERE id=?").get(req.vendorId);res.json(v)});
 app.get("/api/vendor/orders",vendorGuard,(req,res)=>res.json(db.prepare("SELECT * FROM orders WHERE vendor_id=? ORDER BY datetime(created_at) DESC").all(req.vendorId)));
 app.get("/api/vendor/stats",vendorGuard,(req,res)=>res.json({
@@ -167,13 +207,6 @@ app.post("/api/vendors/apply",(req,res)=>{
   if(exists)return res.status(409).json({error:"A vendor application already exists for this number."});
   const x=db.prepare("INSERT INTO vendors(full_name,business_name,whatsapp,location,category,description,password_hash) VALUES(?,?,?,?,?,?,?)").run(String(b.fullName).trim(),String(b.businessName).trim(),"220"+phone,String(b.location||""),String(b.category||""),String(b.description||""),crypto.createHash("sha256").update(pin).digest("hex"));
   broadcastLive("vendors",{vendorId:Number(x.lastInsertRowid)});res.json({ok:true,id:x.lastInsertRowid,message:"Application submitted. Wait for admin approval."});
-});
-app.get("/api/vendors/status",(req,res)=>{
-  const phone=String(req.query.whatsapp||req.query.phone||"").replace(/\D/g,"").replace(/^220/,"");
-  if(phone.length<6)return res.status(400).json({error:"Enter a valid WhatsApp number"});
-  const v=db.prepare("SELECT id,status,business_name FROM vendors WHERE whatsapp=? ORDER BY id DESC LIMIT 1").get("220"+phone);
-  if(!v)return res.status(404).json({error:"No vendor application found for this number."});
-  res.json({id:v.id,status:v.status,business_name:v.business_name});
 });
 app.get("/api/admin/vendors",guard,(req,res)=>res.json(db.prepare("SELECT * FROM vendors ORDER BY datetime(created_at) DESC").all()));
 app.post("/api/admin/vendors/:id/approve",guard,(req,res)=>{db.prepare("UPDATE vendors SET status='APPROVED' WHERE id=?").run(req.params.id);broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true})});

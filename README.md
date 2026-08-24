@@ -45,3 +45,12 @@ The marketplace, admin dashboard, and vendor dashboard use a server-sent event s
 
 ## BASSE MARKET WhatsApp
 The customer-facing confirmation/support destination defaults to +220 6963349 via `BASSE_MARKET_WHATSAPP`.
+
+
+## Stability/authentication update
+- Vendor authentication is persisted in SQLite for 30 days and cleared by explicit logout or expiry.
+- Vendor login accepts both `whatsapp` and `phone` payload names; the duplicate login handler that prevented the correct token from being saved was removed.
+- Vendor dashboard no longer polls every 10 seconds; live events refresh it only when data changes.
+- Customer accounts now use server-side authentication sessions and remain signed in after closing/reopening the browser until logout/expiry.
+- Mobile viewport/touch handling was tightened to reduce accidental double-tap zoom and horizontal page movement.
+- Marketplace polling fallback is 30 seconds and only runs when the live event stream is disconnected.
