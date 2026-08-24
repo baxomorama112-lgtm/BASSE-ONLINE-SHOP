@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: basse-online-shop
+    runtime: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeployTrigger: commit
+    plan: starter
+    disk:
+      name: basse-data
+      mountPath: /opt/render/project/src/server/data
+      sizeGB: 1
+    envVars:
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: WAYCHIT_API_KEY
+        sync: false
+      - key: WAYCHIT_WEBHOOK_SECRET
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: DATA_DIR
+        value: /opt/render/project/src/server/data

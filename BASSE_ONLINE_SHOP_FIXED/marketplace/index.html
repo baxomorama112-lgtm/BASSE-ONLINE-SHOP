@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BASSE ONLINE SHOP</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<header class="top">
+<a class="brand" href="#"><span class="mark">B</span><span><b>BASSE</b><small>ONLINE SHOP</small></span></a>
+<div class="search"><input id="search" placeholder="Search phones, fashion, beauty..." oninput="loadProducts()"><button>⌕</button></div>
+<a class="support" href="https://wa.me/2208780003" target="_blank">💬 Support</a><button class="cart" onclick="openCart()">🛒<i id="cartCount">0</i></button>
+</header>
+<main>
+<section class="hero"><div><label>BASSE & SURROUNDING AREAS</label><h1>Stay home.<br><em>Make order.</em></h1><p>Shop fashion, phones, electronics, beauty, home & living and accessories from one trusted marketplace.</p><button onclick="document.querySelector('#products').scrollIntoView({behavior:'smooth'})">SHOP NOW <b>→</b></button></div><div class="hero-art"><div>🛍️</div><b>SHOP LOCAL</b><span>Fast. Simple. Trusted.</span></div></section>
+<section class="categories"><div class="section-title"><h2>Shop by category</h2><span>Explore what you need</span></div><div class="cats">
+<button class="active" onclick="setCat('All',this)">All</button><button onclick="setCat('Fashion',this)">👕 Fashion</button><button onclick="setCat('Electronics',this)">🎧 Electronics</button><button onclick="setCat('Phones',this)">📱 Phones</button><button onclick="setCat('Beauty',this)">💄 Beauty</button><button onclick="setCat('Home & Living',this)">🏠 Home & Living</button><button onclick="setCat('Accessories',this)">👜 Accessories</button>
+</div></section>
+<section id="products"><div class="section-title"><div><h2>Featured products</h2><span>Fresh products from BASSE ONLINE SHOP</span></div><small id="count"></small></div><div id="grid"></div></section>
+<section class="trust"><div>🔒<b>Secure payment</b><span>Pay with Waychit</span></div><div>💬<b>WhatsApp support</b><span>+220 8780003</span></div><div>🚚<b>Local delivery</b><span>Delivery based on location</span></div></section>
+</main>
+<nav class="bottom"><a class="active" href="#">⌂<small>Home</small></a><a href="#products">▦<small>Categories</small></a><button onclick="openCart()">🛒<small>Cart</small></button><a href="#orders">📦<small>Orders</small></a><a href="https://wa.me/2208780003" target="_blank">💬<small>Support</small></a></nav>
+<div id="modal" class="modal"></div><div id="toast" class="toast"></div><script src="app.js"></script>
+</body></html>
