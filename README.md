@@ -38,3 +38,10 @@ Webhook URL:
 Keep the API key and webhook secret only in Render Environment Variables. Never place them in marketplace HTML/JavaScript.
 
 Waychit API reference: https://waychit.com/developers
+
+
+## Live updates
+The marketplace, admin dashboard, and vendor dashboard use a server-sent event stream at `/api/live` for near-instant updates, with a 5-second polling fallback. Product edits, approvals, vendor changes, orders, and payment status changes broadcast refresh events automatically.
+
+## BASSE MARKET WhatsApp
+The customer-facing confirmation/support destination defaults to +220 6963349 via `BASSE_MARKET_WHATSAPP`.
