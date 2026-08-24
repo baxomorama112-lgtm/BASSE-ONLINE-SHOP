@@ -183,4 +183,12 @@ button,a{transition:transform .16s ease,box-shadow .16s ease,opacity .16s ease}b
 .vendor-login-sheet .account-avatar{margin-bottom:8px}
 .vendor-login-sheet input{font-size:16px}
 
-html{touch-action:manipulation;-webkit-text-size-adjust:100%;overflow-x:hidden}body{overflow-x:hidden;overscroll-behavior-x:none}button,a,.product,.cats button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}input,select,textarea{font-size:16px;touch-action:manipulation}@media(max-width:720px){.modal{touch-action:pan-y}.sheet{max-width:100%;overflow-x:hidden}}
+.vendor-login-option{order:-1;border:1px solid rgba(30,110,255,.18);background:linear-gradient(135deg,#f7faff,#ffffff);box-shadow:0 8px 24px rgba(20,50,100,.08)}
+.pending-option{border:1px solid rgba(245,170,30,.35);background:#fffaf0}
+.vendor-pending-sheet{text-align:center}
+.pending-icon{font-size:30px}
+.pending-box{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;margin:16px 0;border-radius:16px;background:#f5f7fb}
+.pending-box span{font-weight:800}
+
+.vendor-pending-sheet .pay{margin-top:10px}
+.pending-box{display:flex;align-items:center;justify-content:space-between;gap:12px}
