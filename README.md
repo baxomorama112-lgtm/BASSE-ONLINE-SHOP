@@ -1,41 +1,40 @@
-# BASSE ONLINE SHOP — READY BUILD
+# BASSE ONLINE SHOP — PAYMENT + ADMIN BUILD
 
-## Two completely separate pages, one connected system
+## Customer flow
+1. Customer taps **BUY NOW**.
+2. Enters quantity, full name, WhatsApp number and location.
+3. Taps **PAY WITH WAYCHIT**.
+4. The server creates a Waychit Payment Request for the exact order total and redirects to Waychit's hosted checkout.
+5. Waychit sends the signed completion webhook to the server.
+6. Customer returns to BASSE ONLINE SHOP and the order is checked for **PAID** status.
+7. Customer can open WhatsApp to the shop with a pre-filled order/receipt message.
 
-Customer marketplace:
-- `https://YOUR-MARKETPLACE-DOMAIN/`
+If the live API request is unavailable, the site uses the configured Waychit static merchant payment link as a visible fallback instead of leaving the payment button dead. A static payment link cannot carry the dynamic order amount or guarantee an automatic success redirect, so the live API + webhook should remain the primary path.
 
-Private admin:
-- `https://YOUR-ADMIN-DOMAIN/`
+## Admin
+- Add/edit/delete products with image upload or URL
+- Product changes appear immediately on the marketplace
+- Searchable marketplace with suggestions
+- Pending, Paid, Cancelled and Refunded payment states
+- Confirm payment, cancel unpaid order, mark refund, reopen order
+- NEW / PROCESSING / READY / DELIVERED order workflow
+- Daily sales and dashboard counters
+- Mobile-friendly controls and interactive feedback
 
-Both connect to the same Node backend/database. Customers never see admin controls.
+## Waychit setup
+Set these environment variables in Render:
+- `WAYCHIT_API_KEY` — private live/test API key
+- `WAYCHIT_WEBHOOK_SECRET` — webhook signing secret
+- `PUBLIC_BASE_URL` — `https://basse-online-shop.onrender.com`
+- `WAYCHIT_STATIC_URL` — optional static merchant payment fallback
+- `WHATSAPP_SUPPORT` — shop WhatsApp number in international digits
+- `ADMIN_EMAIL`
+- `ADMIN_PASSWORD`
+- `DATA_DIR=/opt/render/project/src/server/data`
 
-## Included
-- Mobile-first marketplace + desktop responsive layout
-- Categories, search, product cards
-- Product detail/buy flow
-- Customer details: name, WhatsApp, location, quantity
-- Waychit Payment Request API prepared server-side
-- Success/failure return to marketplace
-- WhatsApp order handoff to +220 8780003
-- Admin product add/edit/delete/upload
-- Automatic marketplace product updates
-- Admin orders and manual payment confirmation
-- Optional signed Waychit webhook endpoint
-- Sample products
-- Responsive admin dashboard
+Webhook URL:
+`https://basse-online-shop.onrender.com/api/waychit/webhook`
 
-## Deploy
-1. Put the `server/server.js`, `marketplace/`, `admin/`, and `uploads/` on a Node-capable server.
-2. Set environment variables:
-   - `ADMIN_EMAIL`
-   - `ADMIN_PASSWORD`
-   - `WAYCHIT_API_KEY`
-   - `WAYCHIT_WEBHOOK_SECRET` (only if using webhook)
-   - `PUBLIC_BASE_URL`
-3. Keep API secrets off GitHub client files.
-4. Point your customer domain to the marketplace and your admin domain to the admin interface, or route both through the same backend.
-5. Waychit success URL returns to `/?payment=success&order=...`.
-6. Waychit webhook URL: `https://YOUR-SERVER/api/waychit/webhook`
+Keep the API key and webhook secret only in Render Environment Variables. Never place them in marketplace HTML/JavaScript.
 
-The API key is never put into browser HTML/JS.
+Waychit API reference: https://waychit.com/developers

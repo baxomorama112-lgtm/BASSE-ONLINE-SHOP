@@ -1,5 +1,8 @@
 const express=require("express"),Database=require("better-sqlite3"),multer=require("multer"),path=require("path"),crypto=require("crypto"),fs=require("fs");
-const app=express(),PORT=process.env.PORT||3000,ROOT=__dirname,DATA_DIR=process.env.DATA_DIR||path.join(ROOT,"data");fs.mkdirSync(DATA_DIR,{recursive:true});fs.mkdirSync(path.join(DATA_DIR,"uploads"),{recursive:true});
+const app=express(),PORT=process.env.PORT||3000,ROOT=__dirname,DATA_DIR=process.env.DATA_DIR||path.join(ROOT,"data");
+const PUBLIC_BASE_URL=(process.env.PUBLIC_BASE_URL||"https://basse-online-shop.onrender.com").replace(/\/$/,"");
+const STATIC_WAYCHIT_URL=process.env.WAYCHIT_STATIC_URL||"https://app.waychit.com/pm/?param1=%7B%22type%22%3A%22staticPaymentRequest%22%2C%22merchantAccountId%22%3A%226a8b03204ad0d928fc3a529c%22%7D";
+const SHOP_WHATSAPP=String(process.env.WHATSAPP_SUPPORT||"2208780003").replace(/\D/g,"");fs.mkdirSync(DATA_DIR,{recursive:true});fs.mkdirSync(path.join(DATA_DIR,"uploads"),{recursive:true});
 app.use(express.json({limit:"2mb",verify:(req,res,buf)=>{if(req.originalUrl==="/api/waychit/webhook")req.rawBody=buf.toString("utf8")}}));
 app.use("/uploads",express.static(path.join(DATA_DIR,"uploads")));
 app.use("/admin",express.static(path.join(ROOT,"../admin")));
@@ -25,12 +28,76 @@ app.put("/api/admin/products/:id",guard,upload.single("image"),(req,res)=>{let p
 app.delete("/api/admin/products/:id",guard,(req,res)=>{db.prepare("UPDATE products SET active=0 WHERE id=?").run(req.params.id);res.json({ok:true})});
 app.get("/api/admin/orders",guard,(req,res)=>res.json(db.prepare("SELECT * FROM orders ORDER BY datetime(created_at) DESC").all()));
 app.get("/api/admin/stats",guard,(req,res)=>res.json({products:db.prepare("SELECT COUNT(*) c FROM products WHERE active=1").get().c,orders:db.prepare("SELECT COUNT(*) c FROM orders").get().c,pending:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PENDING'").get().c,paid:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PAID'").get().c,cancelled:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='CANCELLED' OR order_status='CANCELLED'").get().c,refunded:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='REFUNDED'").get().c,sales:db.prepare("SELECT COALESCE(SUM(total),0) s FROM orders WHERE payment_status='PAID' AND order_status!='CANCELLED' AND date(created_at)=date('now','localtime')").get().s}));
-app.post("/api/orders",async(req,res)=>{let p=db.prepare("SELECT * FROM products WHERE id=? AND active=1").get(req.body.productId),q=Math.max(1,+req.body.quantity||1);if(!p)return res.status(404).json({error:"Product unavailable"});if(q>p.stock)return res.status(400).json({error:"Not enough stock"});let id="BOS-"+crypto.randomBytes(4).toString("hex").toUpperCase(),phone="220"+String(req.body.whatsapp).replace(/\D/g,"").replace(/^220/,""),total=p.price*q;db.prepare("INSERT INTO orders(id,product_id,product_name,quantity,customer_name,whatsapp,location,total) VALUES(?,?,?,?,?,?,?,?)").run(id,p.id,p.name,q,req.body.name,phone,req.body.location,total);let paymentUrl="";if(process.env.WAYCHIT_API_KEY&&process.env.PUBLIC_BASE_URL){try{let r=await fetch("https://api.waychit.com/v1/payment-requests",{method:"POST",headers:{"Authorization":"Bearer "+process.env.WAYCHIT_API_KEY,"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({amount:total,description:p.name+" x "+q,clientReference:id,successRedirectUrl:process.env.PUBLIC_BASE_URL+"/?payment=success&order="+id,failureRedirectUrl:process.env.PUBLIC_BASE_URL+"/?payment=failed&order="+id})}),d=await r.json();if(r.ok&&d.paymentRequest){paymentUrl=d.paymentRequest.waychitLaunchUrl;db.prepare("UPDATE orders SET waychit_request_id=? WHERE id=?").run(d.paymentRequest.id,id)}}catch(e){console.error(e.message)}}res.status(201).json({order:db.prepare("SELECT * FROM orders WHERE id=?").get(id),paymentUrl,whatsappSupport:String(process.env.WHATSAPP_SUPPORT||"").replace(/\D/g,"")})});
-app.get("/api/order/:id",(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);o?res.json({...o,whatsappSupport:String(process.env.WHATSAPP_SUPPORT||"").replace(/\D/g,"")}):res.status(404).json({error:"Order not found"})});
+app.post("/api/orders",async(req,res)=>{
+  let p=db.prepare("SELECT * FROM products WHERE id=? AND active=1").get(req.body.productId);
+  let q=Math.max(1,+req.body.quantity||1);
+  if(!p)return res.status(404).json({error:"Product unavailable"});
+  if(q>p.stock)return res.status(400).json({error:"Not enough stock"});
+  let rawPhone=String(req.body.whatsapp||"").replace(/\D/g,"").replace(/^220/,"");
+  if(rawPhone.length<6)return res.status(400).json({error:"Enter a valid WhatsApp number"});
+  let id="BOS-"+crypto.randomBytes(4).toString("hex").toUpperCase();
+  let phone="220"+rawPhone,total=p.price*q;
+  db.prepare("INSERT INTO orders(id,product_id,product_name,quantity,customer_name,whatsapp,location,total) VALUES(?,?,?,?,?,?,?,?)")
+    .run(id,p.id,p.name,q,String(req.body.name||"").trim(),phone,String(req.body.location||""),total);
+
+  let paymentUrl="";
+  let paymentError="";
+  if(process.env.WAYCHIT_API_KEY){
+    try{
+      let r=await fetch("https://api.waychit.com/v1/payment-requests",{
+        method:"POST",
+        headers:{"Authorization":"Bearer "+process.env.WAYCHIT_API_KEY,"Content-Type":"application/json","Accept":"application/json"},
+        body:JSON.stringify({
+          amount:total,
+          description:p.name+" x "+q+" — BASSE ONLINE SHOP",
+          clientReference:id,
+          successRedirectUrl:PUBLIC_BASE_URL+"/?payment=success&order="+encodeURIComponent(id),
+          failureRedirectUrl:PUBLIC_BASE_URL+"/?payment=failed&order="+encodeURIComponent(id)
+        })
+      });
+      let body=await r.text();
+      let d={}; try{d=JSON.parse(body)}catch{}
+      console.log("Waychit payment request:",r.status,body.slice(0,1200));
+      if(r.ok&&d.paymentRequest&&d.paymentRequest.waychitLaunchUrl){
+        paymentUrl=d.paymentRequest.waychitLaunchUrl;
+        db.prepare("UPDATE orders SET waychit_request_id=? WHERE id=?").run(d.paymentRequest.id,id);
+      }else{
+        paymentError=d.message||d.error||`Waychit rejected the payment request (HTTP ${r.status}).`;
+        console.error("Waychit rejected payment:",r.status,body.slice(0,1200));
+      }
+    }catch(e){paymentError="Waychit is temporarily unavailable.";console.error("Waychit request error:",e)}
+  }
+  let paymentMode="dynamic";
+  if(!paymentUrl){paymentUrl=STATIC_WAYCHIT_URL;paymentMode="fallback";}
+  res.status(201).json({
+    order:db.prepare("SELECT * FROM orders WHERE id=?").get(id),
+    paymentUrl,
+    paymentError:paymentError,
+    paymentMode,
+    whatsappSupport:SHOP_WHATSAPP
+  });
+});
+app.get("/api/order/:id",(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);o?res.json({...o,whatsappSupport:SHOP_WHATSAPP}):res.status(404).json({error:"Order not found"})});
 app.post("/api/admin/orders/:id/payment",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});if(o.payment_status==='REFUNDED'||o.payment_status==='CANCELLED')return res.status(400).json({error:'This payment is already closed.'});db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE id=?").run(req.params.id);res.json({ok:true})});
 app.post("/api/admin/orders/:id/cancel-payment",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});if(o.payment_status==='PAID')return res.status(400).json({error:'A paid order cannot be cancelled. Use Refund instead.'});db.prepare("UPDATE orders SET payment_status='CANCELLED',order_status='CANCELLED' WHERE id=?").run(req.params.id);res.json({ok:true})});
 app.post("/api/admin/orders/:id/refund",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});if(o.payment_status!=='PAID')return res.status(400).json({error:'Only paid orders can be marked refunded.'});db.prepare("UPDATE orders SET payment_status='REFUNDED',order_status='REFUNDED' WHERE id=?").run(req.params.id);res.json({ok:true,notice:'Order marked refunded. Complete the actual money reversal in Waychit if required.'})});
 app.post("/api/admin/orders/:id/reopen",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});db.prepare("UPDATE orders SET payment_status='PENDING',order_status='NEW' WHERE id=?").run(req.params.id);res.json({ok:true})});
 app.patch("/api/admin/orders/:id/status",guard,(req,res)=>{let allowed=['NEW','PROCESSING','READY','DELIVERED','CANCELLED','REFUNDED'];let status=String(req.body.status||'').toUpperCase();if(!allowed.includes(status))return res.status(400).json({error:'Invalid order status'});db.prepare("UPDATE orders SET order_status=? WHERE id=?").run(status,req.params.id);res.json({ok:true})});
-app.post("/api/waychit/webhook",(req,res)=>{let sig=req.headers["waychit-signature"],secret=process.env.WAYCHIT_WEBHOOK_SECRET,raw=req.rawBody||"";if(!sig||!secret||!raw)return res.status(400).send("Webhook not configured");try{let parts=String(sig).split(","),t=parts.find(x=>x.trim().startsWith("t="))?.trim().split("=")[1],sigs=parts.filter(x=>x.trim().startsWith("v1=")).map(x=>x.trim().split("=")[1]);if(!t||!sigs.length||Math.abs(Date.now()/1000-Number(t))>300)return res.status(400).send("Invalid signature");let expected=crypto.createHmac("sha256",secret).update(`${t}.${raw}`).digest("hex");if(!sigs.includes(expected))return res.status(400).send("Invalid signature");let e=JSON.parse(raw),ref=e.paymentRequest?.clientReference||e.paymentSession?.clientReference||e.data?.clientReference;if((e.type==="payment.request.completed"||e.type==="payment.session.completed")&&ref)db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE id=?").run(ref);res.sendStatus(200)}catch(e){res.status(400).send("Bad webhook")}});
+app.get("/api/payment-config",(req,res)=>res.json({configured:!!process.env.WAYCHIT_API_KEY,publicBaseUrl:PUBLIC_BASE_URL,staticFallback:true}));
+app.post("/api/waychit/webhook",(req,res)=>{
+  let sig=req.headers["waychit-signature"],secret=process.env.WAYCHIT_WEBHOOK_SECRET,raw=req.rawBody||"";
+  if(!sig||!secret||!raw)return res.status(400).send("Webhook not configured");
+  try{
+    let parts=String(sig).split(","),t=parts.find(x=>x.trim().startsWith("t="))?.trim().split("=")[1],sigs=parts.filter(x=>x.trim().startsWith("v1=")).map(x=>x.trim().split("=")[1]);
+    if(!t||!sigs.length||Math.abs(Date.now()/1000-Number(t))>300)return res.status(400).send("Invalid signature");
+    let expected=crypto.createHmac("sha256",secret).update(`${t}.${raw}`).digest("hex");
+    if(!sigs.includes(expected))return res.status(400).send("Invalid signature");
+    let e=JSON.parse(raw);
+    let ref=e.paymentRequest?.clientReference||e.paymentSession?.clientReference||e.data?.clientReference;
+    if((e.type==="payment.request.completed"||e.type==="payment.session.completed")&&ref){
+      db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE id=? AND payment_status!='REFUNDED'").run(ref);
+    }
+    res.sendStatus(200);
+  }catch(e){res.status(400).send("Bad webhook")}
+});
 app.listen(PORT,"0.0.0.0",()=>console.log("BASSE ONLINE SHOP running on "+PORT));
