@@ -1,15 +1,39 @@
 let category="All",selected=null,searchTimer=null,searchIndex=[];
 const $=id=>document.getElementById(id),money=n=>"D"+Number(n||0).toLocaleString();
 
-async function loadProducts(){
+function renderProductGrid(ps, silent=false){
+  const grid=$("grid");
+  const ids=ps.map(p=>String(p.id));
+  const existing=[...grid.querySelectorAll(".product")];
+  const existingIds=existing.map(x=>x.dataset.id);
+  const sameOrder=existingIds.length===ids.length && existingIds.every((id,i)=>id===ids[i]);
+
+  if(!sameOrder){
+    grid.innerHTML=ps.length?ps.map(p=>`<article class="product" data-id="${p.id}" tabindex="0" role="button" onclick="buy(${p.id})" onkeydown="if(event.key==='Enter'||event.key===' ')buy(${p.id})"><div class="pic"><img src="${p.image||""}" alt="${esc(p.name)}" loading="lazy"><span class="tag">${esc(p.category)}</span></div><div class="info"><h3>${esc(p.name)}</h3><div class="price">${money(p.price)}</div></div></article>`).join(""):`<div class="empty-search"><div>🔎</div><h3>No products found</h3><p>Try another product name or category.</p></div>`;
+    return;
+  }
+
+  ps.forEach((p,i)=>{
+    const el=existing[i];
+    const img=el.querySelector("img"), tag=el.querySelector(".tag"), name=el.querySelector("h3"), price=el.querySelector(".price");
+    if(img && img.getAttribute("src")!==String(p.image||"")) img.src=p.image||"";
+    if(img) img.alt=p.name||"Product";
+    if(tag) tag.textContent=p.category||"";
+    if(name) name.textContent=p.name||"";
+    if(price) price.textContent=money(p.price);
+  });
+}
+
+async function loadProducts(silent=false){
   try{
-    const r=await fetch(`/api/products?category=${encodeURIComponent(category)}&q=${encodeURIComponent($("search").value.trim())}`);
+    const r=await fetch(`/api/products?category=${encodeURIComponent(category)}&q=${encodeURIComponent($("search").value.trim())}`,{cache:"no-store"});
     const ps=await r.json();
     $("count").textContent=ps.length+" products";
-    $("grid").innerHTML=ps.length?ps.map(p=>`<article class="product reveal" tabindex="0" role="button" onclick="buy(${p.id})" onkeydown="if(event.key==='Enter'||event.key===' ')buy(${p.id})"><div class="pic"><img src="${p.image||""}" alt="${esc(p.name)}" loading="lazy"><span class="tag">${esc(p.category)}</span></div><div class="info"><h3>${esc(p.name)}</h3><div class="price">${money(p.price)}</div></div></article>`).join(""):`<div class="empty-search"><div>🔎</div><h3>No products found</h3><p>Try another product name or category.</p></div>`;
+    renderProductGrid(ps,silent);
     $("clearSearch").classList.toggle("show",!!$("search").value.trim());
-    requestAnimationFrame(()=>document.querySelectorAll(".reveal").forEach((x,i)=>setTimeout(()=>x.classList.add("in"),i*35)));
-  }catch(e){$("grid").innerHTML='<div class="empty-search"><div>⚠️</div><h3>Shop temporarily unavailable</h3><p>Please refresh and try again.</p></div>'}
+  }catch(e){
+    if(!$("grid").querySelector(".product")) $("grid").innerHTML='<div class="empty-search"><div>⚠️</div><h3>Shop temporarily unavailable</h3><p>Please refresh and try again.</p></div>';
+  }
 }
 async function loadSearchIndex(){try{let r=await fetch("/api/products?category=All");searchIndex=await r.json()}catch{searchIndex=[]}}
 function showSuggestions(){let term=$("search").value.trim().toLowerCase(),box=$("searchSuggestions");if(!term){box.classList.remove("show");box.innerHTML="";return}let matches=searchIndex.filter(p=>(p.name+" "+p.category+" "+(p.description||"")).toLowerCase().includes(term)).slice(0,7);box.innerHTML=matches.length?matches.map(p=>`<button type="button" class="suggest-item" onclick="pickSuggestion(${p.id})"><span class="suggest-icon">🔎</span><span><b>${esc(p.name)}</b><small>${esc(p.category)} · ${money(p.price)}</small></span></button>`).join(""):"<div class=suggest-empty>No matching products</div>";box.classList.add("show")}
@@ -20,10 +44,38 @@ function setCat(c,b){category=c;document.querySelectorAll(".cats button").forEac
 
 async function buy(id){
   try{
-    let r=await fetch("/api/products/"+id);selected=await r.json();if(!r.ok)throw new Error(selected.error||"Product unavailable");
-    let imgs=[];try{imgs=JSON.parse(selected.images||"[]")}catch(e){};if(!Array.isArray(imgs))imgs=[];if(selected.image&&!imgs.includes(selected.image))imgs.unshift(selected.image);if(!imgs.length)imgs=[""];
-    $("modal").innerHTML=`<div class="sheet product-sheet"><button class="close" onclick="closeModal()">×</button><div class="product-detail"><div class="gallery"><img id="mainProductImage" src="${imgs[0]}" alt="${esc(selected.name)}">${imgs.length>1?`<div class="thumbs">${imgs.map((im,i)=>`<button class="${i===0?'active':''}" onclick="pickImage(${i})"><img src="${im}" alt=""></button>`).join("")}</div>`:""}</div><div class="detail-info"><span class="tagline">${esc(selected.category)}</span><h2>${esc(selected.name)}</h2><div class="detail-price">${money(selected.price)}</div><p class="muted">${esc(selected.description||"Quality product from BASSE MARKET.")}</p><div class="stock-note">${selected.stock>0?`✓ ${selected.stock} available`:"Out of stock"}</div><label>Quantity</label><div class="qty-row"><button type="button" onclick="changeQty(-1)">−</button><input id="qty" type="number" min="1" max="${selected.stock}" value="1"><button type="button" onclick="changeQty(1)">+</button></div><div class="summary"><div class="row"><span>Price</span><b>${money(selected.price)}</b></div><div class="row total-row"><span>Total</span><b id="total">${money(selected.price)}</b></div></div><button class="pay pulse" ${selected.stock<1?"disabled":""} onclick="openCheckout()">🛒 BUY NOW <span>→</span></button></div></div></div>`;
-    window.__productImages=imgs;$("modal").classList.add("show");
+    let r=await fetch("/api/products/"+id,{cache:"no-store"});
+    selected=await r.json();
+    if(!r.ok)throw new Error(selected.error||"Product unavailable");
+    let imgs=[];
+    try{imgs=JSON.parse(selected.images||"[]")}catch(e){}
+    if(!Array.isArray(imgs))imgs=[];
+    if(selected.image&&!imgs.includes(selected.image))imgs.unshift(selected.image);
+    if(!imgs.length)imgs=[""];
+
+    const thumbs=imgs.length>1?`<div class="thumbs" aria-label="Product photos">${imgs.map((im,i)=>`<button type="button" class="${i===0?'active':''}" onclick="pickImage(${i})" aria-label="View photo ${i+1}"><img src="${im}" alt=""></button>`).join("")}</div>`:"";
+    $("modal").innerHTML=`<div class="sheet product-sheet product-sheet-modern">
+      <button class="close modern-close" onclick="closeModal()" aria-label="Close">×</button>
+      <div class="product-detail">
+        <div class="gallery">
+          <div class="main-photo-wrap"><img id="mainProductImage" src="${imgs[0]}" alt="${esc(selected.name)}"></div>
+          ${thumbs}
+        </div>
+        <div class="detail-info modern-detail-info">
+          <span class="tagline">${esc(selected.category)}</span>
+          <h2>${esc(selected.name)}</h2>
+          <div class="detail-price">${money(selected.price)}</div>
+          <p class="muted">${esc(selected.description||"Quality product from BASSE MARKET.")}</p>
+          <div class="stock-note ${selected.stock<1?'out':''}">${selected.stock>0?`✓ ${selected.stock} available`:"Out of stock"}</div>
+          <div class="detail-actions">
+            <button class="pay buy-now-modern" ${selected.stock<1?"disabled":""} onclick="openCheckout()"><span>🛒</span><b>BUY NOW</b><span class="arrow">→</span></button>
+          </div>
+          <div class="product-hint">Secure checkout · Pay with Waychit</div>
+        </div>
+      </div>
+    </div>`;
+    window.__productImages=imgs;
+    $("modal").classList.add("show");
   }catch(e){toast(e.message)}
 }
 function pickImage(i){let im=window.__productImages?.[i];if(im){$("mainProductImage").src=im;document.querySelectorAll(".thumbs button").forEach((b,n)=>b.classList.toggle("active",n===i))}}
@@ -91,11 +143,11 @@ loadSearchIndex().then(loadProducts);handleReturn();
 function connectLive(){
   try{
     const es=new EventSource("/api/live");
-    es.addEventListener("catalog",()=>{loadSearchIndex();if(document.visibilityState==="visible"&&!$("modal").classList.contains("show"))loadProducts();});
+    es.addEventListener("catalog",()=>{loadSearchIndex();if(document.visibilityState==="visible"&&!$("modal").classList.contains("show"))loadProducts(true);});
     es.addEventListener("orders",()=>{if(document.visibilityState==="visible"&&localStorage.getItem("basseLastOrder"))openOrders().catch(()=>{});});
     es.onerror=()=>{es.close();setTimeout(connectLive,3000)};
   }catch{setTimeout(connectLive,3000)}
 }
 connectLive();
 // Safety fallback for networks that block EventSource.
-setInterval(()=>{if(document.visibilityState==="visible"&&!$("modal").classList.contains("show"))loadProducts()},5000);
+setInterval(()=>{if(document.visibilityState==="visible"&&!$("modal").classList.contains("show"))loadProducts(true)},5000);

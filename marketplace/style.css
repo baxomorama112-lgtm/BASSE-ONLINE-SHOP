@@ -13,3 +13,168 @@ button,a{transition:transform .16s ease,box-shadow .16s ease,opacity .16s ease}b
 .product-sheet{max-width:720px}.product-detail{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,1fr);gap:22px}.gallery>img{width:100%;max-height:330px;object-fit:contain;background:#f4f6fa;border-radius:18px}.thumbs{display:flex;gap:8px;margin-top:10px;overflow:auto}.thumbs button{width:58px;height:58px;min-width:58px;border:2px solid transparent;border-radius:10px;padding:0;overflow:hidden;background:#f1f3f7}.thumbs button.active{border-color:var(--gold)}.thumbs img{width:100%;height:100%;object-fit:cover}.detail-info h2{font-size:25px;margin:6px 0}.tagline{font-size:10px;font-weight:900;color:var(--blue);text-transform:uppercase}.detail-price{font-size:25px;font-weight:950;color:var(--navy);margin:8px 0}.stock-note{font-size:11px;color:#138a4a;margin:10px 0}.account-sheet,.form-sheet{max-width:500px}.account-hero{text-align:center;padding:10px 0 18px}.account-avatar{width:64px;height:64px;margin:auto;border-radius:50%;background:#edf2fa;display:grid;place-items:center;font-size:30px}.account-option{width:100%;display:flex;align-items:center;gap:12px;padding:15px;border:1px solid var(--line);background:#fff;border-radius:14px;margin:9px 0;text-align:left;cursor:pointer}.account-option>span{flex:1}.account-option b,.account-option small{display:block}.account-option small{color:var(--muted);margin-top:3px}.vendor-option{border-color:#f0d98b}.guest-note{text-align:center;color:var(--muted);font-size:11px;margin:16px 0}.form textarea{min-height:90px;resize:vertical;border:1px solid var(--line);border-radius:12px;padding:11px;font:inherit}.secondary-btn{border:1px solid var(--line);background:#fff;color:var(--navy);padding:12px 15px;border-radius:12px;font-weight:900;cursor:pointer;width:100%;margin-top:10px}
 @media(max-width:760px){.top{height:auto;flex-wrap:wrap;padding:9px 12px;gap:8px}.brand{min-width:auto}.brand b{font-size:14px}.brand small{font-size:8px}.cart{margin-left:auto}.support{display:none}.search-wrap{order:3;flex-basis:100%;max-width:none}.hero{margin:10px 10px;min-height:150px;padding:20px 18px}.hero-art{display:none}.hero h1{font-size:34px}.hero p{font-size:12px;margin:8px 0}.hero button{padding:11px 14px;font-size:11px}#grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.categories,#products{margin:20px auto;padding:0 12px}.section-title h2{font-size:18px}.section-title span{display:none}.product{border-radius:14px}.product .pic{aspect-ratio:1.05}.bottom{height:68px}.bottom a,.bottom button{font-size:18px}.bottom small{font-size:9px}.product-detail{grid-template-columns:1fr;gap:14px}.gallery>img{max-height:260px}.detail-info h2{font-size:21px}.sheet{width:calc(100% - 18px);padding:18px}.thumbs button{width:52px;height:52px;min-width:52px}}
 @media(min-width:761px){.bottom{display:none}}
+
+/* PRODUCT DETAIL REDESIGN — clean, quiet, mobile-first */
+.product-sheet-modern{
+  width:min(760px,100%);
+  max-height:min(90vh,760px);
+  padding:18px;
+  border-radius:28px;
+  box-shadow:0 28px 80px rgba(7,26,74,.24);
+}
+.modern-close{
+  z-index:4;
+  width:42px;
+  height:42px;
+  background:rgba(255,255,255,.94);
+  box-shadow:0 8px 24px rgba(7,26,74,.12);
+  color:var(--navy);
+}
+.product-detail{
+  grid-template-columns:minmax(0,1.12fr) minmax(250px,.88fr);
+  align-items:center;
+  gap:24px;
+}
+.main-photo-wrap{
+  aspect-ratio:1/1;
+  max-height:430px;
+  display:grid;
+  place-items:center;
+  background:linear-gradient(145deg,#f7f8fb,#eef1f6);
+  border-radius:22px;
+  overflow:hidden;
+}
+.main-photo-wrap img{
+  width:100%;
+  height:100%;
+  object-fit:contain;
+  display:block;
+}
+.thumbs{
+  padding:10px 2px 2px;
+  margin-top:0;
+}
+.thumbs button{
+  width:54px;
+  height:54px;
+  min-width:54px;
+  border-radius:13px;
+  border:2px solid transparent;
+  box-shadow:0 4px 14px rgba(7,26,74,.07);
+}
+.thumbs button.active{
+  border-color:var(--blue);
+  box-shadow:0 5px 16px rgba(23,72,168,.18);
+}
+.modern-detail-info{
+  padding:4px 3px 3px;
+}
+.modern-detail-info h2{
+  font-size:clamp(25px,4vw,34px);
+  line-height:1.05;
+  letter-spacing:-.5px;
+  margin:8px 0 6px;
+}
+.modern-detail-info .detail-price{
+  font-size:clamp(25px,4vw,34px);
+  margin:8px 0 12px;
+}
+.modern-detail-info .muted{
+  font-size:13px;
+  line-height:1.6;
+  margin:0;
+}
+.modern-detail-info .stock-note{
+  margin:15px 0 20px;
+  font-weight:750;
+}
+.stock-note.out{color:#c62828}
+.detail-actions{margin-top:8px}
+.buy-now-modern{
+  width:100%;
+  min-height:58px;
+  border:0;
+  border-radius:17px;
+  padding:0 18px;
+  background:linear-gradient(135deg,#071a4a,#1748a8);
+  color:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  font-size:15px;
+  letter-spacing:.2px;
+  cursor:pointer;
+  box-shadow:0 14px 30px rgba(7,26,74,.22);
+}
+.buy-now-modern:hover{
+  transform:translateY(-2px);
+  box-shadow:0 18px 38px rgba(7,26,74,.28);
+}
+.buy-now-modern:active{transform:translateY(0)}
+.buy-now-modern .arrow{
+  margin-left:auto;
+  font-size:23px;
+  line-height:1;
+}
+.buy-now-modern:disabled{background:#aeb6c4;box-shadow:none}
+.product-hint{
+  text-align:center;
+  color:var(--muted);
+  font-size:10px;
+  margin-top:10px;
+}
+/* Quiet live updates: never animate/reflow the catalog when background data changes. */
+.product,.product.in{
+  opacity:1!important;
+  transform:none!important;
+  transition:box-shadow .2s ease, border-color .2s ease!important;
+}
+.product.reveal{animation:none!important}
+@media(max-width:720px){
+  .product-sheet-modern{
+    width:calc(100% - 8px);
+    max-height:calc(100vh - 28px);
+    padding:13px;
+    border-radius:25px;
+  }
+  .product-detail{
+    display:block;
+  }
+  .main-photo-wrap{
+    aspect-ratio:1.08/1;
+    max-height:none;
+    border-radius:19px;
+  }
+  .thumbs{
+    margin-top:8px;
+    padding-bottom:3px;
+  }
+  .thumbs button{
+    width:48px;
+    height:48px;
+    min-width:48px;
+  }
+  .modern-detail-info{
+    padding:14px 5px 5px;
+  }
+  .modern-detail-info h2{
+    font-size:25px;
+  }
+  .modern-detail-info .detail-price{
+    font-size:27px;
+  }
+  .modern-detail-info .muted{
+    font-size:12px;
+    line-height:1.5;
+  }
+  .modern-detail-info .stock-note{
+    margin:11px 0 14px;
+  }
+  .buy-now-modern{
+    min-height:56px;
+    border-radius:16px;
+  }
+}
+/* Remove the old pulsing BUY animation; the button stays steady and premium. */
+.buy-now-modern.pulse,.pay.pulse{animation:none}
