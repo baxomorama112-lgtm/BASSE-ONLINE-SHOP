@@ -178,3 +178,14 @@ button,a{transition:transform .16s ease,box-shadow .16s ease,opacity .16s ease}b
 }
 /* Remove the old pulsing BUY animation; the button stays steady and premium. */
 .buy-now-modern.pulse,.pay.pulse{animation:none}
+
+.vendor-login-option{border:1px solid rgba(30,110,255,.22);background:linear-gradient(135deg,#f5f8ff,#fff);box-shadow:0 6px 20px rgba(20,60,120,.06)}
+.vendor-login-sheet .account-avatar{margin-bottom:8px}
+.vendor-login-sheet input{font-size:16px}
+
+.vendor-login-option{order:-1;border:1px solid rgba(30,110,255,.18);background:linear-gradient(135deg,#f7faff,#ffffff);box-shadow:0 8px 24px rgba(20,50,100,.08)}
+.pending-option{border:1px solid rgba(245,170,30,.35);background:#fffaf0}
+.vendor-pending-sheet{text-align:center}
+.pending-icon{font-size:30px}
+.pending-box{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;margin:16px 0;border-radius:16px;background:#f5f7fb}
+.pending-box span{font-weight:800}

@@ -168,6 +168,13 @@ app.post("/api/vendors/apply",(req,res)=>{
   const x=db.prepare("INSERT INTO vendors(full_name,business_name,whatsapp,location,category,description,password_hash) VALUES(?,?,?,?,?,?,?)").run(String(b.fullName).trim(),String(b.businessName).trim(),"220"+phone,String(b.location||""),String(b.category||""),String(b.description||""),crypto.createHash("sha256").update(pin).digest("hex"));
   broadcastLive("vendors",{vendorId:Number(x.lastInsertRowid)});res.json({ok:true,id:x.lastInsertRowid,message:"Application submitted. Wait for admin approval."});
 });
+app.get("/api/vendors/status",(req,res)=>{
+  const phone=String(req.query.whatsapp||req.query.phone||"").replace(/\D/g,"").replace(/^220/,"");
+  if(phone.length<6)return res.status(400).json({error:"Enter a valid WhatsApp number"});
+  const v=db.prepare("SELECT id,status,business_name FROM vendors WHERE whatsapp=? ORDER BY id DESC LIMIT 1").get("220"+phone);
+  if(!v)return res.status(404).json({error:"No vendor application found for this number."});
+  res.json({id:v.id,status:v.status,business_name:v.business_name});
+});
 app.get("/api/admin/vendors",guard,(req,res)=>res.json(db.prepare("SELECT * FROM vendors ORDER BY datetime(created_at) DESC").all()));
 app.post("/api/admin/vendors/:id/approve",guard,(req,res)=>{db.prepare("UPDATE vendors SET status='APPROVED' WHERE id=?").run(req.params.id);broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true})});
 app.post("/api/admin/vendors/:id/reject",guard,(req,res)=>{db.prepare("UPDATE vendors SET status='REJECTED' WHERE id=?").run(req.params.id);broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true})});

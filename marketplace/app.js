@@ -123,7 +123,10 @@ function openAccount(){
   const customer=JSON.parse(localStorage.getItem("basseCustomer")||"null");
   $("modal").innerHTML=`<div class="sheet account-sheet"><button class="close" onclick="closeModal()">×</button><div class="account-hero"><div class="account-avatar">👤</div><h2>${customer?`Welcome, ${esc(customer.name)}`:"BASSE MARKET ACCOUNT"}</h2><p>${customer?"Manage your shopping account.":"Shop as a guest or create an account."}</p></div>
   ${customer?`<button class="account-option" onclick="openOrders()">📦 <span><b>My Orders</b><small>View your recent purchases</small></span> →</button><button class="account-option" onclick="toast('Account details are saved on this device.')">⚙️ <span><b>My Details</b><small>${esc(customer.phone)}</small></span> →</button><button class="secondary-btn" onclick="localStorage.removeItem('basseCustomer');openAccount()">LOG OUT</button>`:
-  `<button class="account-option" onclick="openCustomerSignup()">🛍️ <span><b>Customer Account</b><small>Create an account for order history</small></span> →</button><button class="account-option vendor-option" onclick="openVendorApply()">🏪 <span><b>Become a Vendor</b><small>Apply to sell on BASSE MARKET</small></span> →</button><p class="guest-note">You can buy without creating an account.</p>`}</div>`;
+  `<button class="account-option" type="button" onclick="openCustomerSignup()">🛍️ <span><b>Customer Account</b><small>Optional account for orders and saved details</small></span> →</button>
+  <button class="account-option vendor-option" type="button" onclick="openVendorApply()">🏪 <span><b>Become a Vendor</b><small>Apply to sell on BASSE MARKET</small></span> →</button>
+  <button class="account-option vendor-login-option" type="button" onclick="openVendorLogin()">🔐 <span><b>Vendor Login</b><small>Approved vendors: enter your phone and PIN</small></span> →</button>
+  <p class="guest-note">You can buy without creating an account.</p>`}</div>`;
   $("modal").classList.add("show")
 }
 function openCustomerSignup(){
@@ -133,12 +136,102 @@ function createCustomer(){let n=$("caName").value.trim(),p=$("caPhone").value.re
 function openVendorApply(){
  $("modal").innerHTML=`<div class="sheet form-sheet"><button class="close" onclick="openAccount()">←</button><h2>Become a Vendor</h2><p class="muted">Your application goes to BASSE MARKET Admin for approval.</p><div class="form"><label>Full Name</label><input id="vName" placeholder="Full name"><label>Business / Shop Name</label><input id="vBusiness" placeholder="Your shop name"><label>WhatsApp Number</label><input id="vPhone" inputmode="numeric" placeholder="7XXXXXX"><label>Location</label><input id="vLocation" placeholder="Basse"><label>Category</label><input id="vCategory" placeholder="Fashion, Phones, Beauty..."><label>Short Description</label><textarea id="vDesc" placeholder="Tell us about your business"></textarea><label>Create Vendor PIN</label><input id="vPass" type="password" inputmode="numeric" minlength="4" maxlength="5" pattern="[0-9]{4,5}" placeholder="4 or 5 digit PIN" required><button class="pay" onclick="submitVendor()">SUBMIT APPLICATION</button></div></div>`;$("modal").classList.add("show")
 }
-async function submitVendor(){let pin=String($("vPass").value||"");if(!/^\d{4,5}$/.test(pin)){notify("PIN must be exactly 4 or 5 digits.",true);return}let b={fullName:$("vName").value,businessName:$("vBusiness").value,whatsapp:$("vPhone").value,location:$("vLocation").value,category:$("vCategory").value,description:$("vDesc").value,password:pin};if(!b.fullName||!b.businessName||String(b.whatsapp).replace(/\D/g,"").length<6||!/^[0-9]{4,5}$/.test(b.password))return toast("Complete the form and use a 4–5 digit PIN.");try{let r=await fetch("/api/vendors/apply",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}),d=await r.json();if(!r.ok)throw Error(d.error||"Application failed");$("modal").innerHTML=`<div class="sheet return-sheet"><div class="result-icon">✓</div><h2>Application sent!</h2><p>Your vendor application is now waiting for Admin approval.</p><button class="secondary-btn" onclick="closeModal()">DONE</button></div>`}catch(e){toast(e.message)}}
+function openVendorLogin(){
+ $("modal").innerHTML=`<div class="sheet form-sheet vendor-login-sheet">
+ <button class="close" type="button" onclick="openAccount()">←</button>
+ <div class="account-avatar">🏪</div>
+ <h2>Vendor Login</h2>
+ <p class="muted">Only approved vendors can access their dashboard.</p>
+ <div class="form" id="marketVendorLoginForm">
+ <label>WhatsApp / Phone Number</label>
+ <input id="vendorLoginPhone" inputmode="numeric" autocomplete="tel" placeholder="7XXXXXX">
+ <label>Vendor PIN</label>
+ <input id="vendorLoginPin" type="password" inputmode="numeric" autocomplete="one-time-code" maxlength="5" placeholder="4 or 5 digits">
+ <button class="pay" type="button" id="vendorLoginBtn">🔐 LOGIN TO VENDOR DASHBOARD <span>→</span></button>
+ <small>Forgot your PIN? Contact BASSE MARKET Admin for a reset.</small>
+ </div></div>`;
+ $("modal").classList.add("show");
+ $("vendorLoginBtn").addEventListener("click", async function(){
+   const phone=$("vendorLoginPhone").value.trim();
+   const pin=$("vendorLoginPin").value.trim();
+   if(!phone) return toast("Enter your phone number.");
+   if(!/^\\d{4,5}$/.test(pin)) return toast("PIN must be 4 or 5 digits.");
+   const btn=$("vendorLoginBtn"); btn.disabled=true; btn.innerHTML="⏳ SIGNING IN…";
+   try{
+     const r=await fetch("/api/vendor/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({whatsapp:phone,pin})});
+     const d=await r.json().catch(()=>({}));
+     if(!r.ok) throw new Error(d.error||"Vendor login failed.");
+     if(d.token) localStorage.setItem("basseVendorToken",d.token);
+     location.href="/vendor/";
+   }catch(e){btn.disabled=false;btn.innerHTML="🔐 LOGIN TO VENDOR DASHBOARD <span>→</span>";toast(e.message);}
+ });
+}
+async function submitVendor(){
+  let pin=String($("vPass").value||"");
+  if(!/^\d{4,5}$/.test(pin)){toast("PIN must be exactly 4 or 5 digits.");return}
+  let phone=String($("vPhone").value||"").replace(/\D/g,"").replace(/^220/,"");
+  let b={fullName:$("vName").value,businessName:$("vBusiness").value,whatsapp:phone,location:$("vLocation").value,category:$("vCategory").value,description:$("vDesc").value,password:pin};
+  if(!b.fullName||!b.businessName||phone.length<6)return toast("Complete the form with a valid WhatsApp number.");
+  try{
+    let r=await fetch("/api/vendors/apply",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});
+    let d=await r.json();
+    if(!r.ok)throw Error(d.error||"Application failed");
+    sessionStorage.setItem("basseVendorApplication",JSON.stringify({phone,pin,id:d.id,businessName:b.businessName}));
+    showVendorPending(d.id,phone,pin,b.businessName);
+  }catch(e){toast(e.message)}
+}
+function showVendorPending(id,phone,pin,businessName){
+  $("modal").innerHTML=`<div class="sheet return-sheet vendor-pending-sheet">
+    <div class="result-icon pending-icon">⏳</div>
+    <h2>Waiting for Approval</h2>
+    <p>Your <b>${esc(businessName)}</b> vendor application has been submitted.</p>
+    <div class="pending-box"><strong>Application Status</strong><span id="vendorPendingStatus">PENDING</span></div>
+    <p class="muted">Keep this page open. When Admin approves your application, we’ll take you directly to your Vendor Dashboard.</p>
+    <button class="pay" type="button" id="checkVendorApproval">CHECK STATUS</button>
+    <button class="secondary-btn" type="button" onclick="closeModal()">CLOSE</button>
+  </div>`;
+  $("modal").classList.add("show");
+  window.__vendorPending={id,phone,pin,businessName};
+  clearInterval(window.__vendorPendingTimer);
+  const check=async()=>{
+    try{
+      const r=await fetch("/api/vendors/status?whatsapp="+encodeURIComponent(phone),{cache:"no-store"});
+      const d=await r.json();
+      if(!r.ok)throw Error(d.error||"Status unavailable");
+      const label=$("vendorPendingStatus");
+      if(label)label.textContent=d.status;
+      if(d.status==="APPROVED"){
+        clearInterval(window.__vendorPendingTimer);
+        const lr=await fetch("/api/vendor/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({whatsapp:phone,pin})});
+        const ld=await lr.json().catch(()=>({}));
+        if(lr.ok&&ld.token){
+          localStorage.setItem("basseVendorToken",ld.token);
+          sessionStorage.removeItem("basseVendorApplication");
+          $("modal").innerHTML=`<div class="sheet return-sheet"><div class="result-icon">✓</div><h2>Vendor Approved!</h2><p>Your shop is approved. Opening your Vendor Dashboard…</p></div>`;
+          setTimeout(()=>location.href="/vendor/",400);
+        }else{
+          $("modal").innerHTML=`<div class="sheet return-sheet"><div class="result-icon">✓</div><h2>Vendor Approved!</h2><p>Your account is approved. Use Vendor Login with your phone and PIN.</p><button class="pay" type="button" onclick="openVendorLogin()">🔐 VENDOR LOGIN</button></div>`;
+        }
+      }else if(d.status==="REJECTED"||d.status==="SUSPENDED"){
+        clearInterval(window.__vendorPendingTimer);
+      }
+    }catch(e){}
+  };
+  $("checkVendorApproval").onclick=check;
+  check();
+  window.__vendorPendingTimer=setInterval(check,3000);
+}
+function resumeVendorApplication(){
+  try{
+    const a=JSON.parse(sessionStorage.getItem("basseVendorApplication")||"null");
+    if(a&&a.id&&a.phone&&a.pin) showVendorPending(a.id,a.phone,a.pin,a.businessName||"Your shop");
+  }catch{}
+}
 
 function toast(t){let x=$("toast");x.textContent=t;x.classList.add("show");clearTimeout(window.__toast);window.__toast=setTimeout(()=>x.classList.remove("show"),2800)}
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 $("search").addEventListener("input",runSearch);$("search").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();$("searchSuggestions").classList.remove("show");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"smooth",block:"start"})}if(e.key==="Escape")clearSearch()});$("searchBtn").addEventListener("click",()=>{$("searchSuggestions").classList.remove("show");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"smooth",block:"start"});});$("clearSearch").addEventListener("click",clearSearch);document.addEventListener("click",e=>{if(!e.target.closest(".search-wrap"))$("searchSuggestions").classList.remove("show")});
-loadSearchIndex().then(loadProducts);handleReturn();
+loadSearchIndex().then(loadProducts);handleReturn();setTimeout(resumeVendorApplication,200);
 // Instant catalog/order updates. EventSource reconnects automatically if the connection drops.
 function connectLive(){
   try{
