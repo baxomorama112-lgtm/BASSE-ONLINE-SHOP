@@ -54,3 +54,14 @@ The customer-facing confirmation/support destination defaults to +220 6963349 vi
 - Customer accounts now use server-side authentication sessions and remain signed in after closing/reopening the browser until logout/expiry.
 - Mobile viewport/touch handling was tightened to reduce accidental double-tap zoom and horizontal page movement.
 - Marketplace polling fallback is 30 seconds and only runs when the live event stream is disconnected.
+
+
+## Vendor email verification + PIN
+- Vendor applications require an email address and a 6-digit OTP before Admin approval.
+- OTPs expire after 10 minutes and can be resent.
+- Vendor PINs are hashed and saved in SQLite; login normalizes the Gambia +220 phone format.
+- Existing vendors without email remain compatible.
+- If an older vendor PIN is broken, Admin can use **RESET PIN**; the new PIN is hashed and saved immediately.
+- Gmail OTP uses `smtp.gmail.com`. Set `GMAIL_USER` (defaults to `ADMIN_EMAIL`), `GMAIL_APP_PASSWORD`, and optional `EMAIL_FROM` in Render. Use a Google App Password, never the normal Gmail password.
+- The current default sender is the same admin email shown in `.env.example`: `Baxomorama112@gmail.com`. Change it only if you want a different sender.
+- Keep the existing Waychit payment and WhatsApp confirmation flow unchanged.

@@ -1,4 +1,4 @@
-const express=require("express"),Database=require("better-sqlite3"),multer=require("multer"),path=require("path"),crypto=require("crypto"),fs=require("fs");
+const express=require("express"),Database=require("better-sqlite3"),multer=require("multer"),path=require("path"),crypto=require("crypto"),fs=require("fs"),nodemailer=require("nodemailer");
 const app=express(),PORT=process.env.PORT||3000,ROOT=__dirname,DATA_DIR=process.env.DATA_DIR||path.join(ROOT,"data");
 const PUBLIC_BASE_URL=(process.env.PUBLIC_BASE_URL||"https://basse-online-shop.onrender.com").replace(/\/$/,"");
 const STATIC_WAYCHIT_URL=process.env.WAYCHIT_STATIC_URL||"https://app.waychit.com/pm/?param1=%7B%22type%22%3A%22staticPaymentRequest%22%2C%22merchantAccountId%22%3A%226a8b03204ad0d928fc3a529c%22%7D";
@@ -10,7 +10,7 @@ app.use("/",express.static(path.join(ROOT,"../marketplace")));
 const db=new Database(path.join(DATA_DIR,"basse-shop.db"));db.pragma("journal_mode=WAL");
 db.exec(`CREATE TABLE IF NOT EXISTS products(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT,category TEXT,price INTEGER,stock INTEGER,description TEXT,image TEXT,active INTEGER DEFAULT 1,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY,product_id INTEGER,product_name TEXT,quantity INTEGER,customer_name TEXT,whatsapp TEXT,location TEXT,total INTEGER,payment_status TEXT DEFAULT 'PENDING',order_status TEXT DEFAULT 'NEW',waychit_request_id TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,vendor_id INTEGER DEFAULT NULL,commission INTEGER DEFAULT 0,vendor_earnings INTEGER DEFAULT 0);
-CREATE TABLE IF NOT EXISTS vendors(id INTEGER PRIMARY KEY AUTOINCREMENT,full_name TEXT,business_name TEXT,whatsapp TEXT,location TEXT,category TEXT,description TEXT,password_hash TEXT,status TEXT DEFAULT 'PENDING',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS vendors(id INTEGER PRIMARY KEY AUTOINCREMENT,full_name TEXT,business_name TEXT,whatsapp TEXT,location TEXT,category TEXT,description TEXT,password_hash TEXT,status TEXT DEFAULT 'PENDING',created_at TEXT DEFAULT CURRENT_TIMESTAMP,email TEXT,email_verified INTEGER DEFAULT 0,otp_hash TEXT,otp_expires_at INTEGER,otp_attempts INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS vendor_products(id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER,vendor_id INTEGER,status TEXT DEFAULT 'PENDING',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS customer_accounts(id INTEGER PRIMARY KEY AUTOINCREMENT,full_name TEXT,whatsapp TEXT UNIQUE,password_hash TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS payout_requests(id INTEGER PRIMARY KEY AUTOINCREMENT,vendor_id INTEGER,amount INTEGER,status TEXT DEFAULT 'PENDING',created_at TEXT DEFAULT CURRENT_TIMESTAMP);\nCREATE TABLE IF NOT EXISTS auth_sessions(token TEXT PRIMARY KEY,type TEXT NOT NULL,vendor_id INTEGER DEFAULT NULL,customer_id INTEGER DEFAULT NULL,expires_at INTEGER NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);`);
@@ -19,6 +19,11 @@ try{db.exec("ALTER TABLE products ADD COLUMN vendor_id INTEGER DEFAULT NULL")}ca
 try{db.exec("ALTER TABLE orders ADD COLUMN vendor_id INTEGER DEFAULT NULL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN commission INTEGER DEFAULT 0")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN vendor_earnings INTEGER DEFAULT 0")}catch(e){}
+try{db.exec("ALTER TABLE vendors ADD COLUMN email TEXT")}catch(e){}
+try{db.exec("ALTER TABLE vendors ADD COLUMN email_verified INTEGER DEFAULT 0")}catch(e){}
+try{db.exec("ALTER TABLE vendors ADD COLUMN otp_hash TEXT")}catch(e){}
+try{db.exec("ALTER TABLE vendors ADD COLUMN otp_expires_at INTEGER")}catch(e){}
+try{db.exec("ALTER TABLE vendors ADD COLUMN otp_attempts INTEGER DEFAULT 0")}catch(e){}
 if(!db.prepare("SELECT COUNT(*) c FROM products").get().c){let q=db.prepare("INSERT INTO products(name,category,price,stock,description,image) VALUES(?,?,?,?,?,?)");[
 ["Premium Blue Hoodie","Fashion",850,15,"Comfortable everyday hoodie.","https://images.unsplash.com/photo-1551488831-00ddcb6c6bd3?auto=format&fit=crop&w=900&q=80"],
 ["Wireless Headphones","Electronics",1500,10,"Clear wireless sound.","https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=900&q=80"],
@@ -64,6 +69,28 @@ function authToken(req){return String(req.headers.authorization||"").replace(/^B
 function guard(req,res,next){const s=getSession(authToken(req));if(!s||s.type!=="admin")return res.status(401).json({error:"Admin login required"});next()}
 function vendorGuard(req,res,next){const s=getSession(authToken(req));if(!s||s.type!=="vendor")return res.status(401).json({error:"Vendor login required"});req.vendorId=s.vendorId;next()}
 function customerGuard(req,res,next){const s=getSession(authToken(req));if(!s||s.type!=="customer")return res.status(401).json({error:"Customer login required"});req.customerId=s.customerId;next()}
+function normalizePhone(value){return String(value||"").replace(/\D/g,"").replace(/^220/,"");}
+function hashSecret(value){return crypto.createHash("sha256").update(String(value||"")).digest("hex");}
+function secretMatches(value,stored){
+  const input=hashSecret(value);
+  if(stored===input)return true;
+  // Compatibility with any older build that may have stored the PIN directly.
+  if(/^\d{4,5}$/.test(String(stored||"")) && String(stored)===String(value)){return true;}
+  return false;
+}
+function gmailTransport(){
+  const user=process.env.GMAIL_USER||process.env.ADMIN_EMAIL;
+  const pass=process.env.GMAIL_APP_PASSWORD;
+  if(!user||!pass)return null;
+  return nodemailer.createTransport({host:"smtp.gmail.com",port:465,secure:true,auth:{user,pass}});
+}
+async function sendVendorOtp(email,code){
+  const transport=gmailTransport();
+  if(!transport)throw new Error("Email verification is not configured yet. Add GMAIL_APP_PASSWORD in Render.");
+  const from=process.env.EMAIL_FROM||process.env.GMAIL_USER||process.env.ADMIN_EMAIL;
+  await transport.sendMail({from,to:email,subject:"BASSE ONLINE SHOP verification code",text:`Your BASSE ONLINE SHOP verification code is ${code}. It expires in 10 minutes. If you did not request this, ignore this email.`,html:`<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto"><h2>BASSE ONLINE SHOP</h2><p>Your verification code is:</p><div style="font-size:34px;font-weight:700;letter-spacing:8px;padding:18px;background:#f2f5fb;text-align:center">${code}</div><p>This code expires in 10 minutes.</p></div>`});
+}
+
 app.get("/api/products",(req,res)=>{let p=db.prepare("SELECT * FROM products WHERE active=1 ORDER BY id DESC").all(),c=req.query.category||"All",q=(req.query.q||"").toLowerCase();if(c!=="All")p=p.filter(x=>x.category===c);if(q)p=p.filter(x=>(x.name+" "+x.category+" "+x.description).toLowerCase().includes(q));res.json(p)});
 app.get("/api/products/:id",(req,res)=>{let p=db.prepare("SELECT * FROM products WHERE id=? AND active=1").get(req.params.id);p?res.json(p):res.status(404).json({error:"Product not found"})});
 app.post("/api/admin/login",(req,res)=>{if(req.body.email===process.env.ADMIN_EMAIL&&req.body.password===process.env.ADMIN_PASSWORD){let t=createSession("admin");res.json({token:t})}else res.status(401).json({error:"Invalid admin login"})});
@@ -170,9 +197,13 @@ app.get("/api/customer/me",customerGuard,(req,res)=>{
 app.post("/api/customer/logout",(req,res)=>{deleteSession(authToken(req));res.json({ok:true})});
 
 app.post("/api/vendor/login",(req,res)=>{
- const phone=String(req.body.whatsapp||req.body.phone||"").replace(/\D/g,"").replace(/^220/,""),pin=String(req.body.pin||"");
+ const phone=normalizePhone(req.body.whatsapp||req.body.phone),pin=String(req.body.pin||"").trim();
+ if(phone.length<6)return res.status(400).json({error:"Enter a valid WhatsApp number."});
+ if(!/^\d{4,5}$/.test(pin))return res.status(400).json({error:"PIN must be 4 or 5 digits."});
  const v=db.prepare("SELECT * FROM vendors WHERE whatsapp=? AND status='APPROVED'").get("220"+phone);
- if(!v||crypto.createHash("sha256").update(pin).digest("hex")!==v.password_hash)return res.status(401).json({error:"Invalid vendor login or account not approved."});
+ if(!v||!secretMatches(pin,v.password_hash))return res.status(401).json({error:"Invalid vendor number or PIN. If you recently changed your PIN, use the new PIN."});
+ // Upgrade any legacy plain-text PIN immediately to a hash.
+ if(String(v.password_hash||"")===pin)db.prepare("UPDATE vendors SET password_hash=? WHERE id=?").run(hashSecret(pin),v.id);
  const t=createSession("vendor",{vendorId:v.id});
  res.json({token:t,vendor:{id:v.id,business_name:v.business_name,full_name:v.full_name}});
 });
@@ -197,19 +228,48 @@ app.post("/api/vendor/products",vendorGuard,upload.array("images",8),(req,res)=>
 app.get("/api/vendor/products",vendorGuard,(req,res)=>res.json(db.prepare("SELECT p.*,COALESCE(vp.status,'APPROVED') approval_status FROM products p LEFT JOIN vendor_products vp ON vp.product_id=p.id WHERE p.vendor_id=? ORDER BY p.id DESC").all(req.vendorId)));
 
 // Vendor applications: public application, admin approval, isolated vendor data
-app.post("/api/vendors/apply",(req,res)=>{
+app.post("/api/vendors/apply",async(req,res)=>{
   const b=req.body||{};
-  const pin=String(b.password||"");
-  if(!String(b.fullName||"").trim()||!String(b.businessName||"").trim()||String(b.whatsapp||"").replace(/\D/g,"").length<6)return res.status(400).json({error:"Please complete your name, business name and WhatsApp number."});
+  const pin=String(b.password||"").trim(), confirm=String(b.confirmPin||pin).trim();
+  const email=String(b.email||"").trim().toLowerCase();
+  const phone=normalizePhone(b.whatsapp);
+  if(!String(b.fullName||"").trim()||!String(b.businessName||"").trim()||phone.length<6||!email)return res.status(400).json({error:"Please complete your name, business name, WhatsApp number and email."});
+  if(!/^\S+@\S+\.\S+$/.test(email))return res.status(400).json({error:"Enter a valid email address."});
   if(!/^\d{4,5}$/.test(pin))return res.status(400).json({error:"Vendor PIN must be exactly 4 or 5 digits."});
-  const phone=String(b.whatsapp).replace(/\D/g,"").replace(/^220/,"");
+  if(pin!==confirm)return res.status(400).json({error:"PINs do not match."});
   const exists=db.prepare("SELECT id FROM vendors WHERE whatsapp=? AND status!='REJECTED'").get("220"+phone);
   if(exists)return res.status(409).json({error:"A vendor application already exists for this number."});
-  const x=db.prepare("INSERT INTO vendors(full_name,business_name,whatsapp,location,category,description,password_hash) VALUES(?,?,?,?,?,?,?)").run(String(b.fullName).trim(),String(b.businessName).trim(),"220"+phone,String(b.location||""),String(b.category||""),String(b.description||""),crypto.createHash("sha256").update(pin).digest("hex"));
-  broadcastLive("vendors",{vendorId:Number(x.lastInsertRowid)});res.json({ok:true,id:x.lastInsertRowid,message:"Application submitted. Wait for admin approval."});
+  const code=String(crypto.randomInt(100000,1000000)),otpHash=hashSecret(code),expires=Date.now()+10*60*1000;
+  try{
+    const x=db.prepare("INSERT INTO vendors(full_name,business_name,whatsapp,location,category,description,password_hash,status,email,email_verified,otp_hash,otp_expires_at,otp_attempts) VALUES(?,?,?,?,?,?,?,'PENDING',?,0,?,?,0)").run(String(b.fullName).trim(),String(b.businessName).trim(),"220"+phone,String(b.location||""),String(b.category||""),String(b.description||""),hashSecret(pin),email,otpHash,expires);
+    try{await sendVendorOtp(email,code)}catch(mailErr){db.prepare("DELETE FROM vendors WHERE id=?").run(x.lastInsertRowid);return res.status(503).json({error:mailErr.message});}
+    broadcastLive("vendors",{vendorId:Number(x.lastInsertRowid)});
+    res.json({ok:true,id:x.lastInsertRowid,verificationRequired:true,email,message:"Verification code sent to your email."});
+  }catch(e){res.status(500).json({error:"Unable to create vendor account."})}
+});
+app.post("/api/vendors/verify-email",(req,res)=>{
+  const email=String(req.body.email||"").trim().toLowerCase(),code=String(req.body.code||"").replace(/\D/g,"");
+  if(!email||!/\d{6}/.test(code))return res.status(400).json({error:"Enter the 6-digit verification code."});
+  const v=db.prepare("SELECT * FROM vendors WHERE email=? AND status='PENDING' ORDER BY id DESC LIMIT 1").get(email);
+  if(!v)return res.status(404).json({error:"Vendor application not found."});
+  if(v.email_verified)return res.json({ok:true,verified:true});
+  if(Number(v.otp_attempts||0)>=5)return res.status(429).json({error:"Too many incorrect codes. Request a new code."});
+  if(!v.otp_expires_at||Number(v.otp_expires_at)<Date.now())return res.status(400).json({error:"That code has expired. Please request a new code."});
+  if(!secretMatches(code,v.otp_hash)){db.prepare("UPDATE vendors SET otp_attempts=COALESCE(otp_attempts,0)+1 WHERE id=?").run(v.id);return res.status(400).json({error:"Incorrect verification code."});}
+  db.prepare("UPDATE vendors SET email_verified=1,otp_hash=NULL,otp_expires_at=NULL,otp_attempts=0 WHERE id=?").run(v.id);
+  broadcastLive("vendors",{vendorId:v.id,emailVerified:true});
+  res.json({ok:true,verified:true,message:"Email verified. Your application is now waiting for Admin approval."});
+});
+app.post("/api/vendors/resend-otp",async(req,res)=>{
+  const email=String(req.body.email||"").trim().toLowerCase();
+  const v=db.prepare("SELECT * FROM vendors WHERE email=? AND status='PENDING' ORDER BY id DESC LIMIT 1").get(email);
+  if(!v)return res.status(404).json({error:"Vendor application not found."});
+  const code=String(crypto.randomInt(100000,1000000));
+  try{await sendVendorOtp(email,code);db.prepare("UPDATE vendors SET otp_hash=?,otp_expires_at=?,otp_attempts=0 WHERE id=?").run(hashSecret(code),Date.now()+10*60*1000,v.id);res.json({ok:true,message:"A new verification code was sent."});}
+  catch(e){res.status(503).json({error:e.message})}
 });
 app.get("/api/admin/vendors",guard,(req,res)=>res.json(db.prepare("SELECT * FROM vendors ORDER BY datetime(created_at) DESC").all()));
-app.post("/api/admin/vendors/:id/approve",guard,(req,res)=>{db.prepare("UPDATE vendors SET status='APPROVED' WHERE id=?").run(req.params.id);broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true})});
+app.post("/api/admin/vendors/:id/approve",guard,(req,res)=>{const v=db.prepare("SELECT id,email,email_verified FROM vendors WHERE id=?").get(req.params.id);if(!v)return res.status(404).json({error:"Vendor not found"});if(v.email&&!v.email_verified)return res.status(400).json({error:"Vendor must verify the email address before approval."});db.prepare("UPDATE vendors SET status='APPROVED' WHERE id=?").run(req.params.id);broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true})});
 app.post("/api/admin/vendors/:id/reject",guard,(req,res)=>{db.prepare("UPDATE vendors SET status='REJECTED' WHERE id=?").run(req.params.id);broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true})});
 app.post("/api/admin/vendors/:id/suspend",guard,(req,res)=>{db.prepare("UPDATE vendors SET status='SUSPENDED' WHERE id=?").run(req.params.id);broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true})});
 app.post("/api/admin/vendors/:id/reset-pin",guard,(req,res)=>{
@@ -217,7 +277,7 @@ app.post("/api/admin/vendors/:id/reset-pin",guard,(req,res)=>{
   if(!/^\d{4,5}$/.test(pin))return res.status(400).json({error:"PIN must be exactly 4 or 5 digits."});
   const v=db.prepare("SELECT id FROM vendors WHERE id=?").get(req.params.id);
   if(!v)return res.status(404).json({error:"Vendor not found"});
-  db.prepare("UPDATE vendors SET password_hash=? WHERE id=?").run(crypto.createHash("sha256").update(pin).digest("hex"),req.params.id);
+  db.prepare("UPDATE vendors SET password_hash=? WHERE id=?").run(hashSecret(pin),req.params.id);
   broadcastLive("vendors",{vendorId:Number(req.params.id),pinReset:true});
   res.json({ok:true});
 });
