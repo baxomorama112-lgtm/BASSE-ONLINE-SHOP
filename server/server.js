@@ -33,7 +33,7 @@ if(!db.prepare("SELECT COUNT(*) c FROM products").get().c){let q=db.prepare("INS
 ["Smart Watch Pro","Electronics",2200,9,"Smart everyday watch.","https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80"]].forEach(x=>q.run(...x))}
 const upload=multer({storage:multer.diskStorage({destination:path.join(DATA_DIR,"uploads"),filename:(r,f,cb)=>cb(null,crypto.randomBytes(8).toString("hex")+path.extname(f.originalname))}),limits:{fileSize:6e6}});
 const sessions=new Map(); // short-lived cache; auth_sessions is the persistent source of truth
-const SESSION_DAYS=30;
+const SESSION_DAYS=3650; // Keep vendor/customer sessions until explicit logout (or manual token cleanup).
 function createSession(type,fields={}){
  const token=crypto.randomBytes(32).toString("hex"),expires=Date.now()+SESSION_DAYS*864e5;
  db.prepare("INSERT INTO auth_sessions(token,type,vendor_id,customer_id,expires_at) VALUES(?,?,?,?,?)").run(token,type,fields.vendorId||null,fields.customerId||null,expires);
@@ -70,6 +70,11 @@ function guard(req,res,next){const s=getSession(authToken(req));if(!s||s.type!==
 function vendorGuard(req,res,next){const s=getSession(authToken(req));if(!s||s.type!=="vendor")return res.status(401).json({error:"Vendor login required"});req.vendorId=s.vendorId;next()}
 function customerGuard(req,res,next){const s=getSession(authToken(req));if(!s||s.type!=="customer")return res.status(401).json({error:"Customer login required"});req.customerId=s.customerId;next()}
 function normalizePhone(value){return String(value||"").replace(/\D/g,"").replace(/^220/,"");}
+function phoneVariants(value){
+  const raw=String(value||"").replace(/\D/g,"");
+  const local=raw.replace(/^220/,"");
+  return [...new Set([raw,local,"220"+local])].filter(Boolean);
+}
 function hashSecret(value){return crypto.createHash("sha256").update(String(value||"")).digest("hex");}
 function secretMatches(value,stored){
   const input=hashSecret(value);
@@ -200,8 +205,14 @@ app.post("/api/vendor/login",(req,res)=>{
  const phone=normalizePhone(req.body.whatsapp||req.body.phone),pin=String(req.body.pin||"").trim();
  if(phone.length<6)return res.status(400).json({error:"Enter a valid WhatsApp number."});
  if(!/^\d{4,5}$/.test(pin))return res.status(400).json({error:"PIN must be 4 or 5 digits."});
- const v=db.prepare("SELECT * FROM vendors WHERE whatsapp=? AND status='APPROVED'").get("220"+phone);
- if(!v||!secretMatches(pin,v.password_hash))return res.status(401).json({error:"Invalid vendor number or PIN. If you recently changed your PIN, use the new PIN."});
+ const variants=phoneVariants(req.body.whatsapp||req.body.phone);
+ const v=db.prepare(`SELECT * FROM vendors WHERE whatsapp IN (${variants.map(()=>"?").join(",")}) ORDER BY id DESC LIMIT 1`).get(...variants);
+ if(!v){return res.status(401).json({error:"Vendor account not found. Check the WhatsApp number."});}
+ if(v.status!=='APPROVED'){
+   const msg=v.status==='PENDING' ? "Your vendor application is still pending Admin approval." : v.status==='SUSPENDED' ? "Your vendor account is suspended. Contact BASSE ONLINE SHOP Admin." : "This vendor account is not active.";
+   return res.status(403).json({error:msg,status:v.status});
+ }
+ if(!secretMatches(pin,v.password_hash))return res.status(401).json({error:"Incorrect vendor PIN. The PIN saved when you created the account is required."});
  // Upgrade any legacy plain-text PIN immediately to a hash.
  if(String(v.password_hash||"")===pin)db.prepare("UPDATE vendors SET password_hash=? WHERE id=?").run(hashSecret(pin),v.id);
  const t=createSession("vendor",{vendorId:v.id});
@@ -237,8 +248,9 @@ app.post("/api/vendors/apply",async(req,res)=>{
   if(email && !/^\S+@\S+\.\S+$/.test(email))return res.status(400).json({error:"Enter a valid email address."});
   if(!/^\d{4,5}$/.test(pin))return res.status(400).json({error:"Vendor PIN must be exactly 4 or 5 digits."});
   if(pin!==confirm)return res.status(400).json({error:"PINs do not match."});
-  const exists=db.prepare("SELECT id FROM vendors WHERE whatsapp=? AND status!='REJECTED'").get("220"+phone);
-  if(exists)return res.status(409).json({error:"A vendor application already exists for this number."});
+  const variants=phoneVariants(b.whatsapp);
+  const exists=db.prepare(`SELECT id,status FROM vendors WHERE whatsapp IN (${variants.map(()=>"?").join(",")}) AND status!='REJECTED' LIMIT 1`).get(...variants);
+  if(exists)return res.status(409).json({error:`A vendor application already exists for this number (${exists.status}). If this is your application, wait for Admin approval or ask Admin to reset/reopen it.`});
   const code=String(crypto.randomInt(100000,1000000)),otpHash=hashSecret(code),expires=Date.now()+10*60*1000;
   try{
     const x=db.prepare("INSERT INTO vendors(full_name,business_name,whatsapp,location,category,description,password_hash,status,email,email_verified,otp_hash,otp_expires_at,otp_attempts) VALUES(?,?,?,?,?,?,?,'PENDING',?,0,?,?,0)").run(String(b.fullName).trim(),String(b.businessName).trim(),"220"+phone,String(b.location||""),String(b.category||""),String(b.description||""),hashSecret(pin),email || null,email ? otpHash : null,email ? expires : null);
@@ -290,7 +302,7 @@ app.post("/api/vendors/resend-otp",async(req,res)=>{
   catch(e){res.status(503).json({error:e.message})}
 });
 app.get("/api/admin/vendors",guard,(req,res)=>res.json(db.prepare("SELECT * FROM vendors ORDER BY datetime(created_at) DESC").all()));
-app.post("/api/admin/vendors/:id/approve",guard,(req,res)=>{const v=db.prepare("SELECT id,email,email_verified FROM vendors WHERE id=?").get(req.params.id);if(!v)return res.status(404).json({error:"Vendor not found"});db.prepare("UPDATE vendors SET status='APPROVED' WHERE id=?").run(req.params.id);broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true,message:"Vendor approved successfully. Email verification is optional."})});
+app.post("/api/admin/vendors/:id/approve",guard,(req,res)=>{const v=db.prepare("SELECT id,email,email_verified FROM vendors WHERE id=?").get(req.params.id);if(!v)return res.status(404).json({error:"Vendor not found"});db.prepare("UPDATE vendors SET status='APPROVED', email_verified=CASE WHEN email IS NOT NULL AND email != '' THEN 1 ELSE email_verified END WHERE id=?").run(req.params.id);broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true,message:"Vendor approved successfully. Email verification is optional."})});
 app.post("/api/admin/vendors/:id/reject",guard,(req,res)=>{db.prepare("UPDATE vendors SET status='REJECTED' WHERE id=?").run(req.params.id);broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true})});
 app.post("/api/admin/vendors/:id/suspend",guard,(req,res)=>{db.prepare("UPDATE vendors SET status='SUSPENDED' WHERE id=?").run(req.params.id);broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true})});
 app.post("/api/admin/vendors/:id/reset-pin",guard,(req,res)=>{

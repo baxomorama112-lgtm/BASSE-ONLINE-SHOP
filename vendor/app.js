@@ -1,4 +1,15 @@
-let token=localStorage.getItem("basseVendorToken")||"";const $=x=>document.getElementById(x),money=n=>"D"+Number(n||0).toLocaleString();const H=()=>({Authorization:"Bearer "+token});async function api(u,o={}){let r=await fetch(u,{...o,credentials:"same-origin",headers:{...H(),...(o.headers||{})}}),d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||"Request failed");return d}async function login(){try{let d=await api("/api/vendor/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({whatsapp:$("phone").value,pin:$("pin").value})});token=d.token;localStorage.setItem("basseVendorToken",token);start()}catch(e){alert(e.message)}}function start(){$("login").classList.add("hidden");$("app").classList.remove("hidden");refresh()}function logout(){
+let token=localStorage.getItem("basseVendorToken")||"";const $=x=>document.getElementById(x),money=n=>"D"+Number(n||0).toLocaleString();const H=()=>({Authorization:"Bearer "+token});async function api(u,o={}){let r=await fetch(u,{...o,credentials:"same-origin",headers:{...H(),...(o.headers||{})}}),d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||"Request failed");return d}async function login(){try{let d=await api("/api/vendor/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({whatsapp:$("phone").value,pin:$("pin").value})});token=d.token;localStorage.setItem("basseVendorToken",token);start()}catch(e){alert(e.message)}}async function start(){
+  try{
+    if(!token)throw Error("no token");
+    const me=await api("/api/vendor/me");
+    $("login").classList.add("hidden");$("app").classList.remove("hidden");
+    $("shop").textContent=me.business_name||"My Shop";
+    refresh();
+  }catch(e){
+    localStorage.removeItem("basseVendorToken");token="";
+    $("app").classList.add("hidden");$("login").classList.remove("hidden");
+  }
+}function logout(){
   localStorage.removeItem("basseVendorToken");
   if(window.__vendorFallbackTimer) clearInterval(window.__vendorFallbackTimer);
   location.href="/vendor/";

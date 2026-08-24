@@ -65,3 +65,20 @@ The customer-facing confirmation/support destination defaults to +220 6963349 vi
 - Gmail OTP uses `smtp.gmail.com`. Set `GMAIL_USER` (defaults to `ADMIN_EMAIL`), `GMAIL_APP_PASSWORD`, and optional `EMAIL_FROM` in Render. Use a Google App Password, never the normal Gmail password.
 - The current default sender is the same admin email shown in `.env.example`: `Baxomorama112@gmail.com`. Change it only if you want a different sender.
 - Keep the existing Waychit payment and WhatsApp confirmation flow unchanged.
+
+
+## Vendor login fix checklist
+- Vendor PINs are hashed and saved in the persistent SQLite database.
+- Vendor login accepts local Gambian numbers and numbers stored with the +220 country code.
+- Admin approval changes the vendor status to APPROVED; email verification no longer blocks login.
+- Vendor sessions are persisted server-side and kept for a long period; logout explicitly removes the session.
+- Vendor applications still open WhatsApp after submission.
+- For Gmail OTP, set GMAIL_USER, GMAIL_APP_PASSWORD and EMAIL_FROM in Render.
+
+### Test after deployment
+1. Submit a new vendor application with a NEW WhatsApp number and a 4–5 digit PIN.
+2. Confirm the application appears in Admin → Vendors as PENDING.
+3. Press APPROVE.
+4. Log in at /vendor/ using the exact WhatsApp number and the PIN created during application.
+5. Close/reopen the browser without logging out. The vendor should remain signed in.
+6. Press Logout and confirm the login screen returns.
