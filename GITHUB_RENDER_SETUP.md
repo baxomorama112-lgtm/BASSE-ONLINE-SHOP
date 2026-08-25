@@ -52,3 +52,16 @@ After deployment, use:
 https://YOUR-SERVER-DOMAIN/api/waychit/webhook
 
 Configure this in Waychit and keep the webhook signing secret in Render Environment Variables.
+
+## BASSE Auto-Save update
+
+The latest build adds a full-shop automatic save/restore layer in **Admin → Backup & Settings**. It saves product/vendor/order/customer data to `server/data/catalog-backup.json` after important changes and can restore it automatically when the database is empty.
+
+For this to survive Render restarts, the Render service must use the Persistent Disk configured in `render.yaml`:
+
+- plan: `starter` (or another plan that supports the disk)
+- mount path: `/opt/render/project/src/server/data`
+- size: `1 GB`
+- `DATA_DIR=/opt/render/project/src/server/data`
+
+Do not delete the disk during deployment.

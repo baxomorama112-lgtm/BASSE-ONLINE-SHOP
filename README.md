@@ -49,3 +49,29 @@ The customer-facing confirmation/support destination defaults to +220 6963349 vi
 ## Data persistence
 
 The live app stores its SQLite database and uploaded product images under `DATA_DIR`. The included `render.yaml` mounts a 1 GB Render persistent disk at `/opt/render/project/src/server/data`. Keep that disk attached to the `basse-online-shop` service; do not point `DATA_DIR` at an ephemeral location. Vendor product submissions use an idempotency key so a retry after a dropped network does not create duplicate products.
+
+## BASSE Auto-Save & Render Persistence
+
+The Admin Dashboard now includes **Backup & Settings → Automatic Shop Save**.
+
+- Automatic saving runs on important shop changes (products, vendor applications/approval, orders/payments, PIN changes, etc.).
+- **SAVE SHOP NOW** creates an immediate full shop snapshot.
+- The snapshot contains products, orders, vendors, vendor products, customer accounts, payout requests, and vendor submission keys.
+- If the SQLite database starts completely empty and a saved snapshot exists, the server automatically restores the shop data at startup.
+- Admin and vendor authentication sessions are now stored in SQLite instead of only server memory, so the existing login token can survive a normal Render restart when persistent storage is enabled.
+
+### Important Render requirement
+
+This feature protects data across Render sleep/restart **only when the service has persistent storage**. The current `render.yaml` configures a 1 GB Render Persistent Disk mounted at:
+
+`/opt/render/project/src/server/data`
+
+and sets:
+
+`DATA_DIR=/opt/render/project/src/server/data`
+
+Do not delete the existing Render disk when deploying. On the Free Render instance, filesystem data is still ephemeral; upgrade/attach the persistent disk before relying on the automatic restore.
+
+
+### Image-safe backups
+Full backups now include the actual uploaded files from `server/data/uploads` as base64 data, and restore writes those files back before products are served. Cloud snapshots use the same file bundle. This is designed to prevent products from returning without their pictures after a Render restart.

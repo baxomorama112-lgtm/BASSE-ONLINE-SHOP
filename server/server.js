@@ -15,55 +15,181 @@ CREATE TABLE IF NOT EXISTS vendors(id INTEGER PRIMARY KEY AUTOINCREMENT,full_nam
 CREATE TABLE IF NOT EXISTS vendor_products(id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER,vendor_id INTEGER,status TEXT DEFAULT 'PENDING',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS customer_accounts(id INTEGER PRIMARY KEY AUTOINCREMENT,full_name TEXT,whatsapp TEXT UNIQUE,password_hash TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS payout_requests(id INTEGER PRIMARY KEY AUTOINCREMENT,vendor_id INTEGER,amount INTEGER,status TEXT DEFAULT 'PENDING',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS vendor_submission_keys(idempotency_key TEXT PRIMARY KEY,vendor_id INTEGER NOT NULL,product_id INTEGER NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);`);
+CREATE TABLE IF NOT EXISTS vendor_submission_keys(idempotency_key TEXT PRIMARY KEY,vendor_id INTEGER NOT NULL,product_id INTEGER NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS auth_sessions(token TEXT PRIMARY KEY,type TEXT NOT NULL,vendor_id INTEGER DEFAULT NULL,expires_at INTEGER NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);`);
 try{db.exec("ALTER TABLE products ADD COLUMN images TEXT DEFAULT ''")}catch(e){}
-function backupCatalog(){
-  try{
-    const products=db.prepare("SELECT * FROM products ORDER BY id").all();
-    fs.writeFileSync(BACKUP_PATH,JSON.stringify({version:1,createdAt:new Date().toISOString(),products},null,2),"utf8");
-  }catch(e){console.error("Catalog backup failed:",e.message)}
+const BACKUP_TABLES=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys"];
+function buildShopSnapshot(){
+  const data={version:3,createdAt:new Date().toISOString(),tables:{}};
+  for(const table of BACKUP_TABLES)data.tables[table]=db.prepare(`SELECT * FROM ${table}`).all();
+  data.meta={productCount:data.tables.products.length,orderCount:data.tables.orders.length,vendorCount:data.tables.vendors.length,orderTotal:data.tables.orders.reduce((n,o)=>n+Number(o.total||0),0)};
+  return data;
 }
-function restoreCatalogIfEmpty(){
+const CLOUD_BACKUP_PROVIDER="github";
+const GITHUB_TOKEN=String(process.env.GITHUB_BACKUP_TOKEN||"").trim();
+const GITHUB_REPO=String(process.env.GITHUB_BACKUP_REPO||"").trim();
+const GITHUB_PATH=String(process.env.GITHUB_BACKUP_PATH||"basse-shop-backup.json").replace(/^\/+/,"");
+const GITHUB_BRANCH=String(process.env.GITHUB_BACKUP_BRANCH||"main").trim()||"main";
+let cloudBackupState={configured:Boolean(GITHUB_TOKEN&&GITHUB_REPO),status:GITHUB_TOKEN&&GITHUB_REPO?"ready":"not-configured",lastSaved:null,lastError:""};
+let cloudTimer=null,cloudBusy=false,cloudPending=null;
+function cloudHeaders(){return {"Accept":"application/vnd.github+json","Authorization":`Bearer ${GITHUB_TOKEN}`,"X-GitHub-Api-Version":"2022-11-28","Content-Type":"application/json"}}
+function cloudConfigured(){return Boolean(GITHUB_TOKEN&&GITHUB_REPO&&/^[^/]+\/[^/]+$/.test(GITHUB_REPO));}
+function collectBackupFiles(){
+  const dir=path.join(DATA_DIR,"uploads");
+  if(!fs.existsSync(dir))return [];
+  const out=[];
+  for(const name of fs.readdirSync(dir)){
+    const full=path.join(dir,name);
+    try{if(fs.statSync(full).isFile())out.push({path:`uploads/${name}`,content:fs.readFileSync(full).toString("base64")})}catch{}
+  }
+  return out;
+}
+function buildCloudSnapshot(reason="auto"){
+  const data=buildShopSnapshot();
+  data.reason=reason;
+  data.files=collectBackupFiles();
+  return data;
+}
+async function githubGet(){
+  if(!cloudConfigured())return null;
+  const url=`https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_PATH}?ref=${encodeURIComponent(GITHUB_BRANCH)}`;
+  const r=await fetch(url,{headers:cloudHeaders()});
+  if(r.status===404)return null;
+  if(!r.ok)throw new Error(`GitHub backup read failed (${r.status})`);
+  const j=await r.json();
+  if(!j.content)throw new Error("GitHub backup file has no content");
+  return {sha:j.sha,data:JSON.parse(Buffer.from(j.content.replace(/\n/g,""),"base64").toString("utf8"))};
+}
+async function githubPut(data,sha=null){
+  if(!cloudConfigured())return {ok:false,error:"Cloud backup is not configured."};
+  const url=`https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_PATH}`;
+  const body={message:`BASSE automatic backup ${new Date().toISOString()}`,content:Buffer.from(JSON.stringify(data)).toString("base64"),branch:GITHUB_BRANCH};
+  if(sha)body.sha=sha;
+  const r=await fetch(url,{method:"PUT",headers:cloudHeaders(),body:JSON.stringify(body)});
+  if(!r.ok){let msg=`GitHub backup write failed (${r.status})`;try{const j=await r.json();if(j.message)msg+=`: ${j.message}`}catch{}throw new Error(msg)}
+  return r.json();
+}
+async function saveCloudSnapshot(reason="auto"){
+  if(!cloudConfigured())return {ok:false,skipped:true,error:"Cloud backup is not configured."};
+  const data=buildCloudSnapshot(reason);
+  let current=null;
+  try{current=await githubGet()}catch(e){cloudBackupState.status="error";cloudBackupState.lastError=e.message;console.error(e.message);return {ok:false,error:e.message}}
   try{
-    const count=db.prepare("SELECT COUNT(*) c FROM products").get().c;
-    if(count>0||!fs.existsSync(BACKUP_PATH))return;
-    const snap=JSON.parse(fs.readFileSync(BACKUP_PATH,"utf8"));
-    if(!Array.isArray(snap.products)||!snap.products.length)return;
-    const ins=db.prepare("INSERT OR REPLACE INTO products(id,name,category,price,stock,description,image,active,created_at,images,vendor_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)");
-    const tx=db.transaction(rows=>rows.forEach(p=>ins.run(p.id,p.name,p.category,p.price,p.stock,p.description||"",p.image||"",p.active??1,p.created_at||new Date().toISOString(),p.images||"[]",p.vendor_id??null)));
-    tx(snap.products);
-    console.log(`Restored ${snap.products.length} products from catalog backup.`);
-  }catch(e){console.error("Catalog restore failed:",e.message)}
+    await githubPut(data,current?.sha||null);
+    cloudBackupState.status="saved";cloudBackupState.lastSaved=data.createdAt;cloudBackupState.lastError="";
+    return {ok:true,createdAt:data.createdAt,meta:data.meta};
+  }catch(e){
+    cloudBackupState.status="error";cloudBackupState.lastError=e.message;console.error("Cloud auto-save failed:",e.message);return {ok:false,error:e.message};
+  }
+}
+function queueCloudBackup(reason="auto"){
+  if(!cloudConfigured())return;
+  cloudPending=reason;
+  clearTimeout(cloudTimer);
+  cloudTimer=setTimeout(async()=>{
+    if(cloudBusy)return;
+    cloudBusy=true;const why=cloudPending||"auto";cloudPending=null;
+    try{await saveCloudSnapshot(why)}finally{cloudBusy=false;if(cloudPending)queueCloudBackup(cloudPending)}
+  },3000);
+}
+function backupShopData(reason="auto"){
+  try{
+    const data=buildShopSnapshot();
+    const tmp=BACKUP_PATH+".tmp";
+    fs.writeFileSync(tmp,JSON.stringify({...data,reason},null,2),"utf8");
+    fs.renameSync(tmp,BACKUP_PATH);
+    queueCloudBackup(reason);
+    return {ok:true,createdAt:data.createdAt,meta:data.meta,cloudConfigured:cloudConfigured(),cloudStatus:cloudBackupState.status};
+  }catch(e){console.error("Shop auto-save failed:",e.message);return {ok:false,error:e.message}}
+}
+function backupCatalog(){ return backupShopData("data-change"); }
+async function restoreFromCloudIfEmpty(){
+  if(!cloudConfigured())return false;
+  try{
+    const counts=BACKUP_TABLES.map(t=>Number(db.prepare(`SELECT COUNT(*) c FROM ${t}`).get().c));
+    if(counts.some(Boolean))return false;
+    const remote=await githubGet();
+    if(!remote?.data?.tables?.products)return false;
+    const data=remote.data;
+    const schemas={
+      products:["id","name","category","price","stock","description","image","active","created_at","images","vendor_id"],
+      orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings"],
+      vendors:["id","full_name","business_name","whatsapp","email","email_verified","verification_code","verification_expires","location","category","description","password_hash","status","created_at"],
+      vendor_products:["id","product_id","vendor_id","status","created_at"],
+      customer_accounts:["id","full_name","whatsapp","password_hash","created_at"],
+      payout_requests:["id","vendor_id","amount","status","created_at"],
+      vendor_submission_keys:["idempotency_key","vendor_id","product_id","created_at"]
+    };
+    const tx=db.transaction(()=>{
+      db.pragma("foreign_keys = OFF");
+      for(const table of BACKUP_TABLES)db.prepare(`DELETE FROM ${table}`).run();
+      for(const table of BACKUP_TABLES){const cols=schemas[table],rows=Array.isArray(data.tables[table])?data.tables[table]:[];if(!rows.length)continue;const ins=db.prepare(`INSERT INTO ${table} (${cols.join(",")}) VALUES (${cols.map(()=>"?").join(",")})`);for(const row of rows)ins.run(...cols.map(k=>row[k]??null));}
+    });
+    tx();
+    for(const file of (data.files||[])){
+      if(!file?.path||!file.path.startsWith("uploads/")||file.path.includes(".."))continue;
+      const dest=path.join(DATA_DIR,file.path);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.writeFileSync(dest,Buffer.from(file.content||"","base64"));
+    }
+    cloudBackupState.status="restored";cloudBackupState.lastSaved=data.createdAt||null;cloudBackupState.lastError="";
+    console.log(`CLOUD AUTO-RESTORE completed: ${data.meta?.productCount||0} products, ${data.meta?.vendorCount||0} vendors.`);
+    return true;
+  }catch(e){cloudBackupState.status="error";cloudBackupState.lastError=e.message;console.error("Cloud auto-restore failed:",e.message);return false}
+}
+function restoreShopBackupIfEmpty(){
+  try{
+    const counts=BACKUP_TABLES.map(t=>Number(db.prepare(`SELECT COUNT(*) c FROM ${t}`).get().c));
+    if(counts.some(Boolean)||!fs.existsSync(BACKUP_PATH))return false;
+    const data=JSON.parse(fs.readFileSync(BACKUP_PATH,"utf8"));
+    if(!data?.tables?.products)return false;
+    const schemas={
+      products:["id","name","category","price","stock","description","image","active","created_at","images","vendor_id"],
+      orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings"],
+      vendors:["id","full_name","business_name","whatsapp","email","email_verified","verification_code","verification_expires","location","category","description","password_hash","status","created_at"],
+      vendor_products:["id","product_id","vendor_id","status","created_at"],
+      customer_accounts:["id","full_name","whatsapp","password_hash","created_at"],
+      payout_requests:["id","vendor_id","amount","status","created_at"],
+      vendor_submission_keys:["idempotency_key","vendor_id","product_id","created_at"]
+    };
+    const tx=db.transaction(()=>{
+      db.pragma("foreign_keys = OFF");
+      for(const table of BACKUP_TABLES)db.prepare(`DELETE FROM ${table}`).run();
+      for(const table of BACKUP_TABLES){
+        const cols=schemas[table], rows=Array.isArray(data.tables[table])?data.tables[table]:[];
+        if(!rows.length)continue;
+        const ins=db.prepare(`INSERT INTO ${table} (${cols.join(",")}) VALUES (${cols.map(()=>"?").join(",")})`);
+        for(const row of rows)ins.run(...cols.map(k=>row[k]??null));
+      }
+    });
+    tx();
+    console.log(`AUTO-RESTORE completed: ${data.meta?.productCount||0} products, ${data.meta?.vendorCount||0} vendors.`);
+    return true;
+  }catch(e){console.error("Shop auto-restore failed:",e.message);return false}
 }
 
 try{db.exec("ALTER TABLE products ADD COLUMN vendor_id INTEGER DEFAULT NULL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN vendor_id INTEGER DEFAULT NULL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN commission INTEGER DEFAULT 0")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN vendor_earnings INTEGER DEFAULT 0")}catch(e){}
-restoreCatalogIfEmpty();
-if(!db.prepare("SELECT COUNT(*) c FROM products").get().c){let q=db.prepare("INSERT INTO products(name,category,price,stock,description,image) VALUES(?,?,?,?,?,?)");[
-["Premium Blue Hoodie","Fashion",850,15,"Comfortable everyday hoodie.","https://images.unsplash.com/photo-1551488831-00ddcb6c6bd3?auto=format&fit=crop&w=900&q=80"],
-["Wireless Headphones","Electronics",1500,10,"Clear wireless sound.","https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=900&q=80"],
-["Smartphone 128GB","Phones",3290,8,"Modern 128GB smartphone.","https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=900&q=80"],
-["Beauty Care Set","Beauty",450,20,"Everyday beauty care bundle.","https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=900&q=80"],
-["Leather Handbag","Accessories",1200,12,"Elegant everyday handbag.","https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=900&q=80"],
-["Smart Watch Pro","Electronics",2200,9,"Smart everyday watch.","https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80"]].forEach(x=>q.run(...x))}
-backupCatalog();
+// Restore from the local backup first. On Render Free, if the local filesystem was reset,
+// restore the same shop snapshot (including uploaded product images) from GitHub before serving traffic.
+restoreShopBackupIfEmpty();
+async function finishStartup(){
+  await restoreFromCloudIfEmpty();
+  // Never repopulate the shop with demo products after a restart. Real shop data is authoritative.
+  if(!db.prepare("SELECT COUNT(*) c FROM products").get().c)console.log("BASSE shop database is empty. Add products from Admin Dashboard.");
+  backupShopData("startup");
+  finishStartup().catch(e=>{console.error("Startup restore error:",e);app.listen(PORT,"0.0.0.0",()=>console.log("BASSE ONLINE SHOP running on "+PORT));});
+}
 const upload=multer({storage:multer.diskStorage({destination:path.join(DATA_DIR,"uploads"),filename:(r,f,cb)=>cb(null,crypto.randomBytes(8).toString("hex")+path.extname(f.originalname))}),limits:{fileSize:6e6}});
-const sessions=new Map();
+const sessions=new Map(); // retained only for backwards compatibility; auth is persisted in SQLite
 // Live-update stream: browsers connected to the marketplace/admin/vendor receive an event
 // whenever products, vendors, orders or payments change. A short polling fallback remains
 // on the clients so the site still recovers automatically after a dropped connection.
 const liveClients=new Set();
-// Anonymous live marketplace presence. No names, phone numbers, or IP addresses are stored.
-const activeVisitors=new Map();
-function pruneVisitors(){const cutoff=Date.now()-45000;for(const [id,v] of activeVisitors){if(v.lastSeen<cutoff)activeVisitors.delete(id)}}
-setInterval(pruneVisitors,15000);
 function broadcastLive(type="refresh",payload={}){
   const data=`event: ${type}\ndata: ${JSON.stringify({type,...payload})}\n\n`;
   for(const res of liveClients){ try{res.write(data)}catch{liveClients.delete(res)} }
 }
-app.post("/api/visitor-heartbeat",(req,res)=>{const id=String(req.body?.visitorId||"").slice(0,120);if(id){activeVisitors.set(id,{lastSeen:Date.now()});pruneVisitors()}res.json({ok:true,activeVisitors:activeVisitors.size})});
 app.get("/api/live",(req,res)=>{
   res.set({"Content-Type":"text/event-stream","Cache-Control":"no-cache, no-transform","Connection":"keep-alive","X-Accel-Buffering":"no"});
   res.flushHeaders?.();
@@ -72,11 +198,25 @@ app.get("/api/live",(req,res)=>{
   const heartbeat=setInterval(()=>{try{res.write(`: heartbeat ${Date.now()}\n\n`)}catch{clearInterval(heartbeat);liveClients.delete(res)}},25000);
   req.on("close",()=>{clearInterval(heartbeat);liveClients.delete(res)});
 });
-function guard(req,res,next){if(!sessions.has((req.headers.authorization||"").replace("Bearer ","")))return res.status(401).json({error:"Admin login required"});next()}
-function vendorGuard(req,res,next){let t=(req.headers.authorization||"").replace("Bearer ",""),s=sessions.get(t);if(!s||s.type!=="vendor")return res.status(401).json({error:"Vendor login required"});req.vendorId=s.vendorId;next()}
+function getSession(req){
+  const token=(req.headers.authorization||"").replace("Bearer ","").trim();
+  if(!token)return null;
+  const s=db.prepare("SELECT * FROM auth_sessions WHERE token=? AND expires_at>? ").get(token,Date.now());
+  if(!s){ if(token)db.prepare("DELETE FROM auth_sessions WHERE token=?").run(token); return null; }
+  return s;
+}
+function guard(req,res,next){const s=getSession(req);if(!s||s.type!=="admin")return res.status(401).json({error:"Admin login required"});req.sessionToken=s.token;next()}
+function vendorGuard(req,res,next){const s=getSession(req);if(!s||s.type!=="vendor")return res.status(401).json({error:"Vendor login required"});req.vendorId=s.vendor_id;req.sessionToken=s.token;next()}
+app.post("/api/auth/logout",(req,res)=>{const token=(req.headers.authorization||"").replace("Bearer ","").trim();if(token)db.prepare("DELETE FROM auth_sessions WHERE token=?").run(token);res.json({ok:true});});
 app.get("/api/products",(req,res)=>{let p=db.prepare("SELECT * FROM products WHERE active=1 ORDER BY id DESC").all(),c=req.query.category||"All",q=(req.query.q||"").toLowerCase();if(c!=="All")p=p.filter(x=>x.category===c);if(q)p=p.filter(x=>(x.name+" "+x.category+" "+x.description).toLowerCase().includes(q));res.json(p)});
 app.get("/api/products/:id",(req,res)=>{let p=db.prepare("SELECT * FROM products WHERE id=? AND active=1").get(req.params.id);p?res.json(p):res.status(404).json({error:"Product not found"})});
-app.post("/api/admin/login",(req,res)=>{if(req.body.email===process.env.ADMIN_EMAIL&&req.body.password===process.env.ADMIN_PASSWORD){let t=crypto.randomBytes(32).toString("hex");sessions.set(t,{expires:Date.now()+432e5,type:"admin"});res.json({token:t})}else res.status(401).json({error:"Invalid admin login"})});
+app.post("/api/admin/login",(req,res)=>{
+  if(req.body.email===process.env.ADMIN_EMAIL&&req.body.password===process.env.ADMIN_PASSWORD){
+    const t=crypto.randomBytes(32).toString("hex"),exp=Date.now()+30*24*60*60*1000;
+    db.prepare("INSERT OR REPLACE INTO auth_sessions(token,type,vendor_id,expires_at) VALUES(?,?,NULL,?)").run(t,"admin",exp);
+    res.json({token:t,expiresAt:exp});
+  }else res.status(401).json({error:"Invalid admin login"})
+});
 app.get("/api/admin/products",guard,(req,res)=>res.json(db.prepare("SELECT * FROM products ORDER BY id DESC").all()));
 app.post("/api/admin/products",guard,upload.array("images",8),(req,res)=>{let b=req.body,files=req.files||[],fileImgs=files.map(f=>"/uploads/"+f.filename),img=fileImgs[0]||b.imageUrl||"",imgs=JSON.stringify(fileImgs.length?fileImgs:(b.images?String(b.images).split(",").map(x=>x.trim()).filter(Boolean):[]));
 let x=db.prepare("INSERT INTO products(name,category,price,stock,description,image,images,vendor_id) VALUES(?,?,?,?,?,?,?,?)").run(b.name,b.category,+b.price,+b.stock||0,b.description||"",img,imgs,b.vendorId?+b.vendorId:null);let created=db.prepare("SELECT * FROM products WHERE id=?").get(x.lastInsertRowid);backupCatalog();broadcastLive("catalog",{productId:created.id});res.json(created)});
@@ -85,13 +225,35 @@ app.delete("/api/admin/products/:id",guard,(req,res)=>{db.prepare("UPDATE produc
 app.get("/api/admin/orders",guard,(req,res)=>res.json(db.prepare("SELECT * FROM orders ORDER BY datetime(created_at) DESC").all()));
 app.get("/api/admin/backup",guard,(req,res)=>{
   try{
-    const tables=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys"];
-    const data={version:2,createdAt:new Date().toISOString(),tables:{}};
-    for(const table of tables)data.tables[table]=db.prepare(`SELECT * FROM ${table}`).all();
-    data.meta={productCount:data.tables.products.length,orderCount:data.tables.orders.length,vendorCount:data.tables.vendors.length};
+    const data=buildCloudSnapshot("manual-download");
+    data.version=4;
+    data.backupNote="Includes shop database records AND uploaded files from server/data/uploads.";
     res.set("Content-Disposition",`attachment; filename="basse-online-shop-full-backup-${new Date().toISOString().slice(0,10)}.json"`);
     res.type("application/json").send(JSON.stringify(data,null,2));
-  }catch(e){res.status(500).json({error:"Could not create backup."})}
+  }catch(e){res.status(500).json({error:"Could not create backup with images."})}
+});
+app.get("/api/admin/backup/status",guard,(req,res)=>{
+  try{
+    const exists=fs.existsSync(BACKUP_PATH), stat=exists?fs.statSync(BACKUP_PATH):null;
+    const data=exists?JSON.parse(fs.readFileSync(BACKUP_PATH,"utf8")):null;
+    res.json({enabled:true,exists,lastSaved:data?.createdAt||cloudBackupState.lastSaved||null,sizeBytes:stat?.size||0,meta:data?.meta||{productCount:0,vendorCount:0,orderCount:0},storagePath:cloudConfigured()?"Free-plan cloud backup + local cache":"local shop data",cloud:{provider:CLOUD_BACKUP_PROVIDER,configured:cloudBackupState.configured,status:cloudBackupState.status,lastSaved:cloudBackupState.lastSaved,lastError:cloudBackupState.lastError}});
+  }catch(e){res.json({enabled:true,exists:false,lastSaved:null,sizeBytes:0,meta:{},cloud:{provider:CLOUD_BACKUP_PROVIDER,configured:cloudBackupState.configured,status:cloudBackupState.status,lastSaved:cloudBackupState.lastSaved,lastError:cloudBackupState.lastError},error:e.message})}
+});
+app.post("/api/admin/backup/save-now",guard,async(req,res)=>{
+  const r=backupShopData("manual");
+  if(!r.ok)return res.status(500).json({error:"Automatic save failed. Check server storage."});
+  if(cloudConfigured()){
+    clearTimeout(cloudTimer);cloudPending=null;
+    const c=await saveCloudSnapshot("manual");
+    if(!c.ok)return res.status(502).json({error:`Local save succeeded, but cloud backup failed: ${c.error}`,...r,cloud:c});
+    return res.json({ok:true,message:"Shop data saved to cloud ✓",...r,cloud:c});
+  }
+  res.json({ok:true,message:"Shop data saved locally. Add the free cloud backup settings to make it survive Render Free restarts.",...r});
+});
+app.post("/api/admin/backup/auto-save",guard,(req,res)=>{
+  const r=backupShopData("auto-toggle");
+  if(!r.ok)return res.status(500).json({error:"Could not initialize automatic backup."});
+  res.json({ok:true,enabled:true,message:"Automatic shop save is ON ✓",...r});
 });
 app.post("/api/admin/restore",guard,(req,res)=>{
   try{
@@ -118,7 +280,7 @@ app.post("/api/admin/restore",guard,(req,res)=>{
     res.json({ok:true,message:`Backup restored successfully: ${data.tables.products.length} products, ${(data.tables.orders||[]).length} orders and ${(data.tables.vendors||[]).length} vendors.`});
   }catch(e){console.error("Backup restore failed:",e);res.status(500).json({error:"Restore failed. The backup format may not match this shop version."})}
 });
-app.get("/api/admin/stats",guard,(req,res)=>res.json({products:db.prepare("SELECT COUNT(*) c FROM products WHERE active=1").get().c,orders:db.prepare("SELECT COUNT(*) c FROM orders").get().c,pending:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PENDING'").get().c,paid:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PAID'").get().c,cancelled:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='CANCELLED' OR order_status='CANCELLED'").get().c,refunded:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='REFUNDED'").get().c,sales:db.prepare("SELECT COALESCE(SUM(total),0) s FROM orders WHERE payment_status='PAID' AND order_status!='CANCELLED' AND date(created_at)=date('now','localtime')").get().s,liveVisitors:activeVisitors.size}));
+app.get("/api/admin/stats",guard,(req,res)=>res.json({products:db.prepare("SELECT COUNT(*) c FROM products WHERE active=1").get().c,orders:db.prepare("SELECT COUNT(*) c FROM orders").get().c,pending:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PENDING'").get().c,paid:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PAID'").get().c,cancelled:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='CANCELLED' OR order_status='CANCELLED'").get().c,refunded:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='REFUNDED'").get().c,sales:db.prepare("SELECT COALESCE(SUM(total),0) s FROM orders WHERE payment_status='PAID' AND order_status!='CANCELLED' AND date(created_at)=date('now','localtime')").get().s}));
 app.post("/api/orders",async(req,res)=>{
   let p=db.prepare("SELECT * FROM products WHERE id=? AND active=1").get(req.body.productId);
   let q=Math.max(1,+req.body.quantity||1);
@@ -131,6 +293,7 @@ app.post("/api/orders",async(req,res)=>{
   let vendorId=p.vendor_id||null, commission=Math.round(total*0.10), vendorEarnings=total-commission;
   db.prepare("INSERT INTO orders(id,product_id,product_name,quantity,customer_name,whatsapp,location,total,vendor_id,commission,vendor_earnings) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
     .run(id,p.id,p.name,q,String(req.body.name||"").trim(),phone,String(req.body.location||""),total,vendorId,commission,vendorEarnings);
+  backupShopData("order-created");
   broadcastLive("orders",{orderId:id});
 
   let paymentUrl="";
@@ -154,6 +317,7 @@ app.post("/api/orders",async(req,res)=>{
       if(r.ok&&d.paymentRequest&&d.paymentRequest.waychitLaunchUrl){
         paymentUrl=d.paymentRequest.waychitLaunchUrl;
         db.prepare("UPDATE orders SET waychit_request_id=? WHERE id=?").run(d.paymentRequest.id,id);
+        backupShopData("payment-request");
       }else{
         paymentError=d.message||d.error||`Waychit rejected the payment request (HTTP ${r.status}).`;
         console.error("Waychit rejected payment:",r.status,body.slice(0,1200));
@@ -173,11 +337,11 @@ app.post("/api/orders",async(req,res)=>{
   });
 });
 app.get("/api/order/:id",(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);o?res.json({...o,whatsappSupport:SHOP_WHATSAPP}):res.status(404).json({error:"Order not found"})});
-app.post("/api/admin/orders/:id/payment",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});if(o.payment_status==='REFUNDED'||o.payment_status==='CANCELLED')return res.status(400).json({error:'This payment is already closed.'});db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE id=?").run(req.params.id);broadcastLive("orders",{orderId:req.params.id});res.json({ok:true})});
-app.post("/api/admin/orders/:id/cancel-payment",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});if(o.payment_status==='PAID')return res.status(400).json({error:'A paid order cannot be cancelled. Use Refund instead.'});db.prepare("UPDATE orders SET payment_status='CANCELLED',order_status='CANCELLED' WHERE id=?").run(req.params.id);broadcastLive("orders",{orderId:req.params.id});res.json({ok:true})});
-app.post("/api/admin/orders/:id/refund",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});if(o.payment_status!=='PAID')return res.status(400).json({error:'Only paid orders can be marked refunded.'});db.prepare("UPDATE orders SET payment_status='REFUNDED',order_status='REFUNDED' WHERE id=?").run(req.params.id);broadcastLive("orders",{orderId:req.params.id});res.json({ok:true,notice:'Order marked refunded. Complete the actual money reversal in Waychit if required.'})});
-app.post("/api/admin/orders/:id/reopen",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});db.prepare("UPDATE orders SET payment_status='PENDING',order_status='NEW' WHERE id=?").run(req.params.id);broadcastLive("orders",{orderId:req.params.id});res.json({ok:true})});
-app.patch("/api/admin/orders/:id/status",guard,(req,res)=>{let allowed=['NEW','PROCESSING','READY','DELIVERED','CANCELLED','REFUNDED'];let status=String(req.body.status||'').toUpperCase();if(!allowed.includes(status))return res.status(400).json({error:'Invalid order status'});db.prepare("UPDATE orders SET order_status=? WHERE id=?").run(status,req.params.id);broadcastLive("orders",{orderId:req.params.id});res.json({ok:true})});
+app.post("/api/admin/orders/:id/payment",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});if(o.payment_status==='REFUNDED'||o.payment_status==='CANCELLED')return res.status(400).json({error:'This payment is already closed.'});db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE id=?").run(req.params.id);backupShopData("payment-confirmed");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true})});
+app.post("/api/admin/orders/:id/cancel-payment",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});if(o.payment_status==='PAID')return res.status(400).json({error:'A paid order cannot be cancelled. Use Refund instead.'});db.prepare("UPDATE orders SET payment_status='CANCELLED',order_status='CANCELLED' WHERE id=?").run(req.params.id);backupShopData("payment-cancelled");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true})});
+app.post("/api/admin/orders/:id/refund",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});if(o.payment_status!=='PAID')return res.status(400).json({error:'Only paid orders can be marked refunded.'});db.prepare("UPDATE orders SET payment_status='REFUNDED',order_status='REFUNDED' WHERE id=?").run(req.params.id);backupShopData("refund");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true,notice:'Order marked refunded. Complete the actual money reversal in Waychit if required.'})});
+app.post("/api/admin/orders/:id/reopen",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});db.prepare("UPDATE orders SET payment_status='PENDING',order_status='NEW' WHERE id=?").run(req.params.id);backupShopData("order-reopen");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true})});
+app.patch("/api/admin/orders/:id/status",guard,(req,res)=>{let allowed=['NEW','PROCESSING','READY','DELIVERED','CANCELLED','REFUNDED'];let status=String(req.body.status||'').toUpperCase();if(!allowed.includes(status))return res.status(400).json({error:'Invalid order status'});db.prepare("UPDATE orders SET order_status=? WHERE id=?").run(status,req.params.id);backupShopData("order-status");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true})});
 app.get("/api/payment-config",(req,res)=>res.json({configured:!!process.env.WAYCHIT_API_KEY,publicBaseUrl:PUBLIC_BASE_URL,staticFallback:true,returnUrl:PUBLIC_BASE_URL+"/payment-return",automaticReturnSupported:!!process.env.WAYCHIT_API_KEY}));
 app.post("/api/waychit/webhook",(req,res)=>{
   let sig=req.headers["waychit-signature"],secret=process.env.WAYCHIT_WEBHOOK_SECRET,raw=req.rawBody||"";
@@ -190,7 +354,7 @@ app.post("/api/waychit/webhook",(req,res)=>{
     let e=JSON.parse(raw);
     let ref=e.paymentRequest?.clientReference||e.paymentSession?.clientReference||e.data?.clientReference;
     if((e.type==="payment.request.completed"||e.type==="payment.session.completed")&&ref){
-      db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE id=? AND payment_status!='REFUNDED'").run(ref);broadcastLive("orders",{orderId:ref});
+      db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE id=? AND payment_status!='REFUNDED'").run(ref);backupShopData("webhook-payment");broadcastLive("orders",{orderId:ref});
     }
     res.sendStatus(200);
   }catch(e){res.status(400).send("Bad webhook")}
@@ -203,8 +367,9 @@ app.post("/api/vendor/login",(req,res)=>{
  const v=db.prepare("SELECT * FROM vendors WHERE whatsapp=? AND status='APPROVED'").get("220"+phone);
  const ok=v && v.password_hash && crypto.createHash("sha256").update(pin).digest("hex")===String(v.password_hash);
  if(!ok)return res.status(401).json({error:"Invalid vendor phone/PIN, or the vendor has not been approved yet."});
- const t=crypto.randomBytes(32).toString("hex");sessions.set(t,{expires:Date.now()+432e5,type:"vendor",vendorId:v.id});
- res.json({token:t,vendor:{id:v.id,business_name:v.business_name,full_name:v.full_name,email:v.email||""}});
+ const t=crypto.randomBytes(32).toString("hex"),exp=Date.now()+30*24*60*60*1000;
+ db.prepare("INSERT OR REPLACE INTO auth_sessions(token,type,vendor_id,expires_at) VALUES(?,?,?,?)").run(t,"vendor",v.id,exp);
+ res.json({token:t,expiresAt:exp,vendor:{id:v.id,business_name:v.business_name,full_name:v.full_name,email:v.email||""}});
 });
 app.get("/api/vendor/me",vendorGuard,(req,res)=>{let v=db.prepare("SELECT id,full_name,business_name,whatsapp,location,category,status FROM vendors WHERE id=?").get(req.vendorId);res.json(v)});
 app.get("/api/vendor/orders",vendorGuard,(req,res)=>res.json(db.prepare("SELECT * FROM orders WHERE vendor_id=? ORDER BY datetime(created_at) DESC").all(req.vendorId)));
@@ -237,6 +402,7 @@ app.post("/api/vendor/products",vendorGuard,(req,res,next)=>{
    if(req.vendorIdempotencyKey){
      db.prepare("INSERT INTO vendor_submission_keys(idempotency_key,vendor_id,product_id) VALUES(?,?,?)").run(req.vendorIdempotencyKey,req.vendorId,x.lastInsertRowid);
    }
+   backupShopData("vendor-product-submission");
    return Number(x.lastInsertRowid);
  });
  try{
@@ -268,6 +434,7 @@ app.post("/api/vendors/apply",(req,res)=>{
   if(existing)return res.status(409).json({error:`A vendor application already exists for this number (${existing.status}). Wait for Admin approval or ask Admin to reset/reopen it.`,id:existing.id,status:existing.status});
   const x=db.prepare("INSERT INTO vendors(full_name,business_name,whatsapp,email,email_verified,location,category,description,password_hash) VALUES(?,?,?,?,?,?,?,?,?)")
     .run(String(b.fullName).trim(),String(b.businessName).trim(),"220"+phone,"",1,String(b.location||""),String(b.category||""),String(b.description||""),hashPin(pin));
+  backupShopData("vendor-application");
   broadcastLive("vendors",{vendorId:Number(x.lastInsertRowid)});
   res.json({ok:true,id:x.lastInsertRowid,status:"PENDING",message:"Application submitted. Wait for Admin approval."});
 });
@@ -279,15 +446,16 @@ app.get("/api/vendors/status",(req,res)=>{
   res.json({id:v.id,status:v.status,business_name:v.business_name});
 });
 app.get("/api/admin/vendors",guard,(req,res)=>res.json(db.prepare("SELECT * FROM vendors ORDER BY datetime(created_at) DESC").all()));
-app.post("/api/admin/vendors/:id/approve",guard,(req,res)=>{const v=db.prepare("SELECT id,status,password_hash FROM vendors WHERE id=?").get(req.params.id);if(!v)return res.status(404).json({error:"Vendor not found"});db.prepare("UPDATE vendors SET status='APPROVED' WHERE id=?").run(req.params.id);broadcastLive("vendors",{vendorId:Number(req.params.id),status:"APPROVED"});res.json({ok:true,status:"APPROVED"})});
-app.post("/api/admin/vendors/:id/reject",guard,(req,res)=>{db.prepare("UPDATE vendors SET status='REJECTED' WHERE id=?").run(req.params.id);broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true})});
-app.post("/api/admin/vendors/:id/suspend",guard,(req,res)=>{db.prepare("UPDATE vendors SET status='SUSPENDED' WHERE id=?").run(req.params.id);broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true})});
+app.post("/api/admin/vendors/:id/approve",guard,(req,res)=>{const v=db.prepare("SELECT id,status,password_hash FROM vendors WHERE id=?").get(req.params.id);if(!v)return res.status(404).json({error:"Vendor not found"});db.prepare("UPDATE vendors SET status='APPROVED' WHERE id=?").run(req.params.id);backupShopData("vendor-approved");broadcastLive("vendors",{vendorId:Number(req.params.id),status:"APPROVED"});res.json({ok:true,status:"APPROVED"})});
+app.post("/api/admin/vendors/:id/reject",guard,(req,res)=>{db.prepare("UPDATE vendors SET status='REJECTED' WHERE id=?").run(req.params.id);backupShopData("vendor-rejected");broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true})});
+app.post("/api/admin/vendors/:id/suspend",guard,(req,res)=>{db.prepare("UPDATE vendors SET status='SUSPENDED' WHERE id=?").run(req.params.id);backupShopData("vendor-suspended");broadcastLive("vendors",{vendorId:Number(req.params.id)});res.json({ok:true})});
 app.post("/api/admin/vendors/:id/reset-pin",guard,(req,res)=>{
   const pin=String(req.body?.pin||"");
   if(!/^\d{4,5}$/.test(pin))return res.status(400).json({error:"PIN must be exactly 4 or 5 digits."});
   const v=db.prepare("SELECT id FROM vendors WHERE id=?").get(req.params.id);
   if(!v)return res.status(404).json({error:"Vendor not found"});
   db.prepare("UPDATE vendors SET password_hash=? WHERE id=?").run(crypto.createHash("sha256").update(pin).digest("hex"),req.params.id);
+  backupShopData("vendor-pin-reset");
   broadcastLive("vendors",{vendorId:Number(req.params.id),pinReset:true});
   res.json({ok:true});
 });
@@ -296,4 +464,5 @@ app.post("/api/admin/products/:id/approve",guard,(req,res)=>{db.prepare("UPDATE 
 app.post("/api/admin/products/:id/reject",guard,(req,res)=>{db.prepare("UPDATE products SET active=0 WHERE id=?").run(req.params.id);db.prepare("UPDATE vendor_products SET status='REJECTED' WHERE product_id=?").run(req.params.id);backupCatalog();broadcastLive("catalog",{productId:Number(req.params.id)});res.json({ok:true})});
 app.get("/api/admin/vendor-stats",guard,(req,res)=>res.json({vendors:db.prepare("SELECT COUNT(*) c FROM vendors").get().c,pending:db.prepare("SELECT COUNT(*) c FROM vendors WHERE status='PENDING'").get().c,active:db.prepare("SELECT COUNT(*) c FROM vendors WHERE status='APPROVED'").get().c,commission:db.prepare("SELECT COALESCE(SUM(commission),0) s FROM orders WHERE payment_status='PAID'").get().s}));
 
-app.listen(PORT,"0.0.0.0",()=>console.log("BASSE ONLINE SHOP running on "+PORT));
+setInterval(()=>{try{db.prepare("DELETE FROM auth_sessions WHERE expires_at<=?").run(Date.now())}catch{}},60*60*1000);
+finishStartup().catch(e=>{console.error("Startup restore error:",e);app.listen(PORT,"0.0.0.0",()=>console.log("BASSE ONLINE SHOP running on "+PORT));});
