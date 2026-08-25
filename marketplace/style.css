@@ -215,7 +215,7 @@ input,select,textarea{font-size:16px;}
 .top{background:#fff;box-shadow:0 4px 18px rgba(7,26,74,.06)}
 .brand-logo{width:178px;height:54px;background:transparent}
 .market-banner{position:relative;margin:12px auto 18px;max-width:1120px;padding:0!important;min-height:0!important;border-radius:24px;overflow:hidden;box-shadow:0 16px 38px rgba(7,26,74,.12);background:#071a4a}
-.market-banner>img{display:block;width:100%;height:auto;aspect-ratio:1400/430;object-fit:cover}
+.banner-link{display:block;line-height:0}.market-banner> .banner-link img{display:block;width:100%;height:auto;max-height:430px;object-fit:contain;background:#071a4a}.market-banner>img{display:block;width:100%;height:auto}
 .banner-overlay{position:absolute;left:0;bottom:0;padding:0 0 22px 31%;}
 .banner-overlay button{border:0;border-radius:999px;padding:12px 24px;background:#ffb800;color:#071a4a;font-weight:950;font-size:13px;box-shadow:0 10px 25px rgba(0,0,0,.18)}
 .categories{margin-top:18px}.cats{gap:14px;padding:4px 2px 12px}.cats button{width:86px;height:86px;min-width:86px;border-radius:50%;padding:10px 7px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border:1px solid #dce2ec;background:#fff;color:#1748a8;box-shadow:0 5px 15px rgba(7,26,74,.06);font-size:11px;font-weight:850;line-height:1.05;white-space:normal;overflow:hidden}.cats button svg{width:27px;height:27px;fill:currentColor;stroke:currentColor;flex:none}.cats button b{display:block;max-width:72px;overflow-wrap:anywhere}.cats button.active{background:#071a4a;color:#fff;border-color:#071a4a;box-shadow:0 10px 22px rgba(7,26,74,.2)}
