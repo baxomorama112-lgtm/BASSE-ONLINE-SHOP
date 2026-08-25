@@ -1,5 +1,8 @@
 let category="All",selected=null,searchTimer=null,searchIndex=[];
 const $=id=>document.getElementById(id),money=n=>"D"+Number(n||0).toLocaleString();
+// Anonymous live-presence heartbeat for BASSE Admin. No personal information is sent.
+function startVisitorPresence(){let id="";try{id=localStorage.getItem("basseVisitorId")||crypto.randomUUID();localStorage.setItem("basseVisitorId",id)}catch{id="v-"+Math.random().toString(36).slice(2)+Date.now()}const beat=()=>fetch("/api/visitor-heartbeat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({visitorId:id}),keepalive:true}).catch(()=>{});beat();window.__visitorBeat=setInterval(beat,15000)}
+startVisitorPresence();
 
 function renderProductGrid(ps, silent=false){
   const grid=$("grid");
