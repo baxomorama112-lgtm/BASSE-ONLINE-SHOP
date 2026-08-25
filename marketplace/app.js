@@ -1,8 +1,5 @@
 let category="All",selected=null,searchTimer=null,searchIndex=[];
 const $=id=>document.getElementById(id),money=n=>"D"+Number(n||0).toLocaleString();
-// Anonymous live-presence heartbeat for BASSE Admin. No personal information is sent.
-function startVisitorPresence(){let id="";try{id=localStorage.getItem("basseVisitorId")||crypto.randomUUID();localStorage.setItem("basseVisitorId",id)}catch{id="v-"+Math.random().toString(36).slice(2)+Date.now()}const beat=()=>fetch("/api/visitor-heartbeat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({visitorId:id}),keepalive:true}).catch(()=>{});beat();window.__visitorBeat=setInterval(beat,15000)}
-startVisitorPresence();
 
 function renderProductGrid(ps, silent=false){
   const grid=$("grid");
@@ -47,10 +44,10 @@ async function loadProducts(silent=false){
 }
 async function loadSearchIndex(){try{let r=await fetch("/api/products?category=All",{cache:"no-store"});if(!r.ok)throw Error();searchIndex=await r.json();saveCatalogCache(searchIndex)}catch{searchIndex=cachedCatalog()}}
 function showSuggestions(){let term=$("search").value.trim().toLowerCase(),box=$("searchSuggestions");if(!term){box.classList.remove("show");box.innerHTML="";return}let matches=searchIndex.filter(p=>(p.name+" "+p.category+" "+(p.description||"")).toLowerCase().includes(term)).slice(0,7);box.innerHTML=matches.length?matches.map(p=>`<button type="button" class="suggest-item" onclick="pickSuggestion(${p.id})"><span class="suggest-icon">🔎</span><span><b>${esc(p.name)}</b><small>${esc(p.category)} · ${money(p.price)}</small></span></button>`).join(""):"<div class=suggest-empty>No matching products</div>";box.classList.add("show")}
-function pickSuggestion(id){let p=searchIndex.find(x=>x.id===id);if(!p)return;$("search").value=p.name;$("searchSuggestions").classList.remove("show");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"smooth",block:"start"})}
+function pickSuggestion(id){let p=searchIndex.find(x=>x.id===id);if(!p)return;$("search").value=p.name;$("searchSuggestions").classList.remove("show");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"auto",block:"start"})}
 function runSearch(){clearTimeout(searchTimer);searchTimer=setTimeout(loadProducts,160);showSuggestions()}
 function clearSearch(){$("search").value="";$('searchSuggestions').classList.remove("show");loadProducts();$('search').focus()}
-function setCat(c,b){category=c;document.querySelectorAll(".cats button").forEach(x=>x.classList.remove("active"));b.classList.add("active");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"smooth",block:"start"})}
+function setCat(c,b){category=c;document.querySelectorAll(".cats button").forEach(x=>x.classList.remove("active"));b.classList.add("active");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"auto",block:"start"})}
 
 function normalizeProductImages(product){
   let imgs=[];
@@ -73,16 +70,30 @@ function renderProductDetail(product){
   $("modal").classList.add("show");
 }
 async function buy(id){
-  // Open immediately from the already-loaded catalog, then refresh the details in the background.
+  // Open immediately from the cached catalog. Do not rebuild the modal when
+  // fresh data arrives: rebuilding caused the brief white/light blink.
   const cached=cachedCatalog().find(p=>Number(p.id)===Number(id)) || searchIndex.find(p=>Number(p.id)===Number(id));
   if(cached) renderProductDetail(cached);
   try{
     const r=await fetch("/api/products/"+id,{cache:"no-store"});
     const fresh=await r.json();
     if(!r.ok)throw new Error(fresh.error||"Product unavailable");
-    if(!cached || !$("modal").classList.contains("show") || Number(selected?.id)!==Number(id)) renderProductDetail(fresh);
-    else renderProductDetail(fresh);
     saveCatalogCache((cachedCatalog().filter(p=>Number(p.id)!==Number(id))).concat([fresh]));
+    // If the same product is already open, update only its data without
+    // recreating the sheet, preventing flicker and keeping the UI instant.
+    if(cached && $("modal").classList.contains("show") && Number(selected?.id)===Number(id)){
+      selected=fresh;
+      const name=document.querySelector(".modern-detail-info h2");
+      const price=document.querySelector(".modern-detail-info .detail-price");
+      const desc=document.querySelector(".modern-detail-info .muted");
+      const stock=document.querySelector(".modern-detail-info .stock-note");
+      if(name)name.textContent=fresh.name;
+      if(price)price.textContent=money(fresh.price);
+      if(desc)desc.textContent=fresh.description||"Quality product from BASSE MARKET.";
+      if(stock){stock.className="stock-note"+(fresh.stock<1?" out":"");stock.textContent=fresh.stock>0?`✓ ${fresh.stock} available`:"Out of stock";}
+    }else if(!cached){
+      renderProductDetail(fresh);
+    }
   }catch(e){if(!cached)toast(e.message)}
 }
 function pickImage(i){let im=window.__productImages?.[i];if(im){$("mainProductImage").src=im;document.querySelectorAll(".thumbs button").forEach((b,n)=>b.classList.toggle("active",n===i))}}
@@ -298,7 +309,7 @@ function resumeVendorApplication(){
 
 function toast(t){let x=$("toast");x.textContent=t;x.classList.add("show");clearTimeout(window.__toast);window.__toast=setTimeout(()=>x.classList.remove("show"),2800)}
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
-$("search").addEventListener("input",runSearch);$("search").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();$("searchSuggestions").classList.remove("show");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"smooth",block:"start"})}if(e.key==="Escape")clearSearch()});$("searchBtn").addEventListener("click",()=>{$("searchSuggestions").classList.remove("show");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"smooth",block:"start"});});$("clearSearch").addEventListener("click",clearSearch);document.addEventListener("click",e=>{if(!e.target.closest(".search-wrap"))$("searchSuggestions").classList.remove("show")});
+$("search").addEventListener("input",runSearch);$("search").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();$("searchSuggestions").classList.remove("show");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"auto",block:"start"})}if(e.key==="Escape")clearSearch()});$("searchBtn").addEventListener("click",()=>{$("searchSuggestions").classList.remove("show");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"auto",block:"start"});});$("clearSearch").addEventListener("click",clearSearch);document.addEventListener("click",e=>{if(!e.target.closest(".search-wrap"))$("searchSuggestions").classList.remove("show")});
 loadSearchIndex().then(loadProducts);handleReturn();setTimeout(()=>{if(new URLSearchParams(location.search).get("vendor")==="apply"){openVendorApply();history.replaceState({},"",location.pathname)}resumeVendorApplication();if(!new URLSearchParams(location.search).get("payment"))resumePendingPayment()},200);
 // Instant catalog/order updates. EventSource reconnects automatically if the connection drops.
 function connectLive(){

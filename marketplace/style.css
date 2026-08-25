@@ -232,4 +232,9 @@ input,select,textarea{font-size:16px;}
 .support{color:#071a4a;text-decoration:none;font-weight:850}.cart{background:#fff;color:#071a4a}
 @media(max-width:760px){.brand-logo{width:128px;height:42px}.market-banner{margin:10px 12px 14px;height:190px;border-radius:18px}.banner-overlay{padding:0 0 10px 6%}.banner-overlay button{padding:8px 15px;font-size:9px}.cats{gap:10px;overflow-x:auto;scrollbar-width:none}.cats::-webkit-scrollbar{display:none}.cats button{width:88px;height:88px;min-width:88px;font-size:10px;padding:8px 5px;gap:4px}.cats button svg{width:27px;height:27px}.cats button b{max-width:78px;line-height:1.1;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.bottom a,.bottom button{min-width:58px;min-height:52px}}
 /* Fast product opening: modal is shown immediately from the cached catalog while fresh data loads. */
-.product-sheet{will-change:transform,opacity}.product-sheet-modern{animation:productSheetIn .16s ease-out}@keyframes productSheetIn{from{opacity:0;transform:translateY(8px) scale(.99)}to{opacity:1;transform:none}}
+/* Instant navigation: no flash, glow, or entrance animation when opening/returning. */
+.product-sheet{will-change:auto!important;animation:none!important}
+.product-sheet-modern{animation:none!important;transition:none!important}
+.modal .sheet{transition:none!important}
+.product,.product.in{transition:none!important}
+
