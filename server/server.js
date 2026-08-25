@@ -55,10 +55,15 @@ const sessions=new Map();
 // whenever products, vendors, orders or payments change. A short polling fallback remains
 // on the clients so the site still recovers automatically after a dropped connection.
 const liveClients=new Set();
+// Anonymous live marketplace presence. No names, phone numbers, or IP addresses are stored.
+const activeVisitors=new Map();
+function pruneVisitors(){const cutoff=Date.now()-45000;for(const [id,v] of activeVisitors){if(v.lastSeen<cutoff)activeVisitors.delete(id)}}
+setInterval(pruneVisitors,15000);
 function broadcastLive(type="refresh",payload={}){
   const data=`event: ${type}\ndata: ${JSON.stringify({type,...payload})}\n\n`;
   for(const res of liveClients){ try{res.write(data)}catch{liveClients.delete(res)} }
 }
+app.post("/api/visitor-heartbeat",(req,res)=>{const id=String(req.body?.visitorId||"").slice(0,120);if(id){activeVisitors.set(id,{lastSeen:Date.now()});pruneVisitors()}res.json({ok:true,activeVisitors:activeVisitors.size})});
 app.get("/api/live",(req,res)=>{
   res.set({"Content-Type":"text/event-stream","Cache-Control":"no-cache, no-transform","Connection":"keep-alive","X-Accel-Buffering":"no"});
   res.flushHeaders?.();
@@ -113,7 +118,7 @@ app.post("/api/admin/restore",guard,(req,res)=>{
     res.json({ok:true,message:`Backup restored successfully: ${data.tables.products.length} products, ${(data.tables.orders||[]).length} orders and ${(data.tables.vendors||[]).length} vendors.`});
   }catch(e){console.error("Backup restore failed:",e);res.status(500).json({error:"Restore failed. The backup format may not match this shop version."})}
 });
-app.get("/api/admin/stats",guard,(req,res)=>res.json({products:db.prepare("SELECT COUNT(*) c FROM products WHERE active=1").get().c,orders:db.prepare("SELECT COUNT(*) c FROM orders").get().c,pending:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PENDING'").get().c,paid:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PAID'").get().c,cancelled:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='CANCELLED' OR order_status='CANCELLED'").get().c,refunded:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='REFUNDED'").get().c,sales:db.prepare("SELECT COALESCE(SUM(total),0) s FROM orders WHERE payment_status='PAID' AND order_status!='CANCELLED' AND date(created_at)=date('now','localtime')").get().s}));
+app.get("/api/admin/stats",guard,(req,res)=>res.json({products:db.prepare("SELECT COUNT(*) c FROM products WHERE active=1").get().c,orders:db.prepare("SELECT COUNT(*) c FROM orders").get().c,pending:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PENDING'").get().c,paid:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PAID'").get().c,cancelled:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='CANCELLED' OR order_status='CANCELLED'").get().c,refunded:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='REFUNDED'").get().c,sales:db.prepare("SELECT COALESCE(SUM(total),0) s FROM orders WHERE payment_status='PAID' AND order_status!='CANCELLED' AND date(created_at)=date('now','localtime')").get().s,liveVisitors:activeVisitors.size}));
 app.post("/api/orders",async(req,res)=>{
   let p=db.prepare("SELECT * FROM products WHERE id=? AND active=1").get(req.body.productId);
   let q=Math.max(1,+req.body.quantity||1);
