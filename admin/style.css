@@ -6,3 +6,7 @@ button{transition:transform .15s,box-shadow .15s,opacity .15s}button:hover{trans
 .vendor-actions button:not(.danger):not(.warning):not(.secondary):not(.pin-reset){background:#16a34a!important;color:#fff!important;border-color:#16a34a!important;box-shadow:0 4px 12px rgba(22,163,74,.22)}
 .vendor-actions .pin-reset{background:#eef2ff;color:#243b7a;border:1px solid #cfd8ff;border-radius:10px;padding:9px 12px;font-weight:800;cursor:pointer}
 .vendor-actions .pin-reset:hover{background:#e0e7ff}
+
+/* BASSE ADMIN branding — design only; catalog data/functions unchanged */
+.sidebrand{padding:6px 4px 18px;border-bottom:1px solid #ffffff18}.admin-logo{width:128px;height:58px;object-fit:contain;object-position:left center;border-radius:10px;background:#fff}.sidebrand b{display:none}.dash-heading{display:flex;align-items:center;gap:15px}.dashboard-logo{width:150px;height:62px;object-fit:contain;background:#fff;border-radius:12px;box-shadow:0 8px 22px rgba(7,26,74,.08)}
+@media(max-width:650px){.admin-logo{width:48px;height:42px}.dash-heading{gap:8px}.dashboard-logo{width:82px;height:42px}.sidebrand{justify-content:center}.sidebrand .admin-logo{width:48px}}

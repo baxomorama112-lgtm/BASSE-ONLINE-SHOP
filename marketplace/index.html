@@ -4,16 +4,31 @@
 <header class="top">
 <a class="brand" href="#" aria-label="BASSE Marketplace"><img class="brand-logo" src="/basse-marketplace-logo.jpg" alt="BASSE Marketplace"></a>
 <div class="search-wrap"><div class="search"><input id="search" autocomplete="off" placeholder="Search products, phones, fashion, beauty..." aria-label="Search products"><button id="searchBtn" type="button" aria-label="Search">⌕</button><button id="clearSearch" class="clear-search" type="button" aria-label="Clear search">×</button></div><div id="searchSuggestions" class="search-suggestions"></div></div>
-<a class="support" href="https://wa.me/2206963349" target="_blank" aria-label="Call or message support">☎ Support</a><button class="cart" onclick="openCart()">🛒<i id="cartCount">0</i></button>
+<a class="support" href="tel:+2206963349" aria-label="Call support">☎ Support</a><button class="cart" onclick="openCart()" aria-label="Cart">🛒<i id="cartCount">0</i></button>
 </header>
 <main>
-<section class="hero"><div><label>BASSE MARKET • BASSE & SURROUNDING AREAS</label><h1>Stay home.<br><em>Make order.</em></h1><p>Shop fashion, phones, electronics, beauty, home & living and accessories from one trusted marketplace.</p><button onclick="document.querySelector('#products').scrollIntoView({behavior:'smooth'})">SHOP NOW <b>→</b></button></div><div class="hero-art"><div>🛍️</div><b>SHOP LOCAL</b><span>Fast. Simple. Trusted.</span></div></section>
+<section class="hero market-banner" aria-label="BASSE Marketplace promotion">
+  <img src="/basse-market-banner.jpg" alt="BASSE Marketplace — Stay home, make order, shop local and get delivery">
+  <div class="banner-overlay"><button onclick="document.querySelector('#products').scrollIntoView({behavior:'smooth'})">SHOP NOW <b>→</b></button></div>
+</section>
 <section id="categories" class="categories"><div class="section-title"><h2>Shop by category</h2><span>Explore what you need</span></div><div class="cats">
-<button class="active" onclick="setCat('All',this)">All</button><button onclick="setCat('Fashion',this)">👕 Fashion</button><button onclick="setCat('Electronics',this)">🎧 Electronics</button><button onclick="setCat('Phones',this)">📱 Phones</button><button onclick="setCat('Beauty',this)">💄 Beauty</button><button onclick="setCat('Home & Living',this)">🏠 Home & Living</button><button onclick="setCat('Accessories',this)">👜 Accessories</button>
+<button class="active" onclick="setCat('All',this)" aria-label="All products"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg><b>All</b></button>
+<button onclick="setCat('Fashion',this)" aria-label="Fashion"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4l4 2 4-2 4 4-2 2v10H6V10L4 8z"/></svg><b>Fashion</b></button>
+<button onclick="setCat('Electronics',this)" aria-label="Electronics"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h10a2 2 0 012 2v8a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2zm-3 13h16v2H4z"/></svg><b>Electronics</b></button>
+<button onclick="setCat('Phones',this)" aria-label="Phones"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"/><circle cx="12" cy="18" r="1"/></svg><b>Phones</b></button>
+<button onclick="setCat('Beauty',this)" aria-label="Beauty"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6v3h2v13H7V7h2zM10 2h4v2h-4z"/></svg><b>Beauty</b></button>
+<button onclick="setCat('Home & Living',this)" aria-label="Home and Living"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"/></svg><b>Home &amp; Living</b></button>
+<button onclick="setCat('Accessories',this)" aria-label="Accessories"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10l2 3v10H5V10zM9 7a3 3 0 016 0" fill="none" stroke="currentColor" stroke-width="2"/></svg><b>Accessories</b></button>
 </div></section>
 <section id="products"><div class="section-title"><div><h2>Featured products</h2><span>Fresh products from BASSE ONLINE SHOP</span></div><small id="count"></small></div><div id="grid"></div></section>
-<section class="trust"><div>🔒<b>Secure payment</b><span>Pay with Waychit</span></div><div>💬<b>WhatsApp support</b><span>+220 6963349</span></div><div>🚚<b>Local delivery</b><span>Delivery based on location</span></div></section>
+<section class="trust"><div>🔒<b>Secure payment</b><span>Pay with Waychit</span></div><div>☎<b>Telephone support</b><span>+220 6963349</span></div><div>🚚<b>Local delivery</b><span>Delivery based on location</span></div></section>
 </main>
-<nav class="bottom"><a class="active" href="#">⌂<small>Home</small></a><a href="#categories">◉<small>Categories</small></a><button onclick="openCart()">🛒<small>Cart</small></button><a href="https://wa.me/2206963349" target="_blank" aria-label="Support">☎<small>Support</small></a><button onclick="openAccount()">👤<small>Account</small></button></nav>
+<nav class="bottom" aria-label="Main navigation">
+<a class="active" href="#" aria-label="Home"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v9h-6v-6H9v6H3z"/></svg><small>Home</small></a>
+<a href="#categories" aria-label="Categories"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg><small>Categories</small></a>
+<button onclick="openCart()" aria-label="Cart"><svg viewBox="0 0 24 24"><path d="M3 4h2l2 11h10l3-8H7" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/></svg><small>Cart</small></button>
+<a href="tel:+2206963349" aria-label="Telephone support"><svg viewBox="0 0 24 24"><path d="M6.5 3.5l3 2-2 3c1.4 3 3 4.6 6 6l3-2 2 3c-4 4-11 0-14-4-3-4-2-7 2-8z" fill="none" stroke="currentColor" stroke-width="2"/></svg><small>Support</small></a>
+<button onclick="openAccount()" aria-label="Account"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3"/><path d="M5 21c.5-4 2.8-6 7-6s6.5 2 7 6" fill="none" stroke="currentColor" stroke-width="2"/></svg><small>Account</small></button>
+</nav>
 <div id="modal" class="modal"></div><div id="toast" class="toast"></div><script src="app.js"></script>
 </body></html>

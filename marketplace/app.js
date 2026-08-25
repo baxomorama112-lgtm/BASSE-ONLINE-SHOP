@@ -24,18 +24,25 @@ function renderProductGrid(ps, silent=false){
   });
 }
 
+function cachedCatalog(){try{const x=JSON.parse(localStorage.getItem("basseCatalogCache")||"[]");return Array.isArray(x)?x:[]}catch{return []}}
+function saveCatalogCache(ps){try{if(Array.isArray(ps)&&ps.length)localStorage.setItem("basseCatalogCache",JSON.stringify(ps))}catch{}}
+function filterCachedCatalog(){const q=$("search").value.trim().toLowerCase();return cachedCatalog().filter(p=>(category==="All"||p.category===category)&&(!q||(p.name+" "+p.category+" "+(p.description||"")).toLowerCase().includes(q)))}
 async function loadProducts(silent=false){
   try{
     const r=await fetch(`/api/products?category=${encodeURIComponent(category)}&q=${encodeURIComponent($("search").value.trim())}`,{cache:"no-store"});
+    if(!r.ok)throw new Error("Catalog unavailable");
     const ps=await r.json();
+    saveCatalogCache(ps);
     $("count").textContent=ps.length+" products";
     renderProductGrid(ps,silent);
     $("clearSearch").classList.toggle("show",!!$("search").value.trim());
   }catch(e){
-    if(!$("grid").querySelector(".product")) $("grid").innerHTML='<div class="empty-search"><div>⚠️</div><h3>Shop temporarily unavailable</h3><p>Please refresh and try again.</p></div>';
+    const ps=filterCachedCatalog();
+    if(ps.length){$("count").textContent=ps.length+" products";renderProductGrid(ps,true);toast("Showing saved catalog — reconnecting…");}
+    else if(!$("grid").querySelector(".product")) $("grid").innerHTML='<div class="empty-search"><div>⚠️</div><h3>Shop temporarily unavailable</h3><p>Your saved catalog will return when the connection is restored.</p></div>';
   }
 }
-async function loadSearchIndex(){try{let r=await fetch("/api/products?category=All");searchIndex=await r.json()}catch{searchIndex=[]}}
+async function loadSearchIndex(){try{let r=await fetch("/api/products?category=All",{cache:"no-store"});if(!r.ok)throw Error();searchIndex=await r.json();saveCatalogCache(searchIndex)}catch{searchIndex=cachedCatalog()}}
 function showSuggestions(){let term=$("search").value.trim().toLowerCase(),box=$("searchSuggestions");if(!term){box.classList.remove("show");box.innerHTML="";return}let matches=searchIndex.filter(p=>(p.name+" "+p.category+" "+(p.description||"")).toLowerCase().includes(term)).slice(0,7);box.innerHTML=matches.length?matches.map(p=>`<button type="button" class="suggest-item" onclick="pickSuggestion(${p.id})"><span class="suggest-icon">🔎</span><span><b>${esc(p.name)}</b><small>${esc(p.category)} · ${money(p.price)}</small></span></button>`).join(""):"<div class=suggest-empty>No matching products</div>";box.classList.add("show")}
 function pickSuggestion(id){let p=searchIndex.find(x=>x.id===id);if(!p)return;$("search").value=p.name;$("searchSuggestions").classList.remove("show");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"smooth",block:"start"})}
 function runSearch(){clearTimeout(searchTimer);searchTimer=setTimeout(loadProducts,160);showSuggestions()}
