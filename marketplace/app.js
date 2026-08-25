@@ -104,6 +104,7 @@ async function placeOrder(){
     let d=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(d.error||"Could not create your order.");
     localStorage.setItem("basseLastOrder",JSON.stringify(d.order));
+    localStorage.setItem("bassePendingPayment",JSON.stringify({orderId:d.order.id,startedAt:Date.now(),paymentMode:d.paymentMode||"dynamic"}));
     if(d.paymentUrl){
       localStorage.setItem("bassePaymentMode",d.paymentMode||"dynamic");
       if(d.paymentMode==="fallback") toast("Opening Waychit checkout…");
@@ -134,8 +135,14 @@ async function waitForPayment(id,attempt=0){
   try{
     let r=await fetch("/api/order/"+encodeURIComponent(id),{cache:"no-store"});
     let o=await r.json();
-    if(o.payment_status==="PAID")return showReturn(o,"",true,o.whatsappSupport);
-    if(o.payment_status==="CANCELLED"||o.payment_status==="REFUNDED")return showReturn(o,"",false,o.whatsappSupport,"This payment is no longer active.");
+    if(o.payment_status==="PAID"){
+      localStorage.removeItem("bassePendingPayment");
+      return showReturn(o,"",true,o.whatsappSupport);
+    }
+    if(o.payment_status==="CANCELLED"||o.payment_status==="REFUNDED"){
+      localStorage.removeItem("bassePendingPayment");
+      return showReturn(o,"",false,o.whatsappSupport,"This payment is no longer active.");
+    }
     if(attempt<30)return setTimeout(()=>waitForPayment(id,attempt+1),2000);
     showReturn(o,"",false,o.whatsappSupport,"Payment is still being verified. If you already paid, your order will update automatically when Waychit confirms it.");
   }catch{
@@ -151,6 +158,7 @@ function handleReturn(){
   if(st==="success"){
     // Waychit redirects here after its hosted payment page. The webhook is authoritative;
     // polling only waits for that server-side confirmation before showing success.
+    localStorage.removeItem("bassePendingPayment");
     waitForPayment(id,0);
   }else{
     fetch("/api/order/"+encodeURIComponent(id)).then(r=>r.json()).then(o=>{
@@ -158,6 +166,17 @@ function handleReturn(){
       else showReturn({id,total:0},"",false,"","The Waychit payment was not completed.");
     }).catch(()=>showReturn({id,total:0},"",false,"","The Waychit payment was not completed. Your order is still pending."));
   }
+}
+function resumePendingPayment(){
+  try{
+    const raw=localStorage.getItem("bassePendingPayment");
+    if(!raw)return;
+    const p=JSON.parse(raw);
+    if(!p?.orderId)return;
+    // Keep checking after the customer returns from the Waychit app.
+    // This also works when Waychit does not automatically hand the browser back.
+    waitForPayment(p.orderId,0);
+  }catch{}
 }
 function closeModal(){$("modal").classList.remove("show")}
 function openCart(){toast("Cart checkout is coming next — Buy Now is fully active.")}
@@ -280,7 +299,7 @@ function resumeVendorApplication(){
 function toast(t){let x=$("toast");x.textContent=t;x.classList.add("show");clearTimeout(window.__toast);window.__toast=setTimeout(()=>x.classList.remove("show"),2800)}
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 $("search").addEventListener("input",runSearch);$("search").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();$("searchSuggestions").classList.remove("show");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"smooth",block:"start"})}if(e.key==="Escape")clearSearch()});$("searchBtn").addEventListener("click",()=>{$("searchSuggestions").classList.remove("show");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"smooth",block:"start"});});$("clearSearch").addEventListener("click",clearSearch);document.addEventListener("click",e=>{if(!e.target.closest(".search-wrap"))$("searchSuggestions").classList.remove("show")});
-loadSearchIndex().then(loadProducts);handleReturn();setTimeout(()=>{if(new URLSearchParams(location.search).get("vendor")==="apply"){openVendorApply();history.replaceState({},"",location.pathname)}resumeVendorApplication()},200);
+loadSearchIndex().then(loadProducts);handleReturn();setTimeout(()=>{if(new URLSearchParams(location.search).get("vendor")==="apply"){openVendorApply();history.replaceState({},"",location.pathname)}resumeVendorApplication();if(!new URLSearchParams(location.search).get("payment"))resumePendingPayment()},200);
 // Instant catalog/order updates. EventSource reconnects automatically if the connection drops.
 function connectLive(){
   try{
@@ -294,4 +313,9 @@ connectLive();
 // Safety fallback for networks that block EventSource.
 setInterval(()=>{if(document.visibilityState==="visible"&&!$("modal").classList.contains("show"))loadProducts(true)},5000);
 
-window.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"){let u=new URLSearchParams(location.search),id=u.get("order"),st=u.get("payment");if(id&&st==="success")waitForPayment(id,0)}});
+window.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState!=="visible")return;
+  let u=new URLSearchParams(location.search),id=u.get("order"),st=u.get("payment");
+  if(id&&st==="success"){waitForPayment(id,0);return;}
+  if(!id&&!st)resumePendingPayment();
+});
