@@ -113,14 +113,52 @@ async function placeOrder(){
     throw new Error(d.paymentError||"Waychit payment could not be started.");
   }catch(e){if(btn){btn.disabled=false;btn.innerHTML="💳 PAY WITH WAYCHIT <span>→</span>"}showReturn({id:"",total:selected.price*q,whatsappSupport:""},"",false,"",e.message||"Payment could not be started.")}
 }
-function receiptMessage(o){return `Hello BASSE ONLINE SHOP 👋\n\nI have paid for my order.\n\nOrder: ${o.id}\nProduct: ${o.product_name} × ${o.quantity}\nTotal: ${money(o.total)}\nLocation: ${o.location}\nCustomer WhatsApp: +${o.whatsapp}\nPayment: PAID\n\nPlease confirm my order. Thank you.`}
+function receiptMessage(o){return `Hello BASSE ONLINE SHOP 👋
+
+I have paid for my order.
+
+Order: ${o.id}
+Product: ${o.product_name} × ${o.quantity}
+Total: ${money(o.total)}
+Location: ${o.location}
+Customer WhatsApp: +${o.whatsapp}
+Payment: PAID
+
+Please confirm my order. Thank you.`}
 function showReturn(o,msg,paid,adminWhatsApp,note=""){
   let target=String(adminWhatsApp||o.whatsappSupport||"").replace(/\D/g,"");
   let href=target?`https://wa.me/${target}?text=${encodeURIComponent(msg||receiptMessage(o))}`:"#";
   $("modal").innerHTML=`<div class="sheet return-sheet"><button class="close" onclick="closeModal()">×</button><div class="result-icon">${paid?"✓":"🧾"}</div><h2>${paid?"Payment successful!":"Order received"}</h2><p>${paid?"Your payment has been confirmed.":note||"Your order has been received."}</p>${o.id?`<div class="summary"><div class="row"><span>Order</span><b>${esc(o.id)}</b></div><div class="row"><span>Total</span><b>${money(o.total)}</b></div><div class="row"><span>Payment</span><b>${paid?"PAID":"PENDING"}</b></div></div>`:""}${target&&o.id?`<a class="whats" href="${href}" target="_blank" rel="noopener">💬 SEND ORDER TO BASSE SHOP</a>`:""}<button class="secondary-btn" onclick="closeModal()">CONTINUE SHOPPING</button></div>`;$('modal').classList.add('show')
 }
-async function waitForPayment(id,attempt=0){try{let r=await fetch("/api/order/"+encodeURIComponent(id));let o=await r.json();if(o.payment_status==="PAID")return showReturn(o,"",true,o.whatsappSupport);if(o.payment_status==="CANCELLED"||o.payment_status==="REFUNDED")return showReturn(o,"",false,o.whatsappSupport,"This payment is no longer active.");if(attempt<20)return setTimeout(()=>waitForPayment(id,attempt+1),2000);showReturn(o,"",false,o.whatsappSupport,"Payment is still being verified. If you already paid, refresh this order in a moment.")}catch{showReturn({id,total:0},"",false,"","We could not verify the payment right now.")}}
-function handleReturn(){let u=new URLSearchParams(location.search),st=u.get("payment"),id=u.get("order");if(!id||!st)return;history.replaceState({},document.title,"/");if(st==="success")waitForPayment(id);else fetch("/api/order/"+encodeURIComponent(id)).then(r=>r.json()).then(o=>showReturn(o,"",false,o.whatsappSupport,"The Waychit payment was not completed. Your order is still pending."))}
+async function waitForPayment(id,attempt=0){
+  try{
+    let r=await fetch("/api/order/"+encodeURIComponent(id),{cache:"no-store"});
+    let o=await r.json();
+    if(o.payment_status==="PAID")return showReturn(o,"",true,o.whatsappSupport);
+    if(o.payment_status==="CANCELLED"||o.payment_status==="REFUNDED")return showReturn(o,"",false,o.whatsappSupport,"This payment is no longer active.");
+    if(attempt<30)return setTimeout(()=>waitForPayment(id,attempt+1),2000);
+    showReturn(o,"",false,o.whatsappSupport,"Payment is still being verified. If you already paid, your order will update automatically when Waychit confirms it.");
+  }catch{
+    if(attempt<30)return setTimeout(()=>waitForPayment(id,attempt+1),2000);
+    showReturn({id,total:0},"",false,"","We could not verify the payment right now. Please try again.");
+  }
+}
+function handleReturn(){
+  let u=new URLSearchParams(location.search),st=u.get("payment"),id=u.get("order");
+  if(!id||!st)return;
+  // Clean the URL without reloading the marketplace.
+  try{history.replaceState({},document.title,location.pathname||"/")}catch{}
+  if(st==="success"){
+    // Waychit redirects here after its hosted payment page. The webhook is authoritative;
+    // polling only waits for that server-side confirmation before showing success.
+    waitForPayment(id,0);
+  }else{
+    fetch("/api/order/"+encodeURIComponent(id)).then(r=>r.json()).then(o=>{
+      if(o?.id)showReturn(o,"",false,o.whatsappSupport,"The Waychit payment was not completed. Your order is still pending.");
+      else showReturn({id,total:0},"",false,"","The Waychit payment was not completed.");
+    }).catch(()=>showReturn({id,total:0},"",false,"","The Waychit payment was not completed. Your order is still pending."));
+  }
+}
 function closeModal(){$("modal").classList.remove("show")}
 function openCart(){toast("Cart checkout is coming next — Buy Now is fully active.")}
 async function openOrders(){let raw=localStorage.getItem("basseLastOrder");if(!raw)return toast("No recent order found on this phone.");try{let old=JSON.parse(raw),r=await fetch("/api/order/"+encodeURIComponent(old.id)),o=await r.json();if(!r.ok)throw new Error(o.error||"Order not found");showReturn(o,"",o.payment_status==="PAID",o.whatsappSupport,o.payment_status==="PENDING"?"Your order is waiting for payment confirmation.":"")}catch(e){toast(e.message)}}
@@ -255,3 +293,5 @@ function connectLive(){
 connectLive();
 // Safety fallback for networks that block EventSource.
 setInterval(()=>{if(document.visibilityState==="visible"&&!$("modal").classList.contains("show"))loadProducts(true)},5000);
+
+window.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"){let u=new URLSearchParams(location.search),id=u.get("order"),st=u.get("payment");if(id&&st==="success")waitForPayment(id,0)}});
