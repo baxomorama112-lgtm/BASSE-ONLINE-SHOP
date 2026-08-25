@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY,product_id INTEGER,product
 CREATE TABLE IF NOT EXISTS vendors(id INTEGER PRIMARY KEY AUTOINCREMENT,full_name TEXT,business_name TEXT,whatsapp TEXT,email TEXT DEFAULT '',email_verified INTEGER DEFAULT 0,verification_code TEXT,verification_expires TEXT,location TEXT,category TEXT,description TEXT,password_hash TEXT,status TEXT DEFAULT 'PENDING',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS vendor_products(id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER,vendor_id INTEGER,status TEXT DEFAULT 'PENDING',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS customer_accounts(id INTEGER PRIMARY KEY AUTOINCREMENT,full_name TEXT,whatsapp TEXT UNIQUE,password_hash TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS payout_requests(id INTEGER PRIMARY KEY AUTOINCREMENT,vendor_id INTEGER,amount INTEGER,status TEXT DEFAULT 'PENDING',created_at TEXT DEFAULT CURRENT_TIMESTAMP);`);
+CREATE TABLE IF NOT EXISTS payout_requests(id INTEGER PRIMARY KEY AUTOINCREMENT,vendor_id INTEGER,amount INTEGER,status TEXT DEFAULT 'PENDING',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS vendor_submission_keys(idempotency_key TEXT PRIMARY KEY,vendor_id INTEGER NOT NULL,product_id INTEGER NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);`);
 try{db.exec("ALTER TABLE products ADD COLUMN images TEXT DEFAULT ''")}catch(e){}
 try{db.exec("ALTER TABLE products ADD COLUMN vendor_id INTEGER DEFAULT NULL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN vendor_id INTEGER DEFAULT NULL")}catch(e){}
@@ -149,13 +150,43 @@ app.get("/api/vendor/stats",vendorGuard,(req,res)=>res.json({
  sales:db.prepare("SELECT COALESCE(SUM(total),0) s FROM orders WHERE vendor_id=? AND payment_status='PAID'").get(req.vendorId).s,
  earnings:db.prepare("SELECT COALESCE(SUM(vendor_earnings),0) s FROM orders WHERE vendor_id=? AND payment_status='PAID'").get(req.vendorId).s
 }));
-app.post("/api/vendor/products",vendorGuard,upload.array("images",8),(req,res)=>{
+app.post("/api/vendor/products",vendorGuard,(req,res,next)=>{
+  // A client keeps the same idempotency key when retrying after a dropped network.
+  // If the first request already reached the server, return the original product
+  // instead of creating a duplicate.
+  const key=String(req.headers["x-idempotency-key"]||"").trim();
+  req.vendorIdempotencyKey=key;
+  if(key){
+    const prior=db.prepare("SELECT product_id FROM vendor_submission_keys WHERE idempotency_key=? AND vendor_id=?").get(key,req.vendorId);
+    if(prior){
+      const product=db.prepare("SELECT id FROM products WHERE id=? AND vendor_id=?").get(prior.product_id,req.vendorId);
+      if(product)return res.json({ok:true,id:product.id,status:"PENDING",duplicate:true});
+    }
+  }
+  next();
+},upload.array("images",8),(req,res)=>{
  let b=req.body,files=req.files||[],imgs=files.map(f=>"/uploads/"+f.filename),img=imgs[0]||b.imageUrl||"";
  if(!b.name||!b.price)return res.status(400).json({error:"Product name and price are required."});
- let x=db.prepare("INSERT INTO products(name,category,price,stock,description,image,images,active,vendor_id) VALUES(?,?,?,?,?,?,?,?,?)").run(b.name,b.category,+b.price,+b.stock||0,b.description||"",img,JSON.stringify(imgs),0,req.vendorId);
- db.prepare("INSERT INTO vendor_products(product_id,vendor_id,status) VALUES(?,?,?)").run(x.lastInsertRowid,req.vendorId,"PENDING");
- broadcastLive("catalog",{productId:Number(x.lastInsertRowid),pending:true});
- res.json({ok:true,id:x.lastInsertRowid,status:"PENDING"});
+ const create=db.transaction(()=>{
+   let x=db.prepare("INSERT INTO products(name,category,price,stock,description,image,images,active,vendor_id) VALUES(?,?,?,?,?,?,?,?,?)").run(String(b.name).trim(),b.category,+b.price,+b.stock||0,b.description||"",img,JSON.stringify(imgs),0,req.vendorId);
+   db.prepare("INSERT INTO vendor_products(product_id,vendor_id,status) VALUES(?,?,?)").run(x.lastInsertRowid,req.vendorId,"PENDING");
+   if(req.vendorIdempotencyKey){
+     db.prepare("INSERT INTO vendor_submission_keys(idempotency_key,vendor_id,product_id) VALUES(?,?,?)").run(req.vendorIdempotencyKey,req.vendorId,x.lastInsertRowid);
+   }
+   return Number(x.lastInsertRowid);
+ });
+ try{
+   const id=create();
+   broadcastLive("catalog",{productId:id,pending:true});
+   res.json({ok:true,id,status:"PENDING"});
+ }catch(err){
+   // A simultaneous retry can hit the unique key. Return the already-created product.
+   if(req.vendorIdempotencyKey){
+     const prior=db.prepare("SELECT product_id FROM vendor_submission_keys WHERE idempotency_key=? AND vendor_id=?").get(req.vendorIdempotencyKey,req.vendorId);
+     if(prior)return res.json({ok:true,id:prior.product_id,status:"PENDING",duplicate:true});
+   }
+   res.status(500).json({error:"Could not save the product. Please try again."});
+ }
 });
 app.get("/api/vendor/products",vendorGuard,(req,res)=>res.json(db.prepare("SELECT p.*,COALESCE(vp.status,'APPROVED') approval_status FROM products p LEFT JOIN vendor_products vp ON vp.product_id=p.id WHERE p.vendor_id=? ORDER BY p.id DESC").all(req.vendorId)));
 

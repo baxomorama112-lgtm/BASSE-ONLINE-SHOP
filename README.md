@@ -45,3 +45,7 @@ The marketplace, admin dashboard, and vendor dashboard use a server-sent event s
 
 ## BASSE MARKET WhatsApp
 The customer-facing confirmation/support destination defaults to +220 6963349 via `BASSE_MARKET_WHATSAPP`.
+
+## Data persistence
+
+The live app stores its SQLite database and uploaded product images under `DATA_DIR`. The included `render.yaml` mounts a 1 GB Render persistent disk at `/opt/render/project/src/server/data`. Keep that disk attached to the `basse-online-shop` service; do not point `DATA_DIR` at an ephemeral location. Vendor product submissions use an idempotency key so a retry after a dropped network does not create duplicate products.
