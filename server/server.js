@@ -160,78 +160,21 @@ app.post("/api/vendor/products",vendorGuard,upload.array("images",8),(req,res)=>
 app.get("/api/vendor/products",vendorGuard,(req,res)=>res.json(db.prepare("SELECT p.*,COALESCE(vp.status,'APPROVED') approval_status FROM products p LEFT JOIN vendor_products vp ON vp.product_id=p.id WHERE p.vendor_id=? ORDER BY p.id DESC").all(req.vendorId)));
 
 
-async function sendVerificationEmail(to,code,businessName){
-  const key=process.env.RESEND_API_KEY;
-  const from=process.env.RESEND_FROM_EMAIL;
-  if(!key||!from) return {sent:false,reason:"Email service is not configured"};
-  const r=await fetch("https://api.resend.com/emails",{
-    method:"POST",
-    headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json"},
-    body:JSON.stringify({
-      from,to:[to],
-      subject:"BASSE MARKET — Verify your vendor email",
-      html:`<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:24px"><h2>BASSE MARKET</h2><p>Verify the email for <b>${String(businessName||"your shop").replace(/[<>&"]/g,"")}</b>.</p><div style="font-size:32px;font-weight:800;letter-spacing:8px;padding:18px;background:#f3f6fb;text-align:center">${code}</div><p>This code expires in 10 minutes.</p><p>If you did not apply to become a vendor, you can ignore this email.</p></div>`
-    })
-  });
-  if(!r.ok){
-    const raw=await r.text();
-    let detail=raw;
-    try{detail=JSON.parse(raw)}catch(e){}
-    if(r.status===403 && String(raw).includes('can only send testing emails to your own email address')){
-      return {sent:false,reason:'Resend test mode only allows email to the Resend account owner. Verify a sending domain in Resend, then set RESEND_FROM_EMAIL to an address on that verified domain.'};
-    }
-    return {sent:false,reason:typeof detail==='string'?detail:JSON.stringify(detail)};
-  }
-  return {sent:true};
-}
 function hashPin(pin){return crypto.createHash("sha256").update(String(pin)).digest("hex")}
-function makeVerificationCode(){return String(Math.floor(100000+Math.random()*900000))}
 
 // Vendor applications: public application, admin approval, isolated vendor data
-app.post("/api/vendors/apply",async(req,res)=>{
-  const b=req.body||{}, pin=String(b.password||""), email=String(b.email||"").trim().toLowerCase();
+app.post("/api/vendors/apply",(req,res)=>{
+  const b=req.body||{}, pin=String(b.password||"");
   const phone=String(b.whatsapp||"").replace(/\D/g,"").replace(/^220/,"");
-  if(!String(b.fullName||"").trim()||!String(b.businessName||"").trim()||phone.length<6)return res.status(400).json({error:"Please complete your name, business name and WhatsApp number."});
+  if(!String(b.fullName||"").trim()||!String(b.businessName||"").trim()||phone.length<6)
+    return res.status(400).json({error:"Please complete your name, business name and WhatsApp number."});
   if(!/^\d{4,5}$/.test(pin))return res.status(400).json({error:"Vendor PIN must be exactly 4 or 5 digits."});
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return res.status(400).json({error:"Enter a valid email address."});
   const existing=db.prepare("SELECT * FROM vendors WHERE whatsapp=? AND status!='REJECTED'").get("220"+phone);
-  if(existing){
-    if(existing.email && existing.email.toLowerCase()===email){
-      return res.status(409).json({error:`A vendor application already exists for this number (${existing.status}).`,id:existing.id,status:existing.status});
-    }
-    return res.status(409).json({error:"A vendor application already exists for this number. Wait for Admin approval or ask Admin to reset/reopen it.",id:existing.id,status:existing.status});
-  }
-  const code=makeVerificationCode(),expires=new Date(Date.now()+10*60*1000).toISOString();
-  const x=db.prepare("INSERT INTO vendors(full_name,business_name,whatsapp,email,email_verified,verification_code,verification_expires,location,category,description,password_hash) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
-    .run(String(b.fullName).trim(),String(b.businessName).trim(),"220"+phone,email,0,code,expires,String(b.location||""),String(b.category||""),String(b.description||""),hashPin(pin));
-  let emailResult={sent:false,reason:""};
-  try{emailResult=await sendVerificationEmail(email,code,b.businessName)}catch(e){emailResult={sent:false,reason:e.message}}
+  if(existing)return res.status(409).json({error:`A vendor application already exists for this number (${existing.status}). Wait for Admin approval or ask Admin to reset/reopen it.`,id:existing.id,status:existing.status});
+  const x=db.prepare("INSERT INTO vendors(full_name,business_name,whatsapp,email,email_verified,location,category,description,password_hash) VALUES(?,?,?,?,?,?,?,?,?)")
+    .run(String(b.fullName).trim(),String(b.businessName).trim(),"220"+phone,"",1,String(b.location||""),String(b.category||""),String(b.description||""),hashPin(pin));
   broadcastLive("vendors",{vendorId:Number(x.lastInsertRowid)});
-  res.json({ok:true,id:x.lastInsertRowid,status:"PENDING",emailSent:emailResult.sent,emailNotice:emailResult.sent?"Verification code sent.":emailResult.reason,message:"Application submitted. Wait for admin approval."});
-});
-app.post("/api/vendors/verify-email",async(req,res)=>{
-  const id=Number(req.body?.id||0),code=String(req.body?.code||"").trim();
-  const v=db.prepare("SELECT * FROM vendors WHERE id=?").get(id);
-  if(!v)return res.status(404).json({error:"Vendor application not found."});
-  if(v.email_verified)return res.json({ok:true,verified:true});
-  if(!code||code!==String(v.verification_code||"")||!v.verification_expires||Date.now()>new Date(v.verification_expires).getTime())
-    return res.status(400).json({error:"Invalid or expired verification code."});
-  db.prepare("UPDATE vendors SET email_verified=1,verification_code=NULL,verification_expires=NULL WHERE id=?").run(id);
-  broadcastLive("vendors",{vendorId:id});
-  res.json({ok:true,verified:true});
-});
-app.post("/api/vendors/resend-code",async(req,res)=>{
-  const id=Number(req.body?.id||0);
-  const v=db.prepare("SELECT * FROM vendors WHERE id=?").get(id);
-  if(!v)return res.status(404).json({error:"Vendor application not found."});
-  if(!v.email)return res.status(400).json({error:"No email is saved for this application."});
-  const code=makeVerificationCode(),expires=new Date(Date.now()+10*60*1000).toISOString();
-  db.prepare("UPDATE vendors SET verification_code=?,verification_expires=? WHERE id=?").run(code,expires,id);
-  try{
-    const r=await sendVerificationEmail(v.email,code,v.business_name);
-    if(!r.sent)return res.status(503).json({error:"Email service is not configured on the server yet.",detail:r.reason});
-    res.json({ok:true,message:"A new verification code was sent."});
-  }catch(e){res.status(503).json({error:"Could not send the verification email.",detail:e.message})}
+  res.json({ok:true,id:x.lastInsertRowid,status:"PENDING",message:"Application submitted. Wait for Admin approval."});
 });
 app.get("/api/vendors/status",(req,res)=>{
   const phone=String(req.query.whatsapp||req.query.phone||"").replace(/\D/g,"").replace(/^220/,"");

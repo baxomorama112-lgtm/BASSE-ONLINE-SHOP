@@ -134,7 +134,7 @@ function openCustomerSignup(){
 }
 function createCustomer(){let n=$("caName").value.trim(),p=$("caPhone").value.replace(/\D/g,"").replace(/^220/,"");if(!n||p.length<6)return toast("Enter your name and valid WhatsApp number.");localStorage.setItem("basseCustomer",JSON.stringify({name:n,phone:"+220 "+p}));openAccount();toast("Customer account created ✓")}
 function openVendorApply(){
- $("modal").innerHTML=`<div class="sheet form-sheet"><button class="close" onclick="openAccount()">←</button><h2>Become a Vendor</h2><p class="muted">Your application goes to BASSE MARKET Admin for approval.</p><div class="form"><label>Full Name</label><input id="vName" placeholder="Full name"><label>Business / Shop Name</label><input id="vBusiness" placeholder="Your shop name"><label>WhatsApp Number</label><input id="vPhone" inputmode="numeric" placeholder="7XXXXXX"><label>Email</label><input id="vEmail" type="email" autocomplete="email" placeholder="your@email.com"><label>Location</label><input id="vLocation" placeholder="Basse"><label>Category</label><input id="vCategory" placeholder="Fashion, Phones, Beauty..."><label>Short Description</label><textarea id="vDesc" placeholder="Tell us about your business"></textarea><label>Create Vendor PIN</label><input id="vPass" type="password" inputmode="numeric" minlength="4" maxlength="5" pattern="[0-9]{4,5}" placeholder="4 or 5 digit PIN" required><button class="pay" onclick="submitVendor()">SUBMIT APPLICATION</button></div></div>`;$("modal").classList.add("show")
+ $("modal").innerHTML=`<div class="sheet form-sheet"><button class="close" onclick="openAccount()">←</button><h2>Become a Vendor</h2><p class="muted">Apply to sell on BASSE MARKET. Admin will review your application.</p><div class="form"><label>Full Name</label><input id="vName" placeholder="Full name"><label>Business / Shop Name</label><input id="vBusiness" placeholder="Your shop name"><label>WhatsApp Number</label><input id="vPhone" inputmode="numeric" placeholder="7XXXXXX"><label>Location</label><input id="vLocation" placeholder="Basse"><label>Category</label><input id="vCategory" placeholder="Fashion, Phones, Beauty..."><label>Short Description</label><textarea id="vDesc" placeholder="Tell us about your business"></textarea><label>Create Vendor PIN</label><input id="vPass" type="password" inputmode="numeric" minlength="4" maxlength="5" pattern="[0-9]{4,5}" placeholder="4 or 5 digit PIN" required><button class="pay" onclick="submitVendor()">SUBMIT APPLICATION</button></div></div>`;$("modal").classList.add("show")
 }
 function openVendorLogin(){
  $("modal").innerHTML=`<div class="sheet form-sheet vendor-login-sheet">
@@ -167,57 +167,33 @@ function openVendorLogin(){
  });
 }
 async function submitVendor(){
-  let pin=String($("vPass").value||""),email=String($("vEmail").value||"").trim().toLowerCase();
-  if(!/^\d{4,5}$/.test(pin)){toast("PIN must be exactly 4 or 5 digits.");return}
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast("Enter a valid email address.");return}
-  let phone=String($("vPhone").value||"").replace(/\D/g,"").replace(/^220/,"");
-  let b={fullName:$("vName").value,businessName:$("vBusiness").value,whatsapp:phone,email,location:$("vLocation").value,category:$("vCategory").value,description:$("vDesc").value,password:pin};
+  let pin=String($("vPass").value||"");
+  if(!/^\\d{4,5}$/.test(pin)){toast("PIN must be exactly 4 or 5 digits.");return}
+  let phone=String($("vPhone").value||"").replace(/\\D/g,"").replace(/^220/,"");
+  let b={fullName:$("vName").value,businessName:$("vBusiness").value,whatsapp:phone,location:$("vLocation").value,category:$("vCategory").value,description:$("vDesc").value,password:pin};
   if(!b.fullName||!b.businessName||phone.length<6)return toast("Complete the form with a valid WhatsApp number.");
   try{
     let r=await fetch("/api/vendors/apply",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});
     let d=await r.json();
     if(!r.ok)throw Error(d.error||"Application failed");
-    sessionStorage.setItem("basseVendorApplication",JSON.stringify({phone,pin,email,id:d.id,businessName:b.businessName,fullName:b.fullName}));
-    showVendorVerification(d.id,phone,pin,email,b.businessName,d.emailSent,d.emailNotice);
+    sessionStorage.setItem("basseVendorApplication",JSON.stringify({phone,pin,id:d.id,businessName:b.businessName,fullName:b.fullName}));
+    window.__vendorPendingName=b.fullName;
+    showVendorPending(d.id,phone,pin,b.businessName);
   }catch(e){toast(e.message)}
 }
-function showVendorVerification(id,phone,pin,email,businessName,emailSent,emailNotice){
-  $("modal").innerHTML=`<div class="sheet form-sheet">
-    <button class="close" type="button" onclick="closeModal()">×</button>
-    <div class="account-avatar">✉️</div>
-    <h2>Verify Your Email</h2>
-    <p class="muted">We sent a 6-digit code to <b>${esc(email)}</b>. The code expires in 10 minutes.</p>
-    ${emailSent?`<div class="form"><label>Verification Code</label><input id="vendorVerifyCode" inputmode="numeric" maxlength="6" placeholder="6-digit code"><button class="pay" type="button" id="verifyVendorEmail">VERIFY EMAIL</button><button class="secondary-btn" type="button" id="resendVendorEmail">RESEND CODE</button></div>`:
-    `<div class="pending-box"><strong>Email not sent</strong><span>Resend setup</span></div><p class="muted">${esc(emailNotice||"Email could not be sent yet.")}</p><p class="muted">You can still contact Admin on WhatsApp. Once the email sending domain is verified, use TRY AGAIN to resend the code.</p><button class="secondary-btn" type="button" id="resendVendorEmail">TRY AGAIN</button>`}
-  </div>`;
-  $("modal").classList.add("show");
-  $("resendVendorEmail").onclick=async()=>{
-    const r=await fetch("/api/vendors/resend-code",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id})});
-    const d=await r.json(); if(!r.ok)return toast(d.error||"Could not resend code.");
-    toast("Verification code sent ✓"); showVendorVerification(id,phone,pin,email,businessName,true,"");
-  };
-  if($("verifyVendorEmail"))$("verifyVendorEmail").onclick=async()=>{
-    const code=$("vendorVerifyCode").value.trim();
-    if(!/^\d{6}$/.test(code))return toast("Enter the 6-digit code.");
-    const r=await fetch("/api/vendors/verify-email",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,code})});
-    const d=await r.json(); if(!r.ok)return toast(d.error||"Verification failed.");
-    showVendorPending(id,phone,pin,businessName);
-  };
-}
-
 function showVendorPending(id,phone,pin,businessName){
   $("modal").innerHTML=`<div class="sheet return-sheet vendor-pending-sheet">
     <div class="result-icon pending-icon">⏳</div>
     <h2>Waiting for Approval</h2>
     <p>Your <b>${esc(businessName)}</b> vendor application has been submitted.</p>
     <div class="pending-box"><strong>Application Status</strong><span id="vendorPendingStatus">PENDING</span></div>
-    <p class="muted">Your application is now waiting for Admin approval.</p>
+    <p class="muted">No email verification is required. Your application is waiting for Admin approval.</p>
     <button class="pay" type="button" id="sendVendorWhatsApp">💬 SEND APPLICATION TO ADMIN</button>
     <button class="secondary-btn" type="button" id="checkVendorApproval">CHECK STATUS</button>
     <button class="secondary-btn" type="button" onclick="closeModal()">CLOSE</button>
   </div>`;
   $("modal").classList.add("show");
-  const waText=`🏪 *BASSE MARKET — NEW VENDOR APPLICATION*%0A%0ABusiness: ${encodeURIComponent(businessName)}%0AVendor: ${encodeURIComponent((window.__vendorPendingName||""))}%0AWhatsApp: +220${encodeURIComponent(phone)}%0AEmail: ${encodeURIComponent((window.__vendorPendingEmail||""))}%0AStatus: PENDING%0A%0APlease review and approve this vendor in the Admin Dashboard.`;
+  const waText=`🏪 *BASSE MARKET — NEW VENDOR APPLICATION*%0A%0ABusiness: ${encodeURIComponent(businessName)}%0AVendor: ${encodeURIComponent((window.__vendorPendingName||""))}%0AWhatsApp: +220${encodeURIComponent(phone)}%0AStatus: PENDING%0A%0APlease review and approve this vendor in the Admin Dashboard.`;
   $("sendVendorWhatsApp").onclick=()=>{ location.href=`https://wa.me/2206963349?text=${waText}`; };
   window.__vendorPending={id,phone,pin,businessName};
   clearInterval(window.__vendorPendingTimer);
@@ -252,7 +228,7 @@ function showVendorPending(id,phone,pin,businessName){
 function resumeVendorApplication(){
   try{
     const a=JSON.parse(sessionStorage.getItem("basseVendorApplication")||"null");
-    if(a&&a.id&&a.phone&&a.pin){window.__vendorPendingName=a.fullName||"";window.__vendorPendingEmail=a.email||"";showVendorPending(a.id,a.phone,a.pin,a.businessName||"Your shop");}
+    if(a&&a.id&&a.phone&&a.pin){window.__vendorPendingName=a.fullName||"";showVendorPending(a.id,a.phone,a.pin,a.businessName||"Your shop");}
   }catch{}
 }
 
