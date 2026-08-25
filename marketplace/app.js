@@ -155,7 +155,7 @@ function openVendorLogin(){
    const phone=$("vendorLoginPhone").value.trim();
    const pin=$("vendorLoginPin").value.trim();
    if(!phone) return toast("Enter your phone number.");
-   if(!/^\\d{4,5}$/.test(pin)) return toast("PIN must be 4 or 5 digits.");
+   if(!/^\d{4,5}$/.test(pin)) return toast("PIN must be 4 or 5 digits.");
    const btn=$("vendorLoginBtn"); btn.disabled=true; btn.innerHTML="⏳ SIGNING IN…";
    try{
      const r=await fetch("/api/vendor/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({whatsapp:phone,pin})});
@@ -168,8 +168,8 @@ function openVendorLogin(){
 }
 async function submitVendor(){
   let pin=String($("vPass").value||"");
-  if(!/^\\d{4,5}$/.test(pin)){toast("PIN must be exactly 4 or 5 digits.");return}
-  let phone=String($("vPhone").value||"").replace(/\\D/g,"").replace(/^220/,"");
+  if(!/^\d{4,5}$/.test(pin)){toast("PIN must be exactly 4 or 5 digits.");return}
+  let phone=String($("vPhone").value||"").replace(/\D/g,"").replace(/^220/,"");
   let b={fullName:$("vName").value,businessName:$("vBusiness").value,whatsapp:phone,location:$("vLocation").value,category:$("vCategory").value,description:$("vDesc").value,password:pin};
   if(!b.fullName||!b.businessName||phone.length<6)return toast("Complete the form with a valid WhatsApp number.");
   try{
@@ -235,7 +235,7 @@ function resumeVendorApplication(){
 function toast(t){let x=$("toast");x.textContent=t;x.classList.add("show");clearTimeout(window.__toast);window.__toast=setTimeout(()=>x.classList.remove("show"),2800)}
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 $("search").addEventListener("input",runSearch);$("search").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();$("searchSuggestions").classList.remove("show");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"smooth",block:"start"})}if(e.key==="Escape")clearSearch()});$("searchBtn").addEventListener("click",()=>{$("searchSuggestions").classList.remove("show");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"smooth",block:"start"});});$("clearSearch").addEventListener("click",clearSearch);document.addEventListener("click",e=>{if(!e.target.closest(".search-wrap"))$("searchSuggestions").classList.remove("show")});
-loadSearchIndex().then(loadProducts);handleReturn();setTimeout(resumeVendorApplication,200);
+loadSearchIndex().then(loadProducts);handleReturn();setTimeout(()=>{if(new URLSearchParams(location.search).get("vendor")==="apply"){openVendorApply();history.replaceState({},"",location.pathname)}resumeVendorApplication()},200);
 // Instant catalog/order updates. EventSource reconnects automatically if the connection drops.
 function connectLive(){
   try{
