@@ -49,41 +49,38 @@ function runSearch(){clearTimeout(searchTimer);searchTimer=setTimeout(loadProduc
 function clearSearch(){$("search").value="";$('searchSuggestions').classList.remove("show");loadProducts();$('search').focus()}
 function setCat(c,b){category=c;document.querySelectorAll(".cats button").forEach(x=>x.classList.remove("active"));b.classList.add("active");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"smooth",block:"start"})}
 
+function normalizeProductImages(product){
+  let imgs=[];
+  try{imgs=JSON.parse(product.images||"[]")}catch(e){}
+  if(!Array.isArray(imgs))imgs=[];
+  if(product.image&&!imgs.includes(product.image))imgs.unshift(product.image);
+  return imgs.length?imgs:[""];
+}
+function renderProductDetail(product){
+  selected=product;
+  const imgs=normalizeProductImages(product);
+  const thumbs=imgs.length>1?`<div class="thumbs" aria-label="Product photos">${imgs.map((im,i)=>`<button type="button" class="${i===0?'active':''}" onclick="pickImage(${i})" aria-label="View photo ${i+1}"><img src="${im}" alt=""></button>`).join("")}</div>`:"";
+  $("modal").innerHTML=`<div class="sheet product-sheet product-sheet-modern">
+    <button class="close modern-close" onclick="closeModal()" aria-label="Close">×</button>
+    <div class="product-detail">
+      <div class="gallery"><div class="main-photo-wrap"><img id="mainProductImage" src="${imgs[0]}" alt="${esc(product.name)}"></div>${thumbs}</div>
+      <div class="detail-info modern-detail-info"><span class="tagline">${esc(product.category)}</span><h2>${esc(product.name)}</h2><div class="detail-price">${money(product.price)}</div><p class="muted">${esc(product.description||"Quality product from BASSE MARKET.")}</p><div class="stock-note ${product.stock<1?'out':''}">${product.stock>0?`✓ ${product.stock} available`:"Out of stock"}</div><div class="detail-actions"><button class="pay buy-now-modern" ${product.stock<1?"disabled":""} onclick="openCheckout()"><span>🛒</span><b>BUY NOW</b><span class="arrow">→</span></button></div><div class="product-hint">Secure checkout · Pay with Waychit</div></div>
+    </div></div>`;
+  window.__productImages=imgs;
+  $("modal").classList.add("show");
+}
 async function buy(id){
+  // Open immediately from the already-loaded catalog, then refresh the details in the background.
+  const cached=cachedCatalog().find(p=>Number(p.id)===Number(id)) || searchIndex.find(p=>Number(p.id)===Number(id));
+  if(cached) renderProductDetail(cached);
   try{
-    let r=await fetch("/api/products/"+id,{cache:"no-store"});
-    selected=await r.json();
-    if(!r.ok)throw new Error(selected.error||"Product unavailable");
-    let imgs=[];
-    try{imgs=JSON.parse(selected.images||"[]")}catch(e){}
-    if(!Array.isArray(imgs))imgs=[];
-    if(selected.image&&!imgs.includes(selected.image))imgs.unshift(selected.image);
-    if(!imgs.length)imgs=[""];
-
-    const thumbs=imgs.length>1?`<div class="thumbs" aria-label="Product photos">${imgs.map((im,i)=>`<button type="button" class="${i===0?'active':''}" onclick="pickImage(${i})" aria-label="View photo ${i+1}"><img src="${im}" alt=""></button>`).join("")}</div>`:"";
-    $("modal").innerHTML=`<div class="sheet product-sheet product-sheet-modern">
-      <button class="close modern-close" onclick="closeModal()" aria-label="Close">×</button>
-      <div class="product-detail">
-        <div class="gallery">
-          <div class="main-photo-wrap"><img id="mainProductImage" src="${imgs[0]}" alt="${esc(selected.name)}"></div>
-          ${thumbs}
-        </div>
-        <div class="detail-info modern-detail-info">
-          <span class="tagline">${esc(selected.category)}</span>
-          <h2>${esc(selected.name)}</h2>
-          <div class="detail-price">${money(selected.price)}</div>
-          <p class="muted">${esc(selected.description||"Quality product from BASSE MARKET.")}</p>
-          <div class="stock-note ${selected.stock<1?'out':''}">${selected.stock>0?`✓ ${selected.stock} available`:"Out of stock"}</div>
-          <div class="detail-actions">
-            <button class="pay buy-now-modern" ${selected.stock<1?"disabled":""} onclick="openCheckout()"><span>🛒</span><b>BUY NOW</b><span class="arrow">→</span></button>
-          </div>
-          <div class="product-hint">Secure checkout · Pay with Waychit</div>
-        </div>
-      </div>
-    </div>`;
-    window.__productImages=imgs;
-    $("modal").classList.add("show");
-  }catch(e){toast(e.message)}
+    const r=await fetch("/api/products/"+id,{cache:"no-store"});
+    const fresh=await r.json();
+    if(!r.ok)throw new Error(fresh.error||"Product unavailable");
+    if(!cached || !$("modal").classList.contains("show") || Number(selected?.id)!==Number(id)) renderProductDetail(fresh);
+    else renderProductDetail(fresh);
+    saveCatalogCache((cachedCatalog().filter(p=>Number(p.id)!==Number(id))).concat([fresh]));
+  }catch(e){if(!cached)toast(e.message)}
 }
 function pickImage(i){let im=window.__productImages?.[i];if(im){$("mainProductImage").src=im;document.querySelectorAll(".thumbs button").forEach((b,n)=>b.classList.toggle("active",n===i))}}
 function openCheckout(){

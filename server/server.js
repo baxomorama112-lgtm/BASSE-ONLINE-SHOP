@@ -3,7 +3,7 @@ const app=express(),PORT=process.env.PORT||3000,ROOT=__dirname,DATA_DIR=process.
 const PUBLIC_BASE_URL=(process.env.PUBLIC_BASE_URL||"https://basse-online-shop.onrender.com").replace(/\/$/,"");
 const STATIC_WAYCHIT_URL=process.env.WAYCHIT_STATIC_URL||"https://app.waychit.com/pm/?param1=%7B%22type%22%3A%22staticPaymentRequest%22%2C%22merchantAccountId%22%3A%226a8b03204ad0d928fc3a529c%22%7D";
 const SHOP_WHATSAPP=String(process.env.BASSE_MARKET_WHATSAPP||"2206963349").replace(/\D/g,"");fs.mkdirSync(DATA_DIR,{recursive:true});fs.mkdirSync(path.join(DATA_DIR,"uploads"),{recursive:true});
-app.use(express.json({limit:"2mb",verify:(req,res,buf)=>{if(req.originalUrl==="/api/waychit/webhook")req.rawBody=buf.toString("utf8")}}));
+app.use(express.json({limit:"20mb",verify:(req,res,buf)=>{if(req.originalUrl==="/api/waychit/webhook")req.rawBody=buf.toString("utf8")}}));
 app.use("/uploads",express.static(path.join(DATA_DIR,"uploads")));
 app.use("/admin",express.static(path.join(ROOT,"../admin")));app.use("/vendor",express.static(path.join(ROOT,"../vendor")));
 app.use("/",express.static(path.join(ROOT,"../marketplace")));
@@ -78,6 +78,41 @@ let x=db.prepare("INSERT INTO products(name,category,price,stock,description,ima
 app.put("/api/admin/products/:id",guard,upload.array("images",8),(req,res)=>{let p=db.prepare("SELECT * FROM products WHERE id=?").get(req.params.id);if(!p)return res.status(404).json({error:"Product not found"});let b=req.body,files=req.files||[],fileImgs=files.map(f=>"/uploads/"+f.filename),img=fileImgs[0]||b.imageUrl||p.image,oldImgs=p.images||"[]",imgs=fileImgs.length?JSON.stringify(fileImgs):(b.images?JSON.stringify(String(b.images).split(",").map(x=>x.trim()).filter(Boolean)):oldImgs);db.prepare("UPDATE products SET name=?,category=?,price=?,stock=?,description=?,image=?,images=?,vendor_id=? WHERE id=?").run(b.name,b.category,+b.price,+b.stock,b.description||"",img,imgs,b.vendorId?+b.vendorId:p.vendor_id||null,p.id);let updated=db.prepare("SELECT * FROM products WHERE id=?").get(p.id);backupCatalog();broadcastLive("catalog",{productId:p.id});res.json(updated)});
 app.delete("/api/admin/products/:id",guard,(req,res)=>{db.prepare("UPDATE products SET active=0 WHERE id=?").run(req.params.id);backupCatalog();broadcastLive("catalog",{productId:Number(req.params.id)});res.json({ok:true})});
 app.get("/api/admin/orders",guard,(req,res)=>res.json(db.prepare("SELECT * FROM orders ORDER BY datetime(created_at) DESC").all()));
+app.get("/api/admin/backup",guard,(req,res)=>{
+  try{
+    const tables=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys"];
+    const data={version:2,createdAt:new Date().toISOString(),tables:{}};
+    for(const table of tables)data.tables[table]=db.prepare(`SELECT * FROM ${table}`).all();
+    data.meta={productCount:data.tables.products.length,orderCount:data.tables.orders.length,vendorCount:data.tables.vendors.length};
+    res.set("Content-Disposition",`attachment; filename="basse-online-shop-full-backup-${new Date().toISOString().slice(0,10)}.json"`);
+    res.type("application/json").send(JSON.stringify(data,null,2));
+  }catch(e){res.status(500).json({error:"Could not create backup."})}
+});
+app.post("/api/admin/restore",guard,(req,res)=>{
+  try{
+    const data=req.body;
+    if(!data||!data.tables||!Array.isArray(data.tables.products))return res.status(400).json({error:"Invalid BASSE backup file."});
+    const tables=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys"];
+    const tx=db.transaction(()=>{
+      db.pragma("foreign_keys = OFF");
+      for(const table of tables)db.prepare(`DELETE FROM ${table}`).run();
+      const productCols=["id","name","category","price","stock","description","image","active","created_at","images","vendor_id"];
+      const productIns=db.prepare(`INSERT INTO products (${productCols.join(",")}) VALUES (${productCols.map(()=>"?").join(",")})`);
+      for(const x of (data.tables.products||[]))productIns.run(...productCols.map(k=>x[k]??null));
+      const schemas={
+        orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings"],
+        vendors:["id","full_name","business_name","whatsapp","email","email_verified","verification_code","verification_expires","location","category","description","password_hash","status","created_at"],
+        vendor_products:["id","product_id","vendor_id","status","created_at"],
+        customer_accounts:["id","full_name","whatsapp","password_hash","created_at"],
+        payout_requests:["id","vendor_id","amount","status","created_at"],
+        vendor_submission_keys:["idempotency_key","vendor_id","product_id","created_at"]
+      };
+      for(const table of Object.keys(schemas)){const cols=schemas[table],ins=db.prepare(`INSERT INTO ${table} (${cols.join(",")}) VALUES (${cols.map(()=>"?").join(",")})`);for(const x of (data.tables[table]||[]))ins.run(...cols.map(k=>x[k]??null))}
+    });
+    tx(); backupCatalog(); broadcastLive("refresh",{});
+    res.json({ok:true,message:`Backup restored successfully: ${data.tables.products.length} products, ${(data.tables.orders||[]).length} orders and ${(data.tables.vendors||[]).length} vendors.`});
+  }catch(e){console.error("Backup restore failed:",e);res.status(500).json({error:"Restore failed. The backup format may not match this shop version."})}
+});
 app.get("/api/admin/stats",guard,(req,res)=>res.json({products:db.prepare("SELECT COUNT(*) c FROM products WHERE active=1").get().c,orders:db.prepare("SELECT COUNT(*) c FROM orders").get().c,pending:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PENDING'").get().c,paid:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PAID'").get().c,cancelled:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='CANCELLED' OR order_status='CANCELLED'").get().c,refunded:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='REFUNDED'").get().c,sales:db.prepare("SELECT COALESCE(SUM(total),0) s FROM orders WHERE payment_status='PAID' AND order_status!='CANCELLED' AND date(created_at)=date('now','localtime')").get().s}));
 app.post("/api/orders",async(req,res)=>{
   let p=db.prepare("SELECT * FROM products WHERE id=? AND active=1").get(req.body.productId);

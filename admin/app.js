@@ -6,7 +6,7 @@ async function login(){try{let r=await fetch("/api/admin/login",{method:"POST",h
 function start(){$("login").classList.add("hidden");$("app").classList.remove("hidden");refresh();clearInterval(window.__refresh);window.__refresh=setInterval(refresh,5000);connectLive()}
 function connectLive(){try{const es=new EventSource("/api/live");es.addEventListener("refresh",()=>refresh());es.addEventListener("catalog",()=>refresh());es.addEventListener("orders",()=>refresh());es.addEventListener("vendors",()=>refresh());es.onerror=()=>{es.close();setTimeout(connectLive,3000)}}catch{setTimeout(connectLive,3000)}}
 function logout(){localStorage.removeItem("basseAdminToken");location.reload()}
-function show(id,btn){["dashboard","products","orders","vendors"].forEach(x=>$(x).classList.add("hidden"));$(id).classList.remove("hidden");$("title").textContent=id[0].toUpperCase()+id.slice(1);document.querySelectorAll(".nav").forEach(x=>x.classList.remove("active"));if(btn)btn.classList.add("active");refresh()}
+function show(id,btn){["dashboard","products","orders","vendors","backup"].forEach(x=>$(x).classList.add("hidden"));$(id).classList.remove("hidden");$("title").textContent=id[0].toUpperCase()+id.slice(1);document.querySelectorAll(".nav").forEach(x=>x.classList.remove("active"));if(btn)btn.classList.add("active");refresh()}
 async function api(url,opt={}){let r=await fetch(url,{...opt,headers:{...H(),...(opt.headers||{})}});let d=await r.json().catch(()=>({}));if(r.status===401){logout();throw new Error("Admin session expired.")}if(!r.ok)throw new Error(d.error||"Request failed");return d}
 async function refresh(){try{let [st,ps,os,vs,vst]=await Promise.all([api("/api/admin/stats"),api("/api/admin/products").then(x=>(cacheAdminProducts(x),x)).catch(()=>cachedAdminProducts()),api("/api/admin/orders"),api("/api/admin/vendors"),api("/api/admin/vendor-stats")]);$("productsCount").textContent=st.products;$("ordersCount").textContent=st.orders;$("pendingCount").textContent=st.pending;$("paidCount").textContent=st.paid;$("cancelledCount").textContent=st.cancelled||0;$("refundedCount").textContent=st.refunded||0;$("sales").textContent=money(st.sales);$("recent").innerHTML=os.slice(0,7).map(o=>`<div class="order"><b>${esc(o.id)}</b> · ${esc(o.product_name)} × ${o.quantity}<br>${esc(o.customer_name)} · ${money(o.total)} · <span class="badge ${o.payment_status.toLowerCase()}">${o.payment_status}</span></div>`).join("")||"<p>No orders yet.</p>";$("productTable").innerHTML=`<div class="tablewrap"><table class="table"><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr>${ps.map(p=>`<tr><td><img class="thumb" src="${p.image||""}" alt=""><br><b>${esc(p.name)}</b></td><td>${esc(p.category)}</td><td>${money(p.price)}</td><td>${p.stock}</td><td><span class="badge ${p.active?"paid":"pending"}">${p.active?"LIVE":"PENDING APPROVAL"}</span></td><td>${!p.active&&p.vendor_id?`<button onclick="approveProduct(${p.id})">✓ APPROVE</button><button class="danger" onclick="rejectProduct(${p.id})">✕ REJECT</button>`:""}<button onclick='editProduct(${JSON.stringify(p)})'>✎ Edit</button><button class="danger" onclick="deleteProduct(${p.id})">🗑 Delete</button></td></tr>`).join("")}</table></div>`;$("orderTable").innerHTML=os.map(renderOrder).join("")||"<p>No orders yet.</p>";
 $("vendorTotal").textContent=vst.vendors;$("vendorPending").textContent=vst.pending;$("vendorActive").textContent=vst.active;$("vendorCommission").textContent=money(vst.commission);
@@ -24,6 +24,34 @@ async function cancelPayment(id){if(!confirm("Cancel this unpaid payment/order?"
 async function refundPayment(id){if(!confirm("Mark this PAID order as REFUNDED? Make sure the actual money reversal has happened in Waychit."))return;try{let d=await api("/api/admin/orders/"+id+"/refund",{method:"POST"});notify(d.notice||"Order marked refunded.");refresh()}catch(e){notify(e.message,true)}}
 async function reopenOrder(id){try{await api("/api/admin/orders/"+id+"/reopen",{method:"POST"});notify("Order reopened.");refresh()}catch(e){notify(e.message,true)}}
 async function changeStatus(id,status){try{await api("/api/admin/orders/"+id+"/status",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status})});notify("Order status updated.");refresh()}catch(e){notify(e.message,true)}}
+
+async function downloadBackup(){
+  try{
+    $("backupStatus").textContent="Creating backup…";
+    const r=await fetch("/api/admin/backup",{headers:H()});
+    if(!r.ok) throw new Error("Could not create backup.");
+    const blob=await r.blob();
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download="basse-online-shop-full-backup-"+new Date().toISOString().slice(0,10)+".json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+    $("backupStatus").textContent="Backup downloaded ✓";
+    notify("Full shop backup downloaded ✓");
+  }catch(e){$("backupStatus").textContent="Backup failed";notify(e.message,true)}
+}
+async function restoreBackup(input){
+  const file=input.files?.[0]; if(!file)return;
+  if(!confirm("Restore this backup? Current products, prices, orders and vendor data will be replaced.")){input.value="";return}
+  try{
+    $("backupStatus").textContent="Restoring…";
+    const text=await file.text();
+    const d=await api("/api/admin/restore",{method:"POST",headers:{"Content-Type":"application/json"},body:text});
+    $("backupStatus").textContent="Restored ✓";
+    notify(d.message||"Backup restored successfully ✓");
+    input.value=""; refresh();
+  }catch(e){$("backupStatus").textContent="Restore failed";notify(e.message,true);input.value=""}
+}
 function closeModal(){$("modal").classList.add("hidden")}
 async function vendorAction(id,action){try{await api(`/api/admin/vendors/${id}/${action}`,{method:"POST"});notify("Vendor updated ✓");refresh()}catch(e){notify(e.message,true)}}
 function notify(t,error=false){let x=$("toast");if(!x){x=document.createElement("div");x.id="toast";document.body.appendChild(x)}x.className="toast show "+(error?"error":"");x.textContent=t;clearTimeout(window.__toast);window.__toast=setTimeout(()=>x.classList.remove("show"),3000)}
