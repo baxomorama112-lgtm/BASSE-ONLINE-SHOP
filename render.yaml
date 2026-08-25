@@ -24,11 +24,3 @@ services:
         value: 2206963349
       - key: DATA_DIR
         value: /opt/render/project/src/server/data
-      - key: GITHUB_BACKUP_TOKEN
-        sync: false
-      - key: GITHUB_BACKUP_REPO
-        sync: false
-      - key: GITHUB_BACKUP_PATH
-        value: backups/basse-shop-backup.json
-      - key: GITHUB_BACKUP_BRANCH
-        value: main

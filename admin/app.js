@@ -29,54 +29,12 @@ async function refreshBackupStatus(){
   if($("backupStatus")===null)return;
   try{
     const d=await api("/api/admin/backup/status");
-    $("backupStatus").textContent=d.lastSaved?`AUTO-SAVE ON · ${new Date(d.lastSaved).toLocaleTimeString()}`:"AUTO-SAVE ON · Waiting";
-    const c=d.cloud||{};
-    if($("backupCloudStatus")){
-      if(!c.configured) $("backupCloudStatus").textContent="☁ CLOUD BACKUP · NOT CONNECTED";
-      else if(c.status==="saved"||c.status==="restored") $("backupCloudStatus").textContent=`☁ CLOUD BACKUP · ${c.status.toUpperCase()}${c.lastSaved?" · "+new Date(c.lastSaved).toLocaleTimeString():""}`;
-      else if(c.status==="error") $("backupCloudStatus").textContent=`☁ CLOUD BACKUP · ERROR`;
-      else $("backupCloudStatus").textContent="☁ CLOUD BACKUP · READY";
-    }
-    if($("backupMeta"))$("backupMeta").textContent=`${d.meta?.productCount||0} products · ${d.meta?.vendorCount||0} vendors · ${d.meta?.orderCount||0} orders`;
-
+    $("backupStatus").textContent=d.lastSaved
+      ? `AUTO-SAVE ON · ${new Date(d.lastSaved).toLocaleTimeString()}`
+      : "AUTO-SAVE ON · Waiting";
+    if($("backupCloudStatus")) $("backupCloudStatus").textContent="LOCAL BACKUP · ACTIVE";
+    if($("backupMeta")) $("backupMeta").textContent=`${d.meta?.productCount||0} products · ${d.meta?.vendorCount||0} vendors · ${d.meta?.orderCount||0} orders`;
   }catch(e){}
-}
-async function saveShopNow(){
-  try{
-    $("backupStatus").textContent="Saving shop…";
-    const d=await api("/api/admin/backup/save-now",{method:"POST"});
-    $("backupStatus").textContent=`SAVED ✓ · ${new Date(d.createdAt).toLocaleTimeString()}`;
-    if($("backupMeta"))$("backupMeta").textContent=`${d.meta?.productCount||0} products · ${d.meta?.vendorCount||0} vendors · ${d.meta?.orderCount||0} orders`;
-    if($("backupCloudStatus"))$("backupCloudStatus").textContent=d.cloud?.ok?"☁ CLOUD BACKUP · SAVED ✓":(d.cloudConfigured?"☁ CLOUD BACKUP · FAILED":"☁ CLOUD BACKUP · NOT CONNECTED");
-    notify(d.cloud?.ok?"All shop data saved to cloud ✓":"Shop data saved locally. Connect cloud backup in Render to protect it during Free-plan restarts.");
-  }catch(e){$("backupStatus").textContent="SAVE FAILED";notify(e.message,true)}
-}
-async function downloadBackup(){
-  try{
-    $("backupStatus").textContent="Creating backup…";
-    const r=await fetch("/api/admin/backup",{headers:H()});
-    if(!r.ok) throw new Error("Could not create backup.");
-    const blob=await r.blob();
-    const a=document.createElement("a");
-    a.href=URL.createObjectURL(blob);
-    a.download="basse-online-shop-full-backup-"+new Date().toISOString().slice(0,10)+".json";
-    a.click();
-    URL.revokeObjectURL(a.href);
-    $("backupStatus").textContent="Backup downloaded ✓";
-    notify("Full shop backup downloaded ✓");
-  }catch(e){$("backupStatus").textContent="Backup failed";notify(e.message,true)}
-}
-async function restoreBackup(input){
-  const file=input.files?.[0]; if(!file)return;
-  if(!confirm("Restore this backup? Current products, prices, orders and vendor data will be replaced.")){input.value="";return}
-  try{
-    $("backupStatus").textContent="Restoring…";
-    const text=await file.text();
-    const d=await api("/api/admin/restore",{method:"POST",headers:{"Content-Type":"application/json"},body:text});
-    $("backupStatus").textContent="Restored ✓";
-    notify(d.message||"Backup restored successfully ✓");
-    input.value=""; refresh();
-  }catch(e){$("backupStatus").textContent="Restore failed";notify(e.message,true);input.value=""}
 }
 function closeModal(){$("modal").classList.add("hidden")}
 async function vendorAction(id,action){try{await api(`/api/admin/vendors/${id}/${action}`,{method:"POST"});notify("Vendor updated ✓");refresh()}catch(e){notify(e.message,true)}}

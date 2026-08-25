@@ -25,116 +25,42 @@ function buildShopSnapshot(){
   data.meta={productCount:data.tables.products.length,orderCount:data.tables.orders.length,vendorCount:data.tables.vendors.length,orderTotal:data.tables.orders.reduce((n,o)=>n+Number(o.total||0),0)};
   return data;
 }
-const CLOUD_BACKUP_PROVIDER="github";
-const GITHUB_TOKEN=String(process.env.GITHUB_BACKUP_TOKEN||"").trim();
-const GITHUB_REPO=String(process.env.GITHUB_BACKUP_REPO||"").trim();
-const GITHUB_PATH=String(process.env.GITHUB_BACKUP_PATH||"basse-shop-backup.json").replace(/^\/+/,"");
-const GITHUB_BRANCH=String(process.env.GITHUB_BACKUP_BRANCH||"main").trim()||"main";
-let cloudBackupState={configured:Boolean(GITHUB_TOKEN&&GITHUB_REPO),status:GITHUB_TOKEN&&GITHUB_REPO?"ready":"not-configured",lastSaved:null,lastError:""};
-let cloudTimer=null,cloudBusy=false,cloudPending=null;
-function cloudHeaders(){return {"Accept":"application/vnd.github+json","Authorization":`Bearer ${GITHUB_TOKEN}`,"X-GitHub-Api-Version":"2022-11-28","Content-Type":"application/json"}}
-function cloudConfigured(){return Boolean(GITHUB_TOKEN&&GITHUB_REPO&&/^[^/]+\/[^/]+$/.test(GITHUB_REPO));}
 function collectBackupFiles(){
   const dir=path.join(DATA_DIR,"uploads");
   if(!fs.existsSync(dir))return [];
   const out=[];
   for(const name of fs.readdirSync(dir)){
     const full=path.join(dir,name);
-    try{if(fs.statSync(full).isFile())out.push({path:`uploads/${name}`,content:fs.readFileSync(full).toString("base64")})}catch{}
+    try{
+      if(fs.statSync(full).isFile()){
+        out.push({path:`uploads/${name}`,content:fs.readFileSync(full).toString("base64")});
+      }
+    }catch{}
   }
   return out;
 }
-function buildCloudSnapshot(reason="auto"){
+function buildFullBackupSnapshot(reason="auto"){
   const data=buildShopSnapshot();
+  data.version=4;
   data.reason=reason;
+  data.backupNote="Includes shop database records and uploaded files from server/data/uploads.";
   data.files=collectBackupFiles();
   return data;
 }
-async function githubGet(){
-  if(!cloudConfigured())return null;
-  const url=`https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_PATH}?ref=${encodeURIComponent(GITHUB_BRANCH)}`;
-  const r=await fetch(url,{headers:cloudHeaders()});
-  if(r.status===404)return null;
-  if(!r.ok)throw new Error(`GitHub backup read failed (${r.status})`);
-  const j=await r.json();
-  if(!j.content)throw new Error("GitHub backup file has no content");
-  return {sha:j.sha,data:JSON.parse(Buffer.from(j.content.replace(/\n/g,""),"base64").toString("utf8"))};
-}
-async function githubPut(data,sha=null){
-  if(!cloudConfigured())return {ok:false,error:"Cloud backup is not configured."};
-  const url=`https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_PATH}`;
-  const body={message:`BASSE automatic backup ${new Date().toISOString()}`,content:Buffer.from(JSON.stringify(data)).toString("base64"),branch:GITHUB_BRANCH};
-  if(sha)body.sha=sha;
-  const r=await fetch(url,{method:"PUT",headers:cloudHeaders(),body:JSON.stringify(body)});
-  if(!r.ok){let msg=`GitHub backup write failed (${r.status})`;try{const j=await r.json();if(j.message)msg+=`: ${j.message}`}catch{}throw new Error(msg)}
-  return r.json();
-}
-async function saveCloudSnapshot(reason="auto"){
-  if(!cloudConfigured())return {ok:false,skipped:true,error:"Cloud backup is not configured."};
-  const data=buildCloudSnapshot(reason);
-  let current=null;
-  try{current=await githubGet()}catch(e){cloudBackupState.status="error";cloudBackupState.lastError=e.message;console.error(e.message);return {ok:false,error:e.message}}
-  try{
-    await githubPut(data,current?.sha||null);
-    cloudBackupState.status="saved";cloudBackupState.lastSaved=data.createdAt;cloudBackupState.lastError="";
-    return {ok:true,createdAt:data.createdAt,meta:data.meta};
-  }catch(e){
-    cloudBackupState.status="error";cloudBackupState.lastError=e.message;console.error("Cloud auto-save failed:",e.message);return {ok:false,error:e.message};
-  }
-}
-function queueCloudBackup(reason="auto"){
-  if(!cloudConfigured())return;
-  cloudPending=reason;
-  clearTimeout(cloudTimer);
-  cloudTimer=setTimeout(async()=>{
-    if(cloudBusy)return;
-    cloudBusy=true;const why=cloudPending||"auto";cloudPending=null;
-    try{await saveCloudSnapshot(why)}finally{cloudBusy=false;if(cloudPending)queueCloudBackup(cloudPending)}
-  },3000);
-}
 function backupShopData(reason="auto"){
   try{
-    const data=buildShopSnapshot();
+    const data=buildFullBackupSnapshot(reason);
     const tmp=BACKUP_PATH+".tmp";
-    fs.writeFileSync(tmp,JSON.stringify({...data,reason},null,2),"utf8");
+    fs.writeFileSync(tmp,JSON.stringify(data,null,2),"utf8");
     fs.renameSync(tmp,BACKUP_PATH);
-    queueCloudBackup(reason);
-    return {ok:true,createdAt:data.createdAt,meta:data.meta,cloudConfigured:cloudConfigured(),cloudStatus:cloudBackupState.status};
-  }catch(e){console.error("Shop auto-save failed:",e.message);return {ok:false,error:e.message}}
+    return {ok:true,createdAt:data.createdAt,meta:data.meta,cloudConfigured:false,cloudStatus:"disabled"};
+  }catch(e){
+    console.error("Shop auto-save failed:",e.message);
+    return {ok:false,error:e.message};
+  }
 }
 function backupCatalog(){ return backupShopData("data-change"); }
-async function restoreFromCloudIfEmpty(){
-  if(!cloudConfigured())return false;
-  try{
-    const counts=BACKUP_TABLES.map(t=>Number(db.prepare(`SELECT COUNT(*) c FROM ${t}`).get().c));
-    if(counts.some(Boolean))return false;
-    const remote=await githubGet();
-    if(!remote?.data?.tables?.products)return false;
-    const data=remote.data;
-    const schemas={
-      products:["id","name","category","price","stock","description","image","active","created_at","images","vendor_id"],
-      orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings"],
-      vendors:["id","full_name","business_name","whatsapp","email","email_verified","verification_code","verification_expires","location","category","description","password_hash","status","created_at"],
-      vendor_products:["id","product_id","vendor_id","status","created_at"],
-      customer_accounts:["id","full_name","whatsapp","password_hash","created_at"],
-      payout_requests:["id","vendor_id","amount","status","created_at"],
-      vendor_submission_keys:["idempotency_key","vendor_id","product_id","created_at"]
-    };
-    const tx=db.transaction(()=>{
-      db.pragma("foreign_keys = OFF");
-      for(const table of BACKUP_TABLES)db.prepare(`DELETE FROM ${table}`).run();
-      for(const table of BACKUP_TABLES){const cols=schemas[table],rows=Array.isArray(data.tables[table])?data.tables[table]:[];if(!rows.length)continue;const ins=db.prepare(`INSERT INTO ${table} (${cols.join(",")}) VALUES (${cols.map(()=>"?").join(",")})`);for(const row of rows)ins.run(...cols.map(k=>row[k]??null));}
-    });
-    tx();
-    for(const file of (data.files||[])){
-      if(!file?.path||!file.path.startsWith("uploads/")||file.path.includes(".."))continue;
-      const dest=path.join(DATA_DIR,file.path);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.writeFileSync(dest,Buffer.from(file.content||"","base64"));
-    }
-    cloudBackupState.status="restored";cloudBackupState.lastSaved=data.createdAt||null;cloudBackupState.lastError="";
-    console.log(`CLOUD AUTO-RESTORE completed: ${data.meta?.productCount||0} products, ${data.meta?.vendorCount||0} vendors.`);
-    return true;
-  }catch(e){cloudBackupState.status="error";cloudBackupState.lastError=e.message;console.error("Cloud auto-restore failed:",e.message);return false}
-}
+
 function restoreShopBackupIfEmpty(){
   try{
     const counts=BACKUP_TABLES.map(t=>Number(db.prepare(`SELECT COUNT(*) c FROM ${t}`).get().c));
@@ -161,7 +87,14 @@ function restoreShopBackupIfEmpty(){
       }
     });
     tx();
+    for(const file of (data.files||[])){
+      if(!file?.path || !file.path.startsWith("uploads/") || file.path.includes("..")) continue;
+      const dest=path.join(DATA_DIR,file.path);
+      fs.mkdirSync(path.dirname(dest),{recursive:true});
+      fs.writeFileSync(dest,Buffer.from(file.content||"","base64"));
+    }
     console.log(`AUTO-RESTORE completed: ${data.meta?.productCount||0} products, ${data.meta?.vendorCount||0} vendors.`);
+
     return true;
   }catch(e){console.error("Shop auto-restore failed:",e.message);return false}
 }
@@ -170,16 +103,14 @@ try{db.exec("ALTER TABLE products ADD COLUMN vendor_id INTEGER DEFAULT NULL")}ca
 try{db.exec("ALTER TABLE orders ADD COLUMN vendor_id INTEGER DEFAULT NULL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN commission INTEGER DEFAULT 0")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN vendor_earnings INTEGER DEFAULT 0")}catch(e){}
-// Restore from the local backup first. On Render Free, if the local filesystem was reset,
-// restore the same shop snapshot (including uploaded product images) from GitHub before serving traffic.
+// Restore from the local backup before serving traffic.
+// This version intentionally has no GitHub/cloud-backup dependency.
 restoreShopBackupIfEmpty();
-async function finishStartup(){
-  await restoreFromCloudIfEmpty();
-  // Never repopulate the shop with demo products after a restart. Real shop data is authoritative.
-  if(!db.prepare("SELECT COUNT(*) c FROM products").get().c)console.log("BASSE shop database is empty. Add products from Admin Dashboard.");
-  backupShopData("startup");
-  finishStartup().catch(e=>{console.error("Startup restore error:",e);app.listen(PORT,"0.0.0.0",()=>console.log("BASSE ONLINE SHOP running on "+PORT));});
+if(!db.prepare("SELECT COUNT(*) c FROM products").get().c){
+  console.log("BASSE shop database is empty. Add products from Admin Dashboard.");
 }
+backupShopData("startup");
+
 const upload=multer({storage:multer.diskStorage({destination:path.join(DATA_DIR,"uploads"),filename:(r,f,cb)=>cb(null,crypto.randomBytes(8).toString("hex")+path.extname(f.originalname))}),limits:{fileSize:6e6}});
 const sessions=new Map(); // retained only for backwards compatibility; auth is persisted in SQLite
 // Live-update stream: browsers connected to the marketplace/admin/vendor receive an event
@@ -225,7 +156,7 @@ app.delete("/api/admin/products/:id",guard,(req,res)=>{db.prepare("UPDATE produc
 app.get("/api/admin/orders",guard,(req,res)=>res.json(db.prepare("SELECT * FROM orders ORDER BY datetime(created_at) DESC").all()));
 app.get("/api/admin/backup",guard,(req,res)=>{
   try{
-    const data=buildCloudSnapshot("manual-download");
+    const data=buildFullBackupSnapshot("manual-download");
     data.version=4;
     data.backupNote="Includes shop database records AND uploaded files from server/data/uploads.";
     res.set("Content-Disposition",`attachment; filename="basse-online-shop-full-backup-${new Date().toISOString().slice(0,10)}.json"`);
@@ -234,21 +165,26 @@ app.get("/api/admin/backup",guard,(req,res)=>{
 });
 app.get("/api/admin/backup/status",guard,(req,res)=>{
   try{
-    const exists=fs.existsSync(BACKUP_PATH), stat=exists?fs.statSync(BACKUP_PATH):null;
+    const exists=fs.existsSync(BACKUP_PATH);
+    const stat=exists?fs.statSync(BACKUP_PATH):null;
     const data=exists?JSON.parse(fs.readFileSync(BACKUP_PATH,"utf8")):null;
-    res.json({enabled:true,exists,lastSaved:data?.createdAt||cloudBackupState.lastSaved||null,sizeBytes:stat?.size||0,meta:data?.meta||{productCount:0,vendorCount:0,orderCount:0},storagePath:cloudConfigured()?"Free-plan cloud backup + local cache":"local shop data",cloud:{provider:CLOUD_BACKUP_PROVIDER,configured:cloudBackupState.configured,status:cloudBackupState.status,lastSaved:cloudBackupState.lastSaved,lastError:cloudBackupState.lastError}});
-  }catch(e){res.json({enabled:true,exists:false,lastSaved:null,sizeBytes:0,meta:{},cloud:{provider:CLOUD_BACKUP_PROVIDER,configured:cloudBackupState.configured,status:cloudBackupState.status,lastSaved:cloudBackupState.lastSaved,lastError:cloudBackupState.lastError},error:e.message})}
+    res.json({
+      enabled:true,
+      exists,
+      lastSaved:data?.createdAt||null,
+      sizeBytes:stat?.size||0,
+      meta:data?.meta||{productCount:0,vendorCount:0,orderCount:0},
+      storagePath:BACKUP_PATH,
+      cloud:{provider:null,configured:false,status:"disabled",lastSaved:null,lastError:""}
+    });
+  }catch(e){
+    res.json({enabled:true,exists:false,lastSaved:null,sizeBytes:0,meta:{},storagePath:BACKUP_PATH,cloud:{provider:null,configured:false,status:"disabled",lastSaved:null,lastError:""},error:e.message});
+  }
 });
-app.post("/api/admin/backup/save-now",guard,async(req,res)=>{
+app.post("/api/admin/backup/save-now",guard,(req,res)=>{
   const r=backupShopData("manual");
   if(!r.ok)return res.status(500).json({error:"Automatic save failed. Check server storage."});
-  if(cloudConfigured()){
-    clearTimeout(cloudTimer);cloudPending=null;
-    const c=await saveCloudSnapshot("manual");
-    if(!c.ok)return res.status(502).json({error:`Local save succeeded, but cloud backup failed: ${c.error}`,...r,cloud:c});
-    return res.json({ok:true,message:"Shop data saved to cloud ✓",...r,cloud:c});
-  }
-  res.json({ok:true,message:"Shop data saved locally. Add the free cloud backup settings to make it survive Render Free restarts.",...r});
+  res.json({ok:true,message:"Shop data and uploaded images saved locally ✓",...r});
 });
 app.post("/api/admin/backup/auto-save",guard,(req,res)=>{
   const r=backupShopData("auto-toggle");
