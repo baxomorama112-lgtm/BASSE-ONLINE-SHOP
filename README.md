@@ -92,3 +92,11 @@ Full backups now include the actual uploaded files from `server/data/uploads` as
 - Live GPS sharing only during active deliveries
 - Customer order tracking at `/api/order/:id/tracking` and Track Order UI
 - Uses browser GPS + OpenStreetMap; no Google Maps API required
+
+## Delivery workflow (V6 DRIVER STEADY)
+- A PAID order changed to READY automatically creates an unassigned delivery record.
+- Admin Delivery Control Center can assign any ACTIVE driver.
+- Driver portal supports ACCEPT DELIVERY → PICKED UP → START DELIVERY & GPS → ARRIVED → DELIVERED.
+- Browser geolocation sends the driver's latest coordinates to the server without requiring Google Maps API.
+- Customer order tracking reads the same delivery status and latest GPS coordinates.
+- Full backup now includes driver accounts, delivery records, product images/uploads, orders, vendors and customer data.

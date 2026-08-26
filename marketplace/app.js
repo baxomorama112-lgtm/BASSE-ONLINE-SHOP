@@ -138,7 +138,7 @@ async function openOrderTracking(id){
   try{
     const r=await fetch("/api/order/"+encodeURIComponent(id)+"/tracking",{cache:"no-store"});const d=await r.json();if(!r.ok)throw Error(d.error||"Order not found");
     const status=d.delivery?.status||d.order.order_status||"NEW";
-    const steps=["NEW","READY","PICKED_UP","ON_THE_WAY","ARRIVED","DELIVERED"];
+    const steps=["NEW","READY","ACCEPTED","PICKED_UP","ON_THE_WAY","ARRIVED","DELIVERED"];
     const idx=Math.max(0,steps.indexOf(status));
     const map=`<div class="live-map-wrap"><div id="customerMap" class="customer-map"><div class="map-placeholder">🗺️<br><b>Live delivery map</b><small>${d.delivery?.lat&&d.delivery?.lng?"Driver GPS is active.":"Waiting for driver location…"}</small></div></div></div>`;
     $("trackingBody").innerHTML=`<div class="tracking-card"><div class="track-top"><b>#${esc(d.order.id)}</b><span class="badge">${esc(status.replaceAll("_"," "))}</span></div><h3>${esc(d.order.product_name)} × ${d.order.quantity}</h3><p>${esc(d.order.location||"Delivery location pending")}</p>${map}<div class="timeline">${steps.map((x,i)=>`<div class="timeline-step ${i<=idx?"done":""}"><span>${i<=idx?"✓":"•"}</span><b>${x.replaceAll("_"," ")}</b></div>`).join("")}</div><p class="muted">${d.delivery?.driver_name?`Driver: <b>${esc(d.delivery.driver_name)}</b>`:"A driver will be assigned after your order is confirmed."}</p></div>`;

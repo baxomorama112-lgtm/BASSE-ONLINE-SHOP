@@ -35,7 +35,7 @@ async function refreshBackupStatus(){
       ? `AUTO-SAVE ON · ${new Date(d.lastSaved).toLocaleTimeString()}`
       : "AUTO-SAVE ON · Waiting";
     if($("backupCloudStatus")) $("backupCloudStatus").textContent="LOCAL BACKUP · ACTIVE";
-    if($("backupMeta")) $("backupMeta").textContent=`${d.meta?.productCount||0} products · ${d.meta?.vendorCount||0} vendors · ${d.meta?.orderCount||0} orders`;
+    if($("backupMeta")) $("backupMeta").textContent=`${d.meta?.productCount||0} products · ${d.meta?.vendorCount||0} vendors · ${d.meta?.orderCount||0} orders · ${d.meta?.driverCount||0} drivers · ${d.meta?.deliveryCount||0} deliveries`;
   }catch(e){}
 }
 
@@ -89,7 +89,7 @@ function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&l
 async function loadDelivery(){
   try{
     const [ds,drs]=await Promise.all([api("/api/admin/deliveries"),api("/api/admin/drivers")]);
-    $("deliveryTable").innerHTML=ds.length?ds.map(d=>`<div class="delivery-row"><div><b>#${esc(d.order_id)}</b> · ${esc(d.customer_name||"Customer")}<br><small>${esc(d.business_name||"Direct order")} · ${esc(d.location||"")}</small></div><span class="badge">${esc(d.status.replaceAll("_"," "))}</span><div><small>Driver: ${esc(d.driver_name||"Unassigned")}</small><br>${d.lat&&d.lng?`<a target="_blank" href="https://www.openstreetmap.org/?mlat=${d.lat}&mlon=${d.lng}#map=17/${d.lat}/${d.lng}">📍 Live location</a>`:"Waiting for GPS"}</div><select onchange="assignDelivery(${d.order_id?`'${d.order_id}'`:"''"},this.value)"><option value="">Assign driver…</option>${drs.filter(x=>x.status==="ACTIVE").map(x=>`<option value="${x.id}" ${Number(x.id)===Number(d.driver_id)?"selected":""}>${esc(x.full_name)}</option>`).join("")}</select></div>`).join(""):"<p>No deliveries yet. Assign a driver after a paid order is ready.</p>";
+    $("deliveryTable").innerHTML=ds.length?ds.map(d=>`<div class="delivery-row"><div><b>#${esc(d.order_id)}</b> · ${esc(d.customer_name||"Customer")}<br><small>${esc(d.business_name||"Direct order")} · ${esc(d.location||"")}</small></div><span class="badge">${esc(d.status.replaceAll("_"," "))}</span><div><small>Driver: ${esc(d.driver_name||"Unassigned")}</small><br>${d.lat&&d.lng?`<a target="_blank" href="https://www.openstreetmap.org/?mlat=${d.lat}&mlon=${d.lng}#map=17/${d.lat}/${d.lng}">📍 Live location</a>`:"Waiting for GPS"}</div><select onchange="assignDelivery(${d.order_id?`'${d.order_id}'`:"''"},this.value)"><option value="">Assign driver…</option>${drs.filter(x=>x.status==="ACTIVE").map(x=>`<option value="${x.id}" ${Number(x.id)===Number(d.driver_id)?"selected":""}>${esc(x.full_name)}</option>`).join("")}</select></div>`).join(""):"<p>No active deliveries yet. Mark a PAID order READY and it will appear here automatically.</p>";
     $("driverTable").innerHTML=drs.map(d=>`<div class="driver-row"><div><b>${esc(d.full_name)}</b><small>+${esc(d.whatsapp)} · ${d.status}</small></div><button onclick="driverStatus(${d.id},'${d.status==="ACTIVE"?"BLOCKED":"ACTIVE"}')">${d.status==="ACTIVE"?"BLOCK":"ACTIVATE"}</button></div>`).join("")||"<p>No drivers yet.</p>";
   }catch(e){if($("deliveryTable"))$("deliveryTable").innerHTML=`<p>${esc(e.message)}</p>`}
 }

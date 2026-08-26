@@ -41,11 +41,11 @@ CREATE TABLE IF NOT EXISTS deliveries(
   FOREIGN KEY(driver_id) REFERENCES delivery_drivers(id)
 );`);
 try{db.exec("ALTER TABLE products ADD COLUMN images TEXT DEFAULT ''")}catch(e){}
-const BACKUP_TABLES=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys"];
+const BACKUP_TABLES=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys","delivery_drivers","deliveries"];
 function buildShopSnapshot(){
   const data={version:3,createdAt:new Date().toISOString(),tables:{}};
   for(const table of BACKUP_TABLES)data.tables[table]=db.prepare(`SELECT * FROM ${table}`).all();
-  data.meta={productCount:data.tables.products.length,orderCount:data.tables.orders.length,vendorCount:data.tables.vendors.length,orderTotal:data.tables.orders.reduce((n,o)=>n+Number(o.total||0),0)};
+  data.meta={productCount:data.tables.products.length,orderCount:data.tables.orders.length,vendorCount:data.tables.vendors.length,driverCount:(data.tables.delivery_drivers||[]).length,deliveryCount:(data.tables.deliveries||[]).length,orderTotal:data.tables.orders.reduce((n,o)=>n+Number(o.total||0),0)};
   return data;
 }
 function collectBackupFiles(){
@@ -97,7 +97,9 @@ function restoreShopBackupIfEmpty(){
       vendor_products:["id","product_id","vendor_id","status","created_at"],
       customer_accounts:["id","full_name","whatsapp","password_hash","status","created_at"],
       payout_requests:["id","vendor_id","amount","status","created_at"],
-      vendor_submission_keys:["idempotency_key","vendor_id","product_id","created_at"]
+      vendor_submission_keys:["idempotency_key","vendor_id","product_id","created_at"],
+      delivery_drivers:["id","full_name","whatsapp","pin_hash","status","created_at"],
+      deliveries:["id","order_id","driver_id","status","lat","lng","accuracy","last_seen","started_at","arrived_at","delivered_at","created_at"]
     };
     const tx=db.transaction(()=>{
       db.pragma("foreign_keys = OFF");
@@ -240,7 +242,7 @@ app.post("/api/admin/restore",guard,(req,res)=>{
   try{
     const data=req.body;
     if(!data||!data.tables||!Array.isArray(data.tables.products))return res.status(400).json({error:"Invalid BASSE backup file."});
-    const tables=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys"];
+    const tables=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys","delivery_drivers","deliveries"];
     const tx=db.transaction(()=>{
       db.pragma("foreign_keys = OFF");
       for(const table of tables)db.prepare(`DELETE FROM ${table}`).run();
@@ -251,9 +253,11 @@ app.post("/api/admin/restore",guard,(req,res)=>{
         orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings"],
         vendors:["id","full_name","business_name","whatsapp","email","email_verified","verification_code","verification_expires","location","category","description","password_hash","status","created_at"],
         vendor_products:["id","product_id","vendor_id","status","created_at"],
-        customer_accounts:["id","full_name","whatsapp","password_hash","created_at"],
+        customer_accounts:["id","full_name","whatsapp","password_hash","status","created_at"],
         payout_requests:["id","vendor_id","amount","status","created_at"],
-        vendor_submission_keys:["idempotency_key","vendor_id","product_id","created_at"]
+        vendor_submission_keys:["idempotency_key","vendor_id","product_id","created_at"],
+        delivery_drivers:["id","full_name","whatsapp","pin_hash","status","created_at"],
+        deliveries:["id","order_id","driver_id","status","lat","lng","accuracy","last_seen","started_at","arrived_at","delivered_at","created_at"]
       };
       for(const table of Object.keys(schemas)){const cols=schemas[table],ins=db.prepare(`INSERT INTO ${table} (${cols.join(",")}) VALUES (${cols.map(()=>"?").join(",")})`);for(const x of (data.tables[table]||[]))ins.run(...cols.map(k=>x[k]??null))}
     });
@@ -275,7 +279,7 @@ app.post("/api/admin/restore",guard,(req,res)=>{
     }
     backupShopData("restore");
     broadcastLive("refresh",{});
-    res.json({ok:true,message:`Backup restored successfully: ${data.tables.products.length} products, ${(data.tables.orders||[]).length} orders, ${(data.tables.vendors||[]).length} vendors and ${restoredFiles} image files.`});
+    res.json({ok:true,message:`Backup restored successfully: ${data.tables.products.length} products, ${(data.tables.orders||[]).length} orders, ${(data.tables.vendors||[]).length} vendors, ${(data.tables.delivery_drivers||[]).length} drivers, ${(data.tables.deliveries||[]).length} deliveries and ${restoredFiles} image files.`});
   }catch(e){console.error("Backup restore failed:",e);res.status(500).json({error:"Restore failed. The backup format may not match this shop version."})}
 });
 app.get("/api/admin/stats",guard,(req,res)=>res.json({products:db.prepare("SELECT COUNT(*) c FROM products WHERE active=1").get().c,orders:db.prepare("SELECT COUNT(*) c FROM orders").get().c,customers:db.prepare("SELECT COUNT(*) c FROM (SELECT whatsapp FROM customer_accounts UNION SELECT whatsapp FROM orders WHERE whatsapp IS NOT NULL AND whatsapp!='')").get().c,pending:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PENDING'").get().c,paid:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PAID'").get().c,cancelled:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='CANCELLED' OR order_status='CANCELLED'").get().c,refunded:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='REFUNDED'").get().c,sales:db.prepare("SELECT COALESCE(SUM(total),0) s FROM orders WHERE payment_status='PAID' AND order_status!='CANCELLED' AND date(created_at)=date('now','localtime')").get().s}));
@@ -383,7 +387,23 @@ app.post("/api/admin/orders/:id/payment",guard,(req,res)=>{let o=db.prepare("SEL
 app.post("/api/admin/orders/:id/cancel-payment",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});if(o.payment_status==='PAID')return res.status(400).json({error:'A paid order cannot be cancelled. Use Refund instead.'});db.prepare("UPDATE orders SET payment_status='CANCELLED',order_status='CANCELLED' WHERE id=?").run(req.params.id);backupShopData("payment-cancelled");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true})});
 app.post("/api/admin/orders/:id/refund",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});if(o.payment_status!=='PAID')return res.status(400).json({error:'Only paid orders can be marked refunded.'});db.prepare("UPDATE orders SET payment_status='REFUNDED',order_status='REFUNDED' WHERE id=?").run(req.params.id);backupShopData("refund");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true,notice:'Order marked refunded. Complete the actual money reversal in Waychit if required.'})});
 app.post("/api/admin/orders/:id/reopen",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});db.prepare("UPDATE orders SET payment_status='PENDING',order_status='NEW' WHERE id=?").run(req.params.id);backupShopData("order-reopen");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true})});
-app.patch("/api/admin/orders/:id/status",guard,(req,res)=>{let allowed=['NEW','PROCESSING','READY','DELIVERED','CANCELLED','REFUNDED'];let status=String(req.body.status||'').toUpperCase();if(!allowed.includes(status))return res.status(400).json({error:'Invalid order status'});db.prepare("UPDATE orders SET order_status=? WHERE id=?").run(status,req.params.id);backupShopData("order-status");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true})});
+function ensureDeliveryForReadyOrder(orderId){
+  const o=db.prepare("SELECT id,payment_status,order_status FROM orders WHERE id=?").get(orderId);
+  if(!o || o.payment_status!=="PAID" || o.order_status!=="READY") return false;
+  const r=db.prepare("INSERT OR IGNORE INTO deliveries(order_id,driver_id,status) VALUES(?,NULL,'ASSIGNED')").run(orderId);
+  return !!r.changes;
+}
+app.patch("/api/admin/orders/:id/status",guard,(req,res)=>{
+  let allowed=['NEW','PROCESSING','READY','DELIVERED','CANCELLED','REFUNDED'];
+  let status=String(req.body.status||'').toUpperCase();
+  if(!allowed.includes(status))return res.status(400).json({error:'Invalid order status'});
+  const o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);
+  if(!o)return res.status(404).json({error:'Order not found'});
+  if(status==='READY' && o.payment_status!=='PAID')return res.status(400).json({error:'Only PAID orders can be marked READY for delivery.'});
+  db.prepare("UPDATE orders SET order_status=? WHERE id=?").run(status,req.params.id);
+  if(status==='READY')ensureDeliveryForReadyOrder(req.params.id);
+  backupShopData("order-status");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true,deliveryCreated:status==='READY'});
+});
 app.get("/api/payment-config",(req,res)=>res.json({configured:!!process.env.WAYCHIT_API_KEY,publicBaseUrl:PUBLIC_BASE_URL,staticFallback:true,returnUrl:PUBLIC_BASE_URL+"/payment-return",automaticReturnSupported:!!process.env.WAYCHIT_API_KEY}));
 app.post("/api/waychit/webhook",(req,res)=>{
   let sig=req.headers["waychit-signature"],secret=process.env.WAYCHIT_WEBHOOK_SECRET,raw=req.rawBody||"";
@@ -439,13 +459,13 @@ app.get("/api/driver/deliveries",driverGuard,(req,res)=>{
 });
 app.patch("/api/driver/deliveries/:id/status",driverGuard,(req,res)=>{
   const status=String(req.body.status||"").toUpperCase();
-  if(!["ASSIGNED","PICKED_UP","ON_THE_WAY","ARRIVED","DELIVERED"].includes(status))return res.status(400).json({error:"Invalid delivery status"});
+  if(!["ASSIGNED","ACCEPTED","PICKED_UP","ON_THE_WAY","ARRIVED","DELIVERED"].includes(status))return res.status(400).json({error:"Invalid delivery status"});
   const d=db.prepare("SELECT * FROM deliveries WHERE id=? AND driver_id=?").get(req.params.id,req.driverId);
   if(!d)return res.status(404).json({error:"Delivery not assigned to you."});
   const now=new Date().toISOString();
   db.prepare("UPDATE deliveries SET status=?,started_at=CASE WHEN ?='ON_THE_WAY' AND started_at IS NULL THEN ? ELSE started_at END,arrived_at=CASE WHEN ?='ARRIVED' THEN ? ELSE arrived_at END,delivered_at=CASE WHEN ?='DELIVERED' THEN ? ELSE delivered_at END WHERE id=?")
     .run(status,status,now,status,now,status,now,d.id);
-  db.prepare("UPDATE orders SET order_status=? WHERE id=?").run(status==="DELIVERED"?"DELIVERED":status==="ON_THE_WAY"||status==="ARRIVED"?"PROCESSING":"READY",d.order_id);
+  db.prepare("UPDATE orders SET order_status=? WHERE id=?").run(status==="DELIVERED"?"DELIVERED":status==="PICKED_UP"||status==="ON_THE_WAY"||status==="ARRIVED"?"PROCESSING":"READY",d.order_id);
   backupShopData("driver-delivery-status");broadcastLive("orders",{orderId:d.order_id});res.json({ok:true});
 });
 app.post("/api/driver/deliveries/:id/location",driverGuard,(req,res)=>{
@@ -578,37 +598,41 @@ app.patch("/api/admin/drivers/:id/status",guard,(req,res)=>{
   backupShopData("driver-status");res.json({ok:true});
 });
 app.get("/api/admin/deliveries",guard,(req,res)=>{
+  // Self-heal READY paid orders created before the delivery workflow was enabled.
+  const readyOrders=db.prepare("SELECT id FROM orders WHERE payment_status='PAID' AND order_status='READY'").all();
+  const tx=db.transaction(rows=>{for(const row of rows)ensureDeliveryForReadyOrder(row.id)}); tx(readyOrders);
   res.json(db.prepare(`
     SELECT d.*,o.product_name,o.quantity,o.customer_name,o.whatsapp,o.location,o.total,o.payment_status,o.order_status,
-           v.business_name,dr.full_name AS driver_name
+           v.business_name,dr.full_name AS driver_name,dr.whatsapp AS driver_whatsapp
     FROM deliveries d
     JOIN orders o ON o.id=d.order_id
     LEFT JOIN vendors v ON v.id=o.vendor_id
     LEFT JOIN delivery_drivers dr ON dr.id=d.driver_id
-    ORDER BY datetime(d.created_at) DESC
+    ORDER BY CASE WHEN d.status IN ('DELIVERED') THEN 1 ELSE 0 END, datetime(d.created_at) DESC
   `).all());
 });
 app.post("/api/admin/orders/:id/assign-driver",guard,(req,res)=>{
-  const o=db.prepare("SELECT id FROM orders WHERE id=?").get(req.params.id);
-  const dr=db.prepare("SELECT id FROM delivery_drivers WHERE id=? AND status='ACTIVE'").get(req.body.driverId);
+  const o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);
+  const dr=db.prepare("SELECT id,full_name FROM delivery_drivers WHERE id=? AND status='ACTIVE'").get(req.body.driverId);
   if(!o)return res.status(404).json({error:"Order not found"});
+  if(o.payment_status!=="PAID")return res.status(400).json({error:"Only PAID orders can be assigned for delivery."});
   if(!dr)return res.status(400).json({error:"Active driver not found"});
   db.prepare(`
     INSERT INTO deliveries(order_id,driver_id,status)
     VALUES(?,?, 'ASSIGNED')
-    ON CONFLICT(order_id) DO UPDATE SET driver_id=excluded.driver_id,status='ASSIGNED'
+    ON CONFLICT(order_id) DO UPDATE SET driver_id=excluded.driver_id,status='ASSIGNED',last_seen=NULL,started_at=NULL,arrived_at=NULL,delivered_at=NULL
   `).run(req.params.id,dr.id);
-  db.prepare("UPDATE orders SET order_status='READY' WHERE id=? AND payment_status='PAID'").run(req.params.id);
-  backupShopData("driver-assigned");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true});
+  db.prepare("UPDATE orders SET order_status='READY' WHERE id=?").run(req.params.id);
+  backupShopData("driver-assigned");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true,driver:dr});
 });
 app.patch("/api/admin/deliveries/:id/status",guard,(req,res)=>{
   const status=String(req.body.status||"").toUpperCase();
-  if(!["ASSIGNED","PICKED_UP","ON_THE_WAY","ARRIVED","DELIVERED"].includes(status))return res.status(400).json({error:"Invalid delivery status"});
+  if(!["ASSIGNED","ACCEPTED","PICKED_UP","ON_THE_WAY","ARRIVED","DELIVERED"].includes(status))return res.status(400).json({error:"Invalid delivery status"});
   const d=db.prepare("SELECT * FROM deliveries WHERE id=?").get(req.params.id);if(!d)return res.status(404).json({error:"Delivery not found"});
   const now=new Date().toISOString();
   db.prepare("UPDATE deliveries SET status=?,started_at=CASE WHEN ?='ON_THE_WAY' AND started_at IS NULL THEN ? ELSE started_at END,arrived_at=CASE WHEN ?='ARRIVED' THEN ? ELSE arrived_at END,delivered_at=CASE WHEN ?='DELIVERED' THEN ? ELSE delivered_at END WHERE id=?")
     .run(status,status,now,status,now,status,now,d.id);
-  db.prepare("UPDATE orders SET order_status=? WHERE id=?").run(status==="DELIVERED"?"DELIVERED":status==="ON_THE_WAY"||status==="ARRIVED"?"PROCESSING":"READY",d.order_id);
+  db.prepare("UPDATE orders SET order_status=? WHERE id=?").run(status==="DELIVERED"?"DELIVERED":status==="PICKED_UP"||status==="ON_THE_WAY"||status==="ARRIVED"?"PROCESSING":"READY",d.order_id);
   backupShopData("delivery-status");broadcastLive("orders",{orderId:d.order_id});res.json({ok:true});
 });
 app.get("/api/admin/vendor-stats",guard,(req,res)=>res.json({vendors:db.prepare("SELECT COUNT(*) c FROM vendors").get().c,pending:db.prepare("SELECT COUNT(*) c FROM vendors WHERE status='PENDING'").get().c,active:db.prepare("SELECT COUNT(*) c FROM vendors WHERE status='APPROVED'").get().c,commission:db.prepare("SELECT COALESCE(SUM(commission),0) s FROM orders WHERE payment_status='PAID'").get().s}));
