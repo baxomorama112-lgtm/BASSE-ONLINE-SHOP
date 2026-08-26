@@ -36,6 +36,46 @@ async function refreshBackupStatus(){
     if($("backupMeta")) $("backupMeta").textContent=`${d.meta?.productCount||0} products · ${d.meta?.vendorCount||0} vendors · ${d.meta?.orderCount||0} orders`;
   }catch(e){}
 }
+
+async function saveShopNow(){
+  try{
+    const d=await api("/api/admin/backup/save-now",{method:"POST"});
+    notify(d.message||"Shop data and images saved ✓");
+    refreshBackupStatus();
+  }catch(e){notify(e.message,true)}
+}
+async function downloadBackup(){
+  try{
+    notify("Preparing full backup with products and images…");
+    const r=await fetch("/api/admin/backup",{headers:H()});
+    if(!r.ok){let d=await r.json().catch(()=>({}));throw new Error(d.error||"Could not download backup.")}
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;
+    a.download=`basse-online-shop-full-backup-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    notify("Full backup downloaded ✓ Products, vendors, orders and uploaded images are included.");
+  }catch(e){notify(e.message,true)}
+}
+async function restoreBackup(input){
+  const file=input?.files?.[0];
+  if(!file)return;
+  if(!confirm("Restore this full BASSE backup? Current shop data and uploaded images will be replaced by the backup.")){input.value="";return}
+  try{
+    notify("Restoring products, vendors, orders and images…");
+    const text=await file.text();
+    const data=JSON.parse(text);
+    const d=await api("/api/admin/restore",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
+    notify(d.message||"Backup restored successfully ✓");
+    input.value="";
+    await refresh();
+    refreshBackupStatus();
+  }catch(e){notify(e.message||"Restore failed.",true);input.value=""}
+}
 function closeModal(){$("modal").classList.add("hidden")}
 async function vendorAction(id,action){try{await api(`/api/admin/vendors/${id}/${action}`,{method:"POST"});notify("Vendor updated ✓");refresh()}catch(e){notify(e.message,true)}}
 function notify(t,error=false){let x=$("toast");if(!x){x=document.createElement("div");x.id="toast";document.body.appendChild(x)}x.className="toast show "+(error?"error":"");x.textContent=t;clearTimeout(window.__toast);window.__toast=setTimeout(()=>x.classList.remove("show"),3000)}

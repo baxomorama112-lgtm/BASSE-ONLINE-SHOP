@@ -3,7 +3,7 @@ const app=express(),PORT=process.env.PORT||3000,ROOT=__dirname,DATA_DIR=process.
 const PUBLIC_BASE_URL=(process.env.PUBLIC_BASE_URL||"https://basse-online-shop.onrender.com").replace(/\/$/,"");
 const STATIC_WAYCHIT_URL=process.env.WAYCHIT_STATIC_URL||"https://app.waychit.com/pm/?param1=%7B%22type%22%3A%22staticPaymentRequest%22%2C%22merchantAccountId%22%3A%226a8b03204ad0d928fc3a529c%22%7D";
 const SHOP_WHATSAPP=String(process.env.BASSE_MARKET_WHATSAPP||"2206963349").replace(/\D/g,"");fs.mkdirSync(DATA_DIR,{recursive:true});fs.mkdirSync(path.join(DATA_DIR,"uploads"),{recursive:true});
-app.use(express.json({limit:"20mb",verify:(req,res,buf)=>{if(req.originalUrl==="/api/waychit/webhook")req.rawBody=buf.toString("utf8")}}));
+app.use(express.json({limit:"100mb",verify:(req,res,buf)=>{if(req.originalUrl==="/api/waychit/webhook")req.rawBody=buf.toString("utf8")}}));
 app.use("/uploads",express.static(path.join(DATA_DIR,"uploads")));
 app.use("/admin",express.static(path.join(ROOT,"../admin")));app.use("/vendor",express.static(path.join(ROOT,"../vendor")));
 app.use("/",express.static(path.join(ROOT,"../marketplace")));
@@ -212,8 +212,25 @@ app.post("/api/admin/restore",guard,(req,res)=>{
       };
       for(const table of Object.keys(schemas)){const cols=schemas[table],ins=db.prepare(`INSERT INTO ${table} (${cols.join(",")}) VALUES (${cols.map(()=>"?").join(",")})`);for(const x of (data.tables[table]||[]))ins.run(...cols.map(k=>x[k]??null))}
     });
-    tx(); backupCatalog(); broadcastLive("refresh",{});
-    res.json({ok:true,message:`Backup restored successfully: ${data.tables.products.length} products, ${(data.tables.orders||[]).length} orders and ${(data.tables.vendors||[]).length} vendors.`});
+    tx();
+    // Restore the actual uploaded image files that were embedded in the backup.
+    const uploadDir=path.join(DATA_DIR,"uploads");
+    fs.mkdirSync(uploadDir,{recursive:true});
+    for(const name of fs.readdirSync(uploadDir)){
+      const full=path.join(uploadDir,name);
+      try{ if(fs.statSync(full).isFile()) fs.unlinkSync(full); }catch{}
+    }
+    let restoredFiles=0;
+    for(const file of (data.files||[])){
+      if(!file?.path || !file.path.startsWith("uploads/") || file.path.includes("..")) continue;
+      const rel=file.path.slice("uploads/".length);
+      if(!rel || rel.includes("/") || rel.includes("\\")) continue;
+      const dest=path.join(uploadDir,rel);
+      try{ fs.writeFileSync(dest,Buffer.from(file.content||"","base64")); restoredFiles++; }catch{}
+    }
+    backupShopData("restore");
+    broadcastLive("refresh",{});
+    res.json({ok:true,message:`Backup restored successfully: ${data.tables.products.length} products, ${(data.tables.orders||[]).length} orders, ${(data.tables.vendors||[]).length} vendors and ${restoredFiles} image files.`});
   }catch(e){console.error("Backup restore failed:",e);res.status(500).json({error:"Restore failed. The backup format may not match this shop version."})}
 });
 app.get("/api/admin/stats",guard,(req,res)=>res.json({products:db.prepare("SELECT COUNT(*) c FROM products WHERE active=1").get().c,orders:db.prepare("SELECT COUNT(*) c FROM orders").get().c,pending:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PENDING'").get().c,paid:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PAID'").get().c,cancelled:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='CANCELLED' OR order_status='CANCELLED'").get().c,refunded:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='REFUNDED'").get().c,sales:db.prepare("SELECT COALESCE(SUM(total),0) s FROM orders WHERE payment_status='PAID' AND order_status!='CANCELLED' AND date(created_at)=date('now','localtime')").get().s}));
