@@ -16,7 +16,30 @@ CREATE TABLE IF NOT EXISTS vendor_products(id INTEGER PRIMARY KEY AUTOINCREMENT,
 CREATE TABLE IF NOT EXISTS customer_accounts(id INTEGER PRIMARY KEY AUTOINCREMENT,full_name TEXT,whatsapp TEXT UNIQUE,password_hash TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS payout_requests(id INTEGER PRIMARY KEY AUTOINCREMENT,vendor_id INTEGER,amount INTEGER,status TEXT DEFAULT 'PENDING',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS vendor_submission_keys(idempotency_key TEXT PRIMARY KEY,vendor_id INTEGER NOT NULL,product_id INTEGER NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS auth_sessions(token TEXT PRIMARY KEY,type TEXT NOT NULL,vendor_id INTEGER DEFAULT NULL,expires_at INTEGER NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);`);
+CREATE TABLE IF NOT EXISTS auth_sessions(token TEXT PRIMARY KEY,type TEXT NOT NULL,vendor_id INTEGER DEFAULT NULL,expires_at INTEGER NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS delivery_drivers(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  full_name TEXT NOT NULL,
+  whatsapp TEXT UNIQUE NOT NULL,
+  pin_hash TEXT NOT NULL,
+  status TEXT DEFAULT 'ACTIVE',
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS deliveries(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id TEXT NOT NULL UNIQUE,
+  driver_id INTEGER,
+  status TEXT DEFAULT 'ASSIGNED',
+  lat REAL,
+  lng REAL,
+  accuracy REAL,
+  last_seen TEXT,
+  started_at TEXT,
+  arrived_at TEXT,
+  delivered_at TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(driver_id) REFERENCES delivery_drivers(id)
+);`);
 try{db.exec("ALTER TABLE products ADD COLUMN images TEXT DEFAULT ''")}catch(e){}
 const BACKUP_TABLES=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys"];
 function buildShopSnapshot(){
@@ -139,7 +162,28 @@ function getSession(req){
 }
 function guard(req,res,next){const s=getSession(req);if(!s||s.type!=="admin")return res.status(401).json({error:"Admin login required"});req.sessionToken=s.token;next()}
 function vendorGuard(req,res,next){const s=getSession(req);if(!s||s.type!=="vendor")return res.status(401).json({error:"Vendor login required"});req.vendorId=s.vendor_id;req.sessionToken=s.token;next()}
+function driverGuard(req,res,next){const s=getSession(req);if(!s||s.type!=="driver")return res.status(401).json({error:"Driver login required"});req.driverId=s.vendor_id;req.sessionToken=s.token;next()}
 app.post("/api/auth/logout",(req,res)=>{const token=(req.headers.authorization||"").replace("Bearer ","").trim();if(token)db.prepare("DELETE FROM auth_sessions WHERE token=?").run(token);res.json({ok:true});});
+
+app.get("/api/stores",(req,res)=>{
+  const stores=db.prepare(`
+    SELECT v.id,v.business_name,v.full_name,v.category,v.description,v.location,v.created_at,
+           COUNT(p.id) AS product_count
+    FROM vendors v
+    LEFT JOIN products p ON p.vendor_id=v.id AND p.active=1
+    WHERE v.status='APPROVED'
+    GROUP BY v.id
+    ORDER BY LOWER(v.business_name) ASC
+  `).all();
+  res.json(stores);
+});
+app.get("/api/stores/:id",(req,res)=>{
+  const v=db.prepare("SELECT id,business_name,full_name,category,description,location,created_at FROM vendors WHERE id=? AND status='APPROVED'").get(req.params.id);
+  if(!v)return res.status(404).json({error:"Store not found"});
+  const products=db.prepare("SELECT * FROM products WHERE vendor_id=? AND active=1 ORDER BY id DESC").all(req.params.id);
+  res.json({...v,products});
+});
+
 app.get("/api/products",(req,res)=>{let p=db.prepare("SELECT * FROM products WHERE active=1 ORDER BY id DESC").all(),c=req.query.category||"All",q=(req.query.q||"").toLowerCase();if(c!=="All")p=p.filter(x=>x.category===c);if(q)p=p.filter(x=>(x.name+" "+x.category+" "+x.description).toLowerCase().includes(q));res.json(p)});
 app.get("/api/products/:id",(req,res)=>{let p=db.prepare("SELECT * FROM products WHERE id=? AND active=1").get(req.params.id);p?res.json(p):res.status(404).json({error:"Product not found"})});
 app.post("/api/admin/login",(req,res)=>{
@@ -324,6 +368,17 @@ app.post("/api/orders",async(req,res)=>{
   });
 });
 app.get("/api/order/:id",(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);o?res.json({...o,whatsappSupport:SHOP_WHATSAPP}):res.status(404).json({error:"Order not found"})});
+
+app.get("/api/order/:id/tracking",(req,res)=>{
+  const o=db.prepare("SELECT id,product_name,quantity,customer_name,whatsapp,location,total,payment_status,order_status,created_at FROM orders WHERE id=?").get(req.params.id);
+  if(!o)return res.status(404).json({error:"Order not found"});
+  const d=db.prepare(`
+    SELECT d.*,dr.full_name AS driver_name,dr.whatsapp AS driver_whatsapp
+    FROM deliveries d LEFT JOIN delivery_drivers dr ON dr.id=d.driver_id
+    WHERE d.order_id=?
+  `).get(req.params.id);
+  res.json({order:o,delivery:d||null});
+});
 app.post("/api/admin/orders/:id/payment",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});if(o.payment_status==='REFUNDED'||o.payment_status==='CANCELLED')return res.status(400).json({error:'This payment is already closed.'});db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE id=?").run(req.params.id);backupShopData("payment-confirmed");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true})});
 app.post("/api/admin/orders/:id/cancel-payment",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});if(o.payment_status==='PAID')return res.status(400).json({error:'A paid order cannot be cancelled. Use Refund instead.'});db.prepare("UPDATE orders SET payment_status='CANCELLED',order_status='CANCELLED' WHERE id=?").run(req.params.id);backupShopData("payment-cancelled");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true})});
 app.post("/api/admin/orders/:id/refund",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});if(o.payment_status!=='PAID')return res.status(400).json({error:'Only paid orders can be marked refunded.'});db.prepare("UPDATE orders SET payment_status='REFUNDED',order_status='REFUNDED' WHERE id=?").run(req.params.id);backupShopData("refund");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true,notice:'Order marked refunded. Complete the actual money reversal in Waychit if required.'})});
@@ -358,6 +413,49 @@ app.get("/api/admin/customers",guard,(req,res)=>{
 app.patch("/api/admin/customers/:id/status",guard,(req,res)=>{const status=String(req.body?.status||'').toUpperCase();if(!['ACTIVE','BLOCKED'].includes(status))return res.status(400).json({error:'Invalid customer status'});const r=db.prepare("UPDATE customer_accounts SET status=? WHERE id=?").run(status,req.params.id);if(!r.changes)return res.status(404).json({error:'Customer account not found'});backupShopData("customer-status");res.json({ok:true,status});});
 app.delete("/api/admin/customers/:id",guard,(req,res)=>{const r=db.prepare("DELETE FROM customer_accounts WHERE id=?").run(req.params.id);if(!r.changes)return res.status(404).json({error:'Customer account not found'});backupShopData("customer-deleted");res.json({ok:true});});
 
+
+app.post("/api/driver/login",(req,res)=>{
+  const phone=String(req.body.whatsapp||"").replace(/\D/g,"").replace(/^220/,"");
+  const pin=String(req.body.pin||"");
+  const d= db.prepare("SELECT * FROM delivery_drivers WHERE whatsapp=? AND status='ACTIVE'").get("220"+phone);
+  if(!d)return res.status(401).json({error:"Driver account not found or blocked."});
+  const hash=crypto.createHash("sha256").update(pin).digest("hex");
+  if(hash!==d.pin_hash)return res.status(401).json({error:"Incorrect PIN."});
+  const t=crypto.randomBytes(32).toString("hex"),exp=Date.now()+30*24*60*60*1000;
+  db.prepare("INSERT OR REPLACE INTO auth_sessions(token,type,vendor_id,expires_at) VALUES(?,?,?,?)").run(t,"driver",d.id,exp);
+  res.json({token:t,expiresAt:exp,driver:{id:d.id,full_name:d.full_name,whatsapp:d.whatsapp}});
+});
+app.get("/api/driver/me",driverGuard,(req,res)=>{
+  const d=db.prepare("SELECT id,full_name,whatsapp,status FROM delivery_drivers WHERE id=?").get(req.driverId);res.json(d);
+});
+app.get("/api/driver/deliveries",driverGuard,(req,res)=>{
+  res.json(db.prepare(`
+    SELECT d.*,o.product_name,o.quantity,o.customer_name,o.whatsapp,o.location,o.total,o.payment_status,o.order_status,
+           v.business_name
+    FROM deliveries d JOIN orders o ON o.id=d.order_id
+    LEFT JOIN vendors v ON v.id=o.vendor_id
+    WHERE d.driver_id=? ORDER BY datetime(d.created_at) DESC
+  `).all(req.driverId));
+});
+app.patch("/api/driver/deliveries/:id/status",driverGuard,(req,res)=>{
+  const status=String(req.body.status||"").toUpperCase();
+  if(!["ASSIGNED","PICKED_UP","ON_THE_WAY","ARRIVED","DELIVERED"].includes(status))return res.status(400).json({error:"Invalid delivery status"});
+  const d=db.prepare("SELECT * FROM deliveries WHERE id=? AND driver_id=?").get(req.params.id,req.driverId);
+  if(!d)return res.status(404).json({error:"Delivery not assigned to you."});
+  const now=new Date().toISOString();
+  db.prepare("UPDATE deliveries SET status=?,started_at=CASE WHEN ?='ON_THE_WAY' AND started_at IS NULL THEN ? ELSE started_at END,arrived_at=CASE WHEN ?='ARRIVED' THEN ? ELSE arrived_at END,delivered_at=CASE WHEN ?='DELIVERED' THEN ? ELSE delivered_at END WHERE id=?")
+    .run(status,status,now,status,now,status,now,d.id);
+  db.prepare("UPDATE orders SET order_status=? WHERE id=?").run(status==="DELIVERED"?"DELIVERED":status==="ON_THE_WAY"||status==="ARRIVED"?"PROCESSING":"READY",d.order_id);
+  backupShopData("driver-delivery-status");broadcastLive("orders",{orderId:d.order_id});res.json({ok:true});
+});
+app.post("/api/driver/deliveries/:id/location",driverGuard,(req,res)=>{
+  const d=db.prepare("SELECT * FROM deliveries WHERE id=? AND driver_id=?").get(req.params.id,req.driverId);
+  if(!d)return res.status(404).json({error:"Delivery not assigned to you."});
+  const lat=Number(req.body.lat),lng=Number(req.body.lng),accuracy=Number(req.body.accuracy||0);
+  if(!Number.isFinite(lat)||!Number.isFinite(lng)||lat<-90||lat>90||lng<-180||lng>180)return res.status(400).json({error:"Invalid GPS coordinates."});
+  db.prepare("UPDATE deliveries SET lat=?,lng=?,accuracy=?,last_seen=? WHERE id=?").run(lat,lng,accuracy,new Date().toISOString(),d.id);
+  broadcastLive("orders",{orderId:d.order_id,location:true});res.json({ok:true});
+});
 app.post("/api/vendor/login",(req,res)=>{
  const phone=String(req.body.whatsapp||req.body.phone||"").replace(/\D/g,"").replace(/^220/,""),pin=String(req.body.pin||req.body.password||"");
  if(phone.length<6||!/^\d{4,5}$/.test(pin))return res.status(400).json({error:"Enter your phone number and 4 or 5 digit PIN."});
@@ -460,6 +558,59 @@ app.post("/api/admin/vendors/:id/reset-pin",guard,(req,res)=>{
 app.get("/api/vendor/:id/products",(req,res)=>{let v=db.prepare("SELECT id FROM vendors WHERE id=? AND status='APPROVED'").get(req.params.id);if(!v)return res.status(403).json({error:"Vendor not approved"});res.json(db.prepare("SELECT * FROM products WHERE vendor_id=? ORDER BY id DESC").all(v.id))});
 app.post("/api/admin/products/:id/approve",guard,(req,res)=>{db.prepare("UPDATE products SET active=1 WHERE id=?").run(req.params.id);db.prepare("UPDATE vendor_products SET status='APPROVED' WHERE product_id=?").run(req.params.id);backupCatalog();broadcastLive("catalog",{productId:Number(req.params.id)});res.json({ok:true})});
 app.post("/api/admin/products/:id/reject",guard,(req,res)=>{db.prepare("UPDATE products SET active=0 WHERE id=?").run(req.params.id);db.prepare("UPDATE vendor_products SET status='REJECTED' WHERE product_id=?").run(req.params.id);backupCatalog();broadcastLive("catalog",{productId:Number(req.params.id)});res.json({ok:true})});
+
+app.get("/api/admin/drivers",guard,(req,res)=>{
+  res.json(db.prepare("SELECT id,full_name,whatsapp,status,created_at FROM delivery_drivers ORDER BY id DESC").all());
+});
+app.post("/api/admin/drivers",guard,(req,res)=>{
+  const name=String(req.body.full_name||"").trim(), phone=String(req.body.whatsapp||"").replace(/\D/g,""), pin=String(req.body.pin||"").trim();
+  if(name.length<2||phone.length<6||!/^\d{4,6}$/.test(pin))return res.status(400).json({error:"Enter driver name, valid WhatsApp number and 4–6 digit PIN."});
+  const hash=crypto.createHash("sha256").update(pin).digest("hex");
+  try{
+    const r=db.prepare("INSERT INTO delivery_drivers(full_name,whatsapp,pin_hash) VALUES(?,?,?)").run(name,"220"+phone.replace(/^220/,""),hash);
+    backupShopData("driver-created");res.json({id:r.lastInsertRowid,full_name:name,whatsapp:"220"+phone.replace(/^220/,""),status:"ACTIVE"});
+  }catch(e){res.status(400).json({error:"A driver with that WhatsApp number already exists."})}
+});
+app.patch("/api/admin/drivers/:id/status",guard,(req,res)=>{
+  const status=String(req.body.status||"").toUpperCase();
+  if(!["ACTIVE","BLOCKED"].includes(status))return res.status(400).json({error:"Invalid driver status"});
+  db.prepare("UPDATE delivery_drivers SET status=? WHERE id=?").run(status,req.params.id);
+  backupShopData("driver-status");res.json({ok:true});
+});
+app.get("/api/admin/deliveries",guard,(req,res)=>{
+  res.json(db.prepare(`
+    SELECT d.*,o.product_name,o.quantity,o.customer_name,o.whatsapp,o.location,o.total,o.payment_status,o.order_status,
+           v.business_name,dr.full_name AS driver_name
+    FROM deliveries d
+    JOIN orders o ON o.id=d.order_id
+    LEFT JOIN vendors v ON v.id=o.vendor_id
+    LEFT JOIN delivery_drivers dr ON dr.id=d.driver_id
+    ORDER BY datetime(d.created_at) DESC
+  `).all());
+});
+app.post("/api/admin/orders/:id/assign-driver",guard,(req,res)=>{
+  const o=db.prepare("SELECT id FROM orders WHERE id=?").get(req.params.id);
+  const dr=db.prepare("SELECT id FROM delivery_drivers WHERE id=? AND status='ACTIVE'").get(req.body.driverId);
+  if(!o)return res.status(404).json({error:"Order not found"});
+  if(!dr)return res.status(400).json({error:"Active driver not found"});
+  db.prepare(`
+    INSERT INTO deliveries(order_id,driver_id,status)
+    VALUES(?,?, 'ASSIGNED')
+    ON CONFLICT(order_id) DO UPDATE SET driver_id=excluded.driver_id,status='ASSIGNED'
+  `).run(req.params.id,dr.id);
+  db.prepare("UPDATE orders SET order_status='READY' WHERE id=? AND payment_status='PAID'").run(req.params.id);
+  backupShopData("driver-assigned");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true});
+});
+app.patch("/api/admin/deliveries/:id/status",guard,(req,res)=>{
+  const status=String(req.body.status||"").toUpperCase();
+  if(!["ASSIGNED","PICKED_UP","ON_THE_WAY","ARRIVED","DELIVERED"].includes(status))return res.status(400).json({error:"Invalid delivery status"});
+  const d=db.prepare("SELECT * FROM deliveries WHERE id=?").get(req.params.id);if(!d)return res.status(404).json({error:"Delivery not found"});
+  const now=new Date().toISOString();
+  db.prepare("UPDATE deliveries SET status=?,started_at=CASE WHEN ?='ON_THE_WAY' AND started_at IS NULL THEN ? ELSE started_at END,arrived_at=CASE WHEN ?='ARRIVED' THEN ? ELSE arrived_at END,delivered_at=CASE WHEN ?='DELIVERED' THEN ? ELSE delivered_at END WHERE id=?")
+    .run(status,status,now,status,now,status,now,d.id);
+  db.prepare("UPDATE orders SET order_status=? WHERE id=?").run(status==="DELIVERED"?"DELIVERED":status==="ON_THE_WAY"||status==="ARRIVED"?"PROCESSING":"READY",d.order_id);
+  backupShopData("delivery-status");broadcastLive("orders",{orderId:d.order_id});res.json({ok:true});
+});
 app.get("/api/admin/vendor-stats",guard,(req,res)=>res.json({vendors:db.prepare("SELECT COUNT(*) c FROM vendors").get().c,pending:db.prepare("SELECT COUNT(*) c FROM vendors WHERE status='PENDING'").get().c,active:db.prepare("SELECT COUNT(*) c FROM vendors WHERE status='APPROVED'").get().c,commission:db.prepare("SELECT COALESCE(SUM(commission),0) s FROM orders WHERE payment_status='PAID'").get().s}));
 
 setInterval(()=>{try{db.prepare("DELETE FROM auth_sessions WHERE expires_at<=?").run(Date.now())}catch{}},60*60*1000);

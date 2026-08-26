@@ -108,6 +108,48 @@ function openCheckout(){
 function changeQty(d){let q=Math.max(1,Math.min(selected.stock,(+$('qty').value||1)+d));$('qty').value=q;updateTotal()}
 function updateTotal(){$("total").textContent=money(selected.price*Math.max(1,Math.min(selected.stock,+$("qty").value||1)))}
 
+
+async function openStores(){
+  const modal=$("modal");
+  modal.innerHTML=`<div class="sheet stores-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="mini-bag">🏪</span><div><small>BASSE MARKETPLACE</small><h2>All Stores</h2></div></div><p class="muted">Discover approved local vendors and shop directly from their stores.</p><div id="storeGrid" class="store-grid"><div class="store-loading">Loading stores…</div></div></div>`;
+  modal.classList.add("show");
+  try{
+    const r=await fetch("/api/stores",{cache:"no-store"});const stores=await r.json();if(!r.ok)throw Error(stores.error||"Could not load stores");
+    const grid=$("storeGrid");
+    grid.innerHTML=stores.length?stores.map(s=>`<button class="store-card" type="button" onclick="openStore(${s.id})"><div class="store-icon">🏪</div><div class="store-main"><b>${esc(s.business_name||"BASSE Store")}</b><span>${esc(s.category||"Local Store")}</span><small>${s.product_count||0} approved products${s.location?" · "+esc(s.location):""}</small></div><span class="store-arrow">→</span></button>`).join(""):`<div class="empty-search"><div>🏪</div><h3>No stores yet</h3><p>Approved vendors will appear here automatically.</p></div>`;
+  }catch(e){$("storeGrid").innerHTML=`<div class="empty-search"><div>⚠️</div><h3>Stores unavailable</h3><p>${esc(e.message||"Please try again.")}</p></div>`}
+}
+async function openStore(id){
+  const modal=$("modal");
+  modal.innerHTML=`<div class="sheet stores-sheet"><button class="close" onclick="openStores()">←</button><div id="storeDetail"><div class="store-loading">Loading store…</div></div></div>`;
+  try{
+    const r=await fetch("/api/stores/"+id,{cache:"no-store"});const s=await r.json();if(!r.ok)throw Error(s.error||"Store unavailable");
+    $("storeDetail").innerHTML=`<div class="store-hero"><div class="store-icon big">🏪</div><div><small>OFFICIAL BASSE STORE</small><h2>${esc(s.business_name)}</h2><p>${esc(s.description||s.category||"Local vendor")}</p><span>${esc(s.location||"Basse")} · ${s.products.length} products</span></div></div><div class="store-products">${s.products.length?s.products.map(p=>`<article class="product" data-id="${p.id}" tabindex="0" role="button" onclick="buy(${p.id})"><div class="pic"><img src="${p.image||""}" alt="${esc(p.name)}" loading="lazy"><span class="tag">${esc(p.category)}</span></div><div class="info"><h3>${esc(p.name)}</h3><div class="price">${money(p.price)}</div></div></article>`).join(""):`<div class="empty-search"><div>🛍️</div><h3>No products yet</h3></div>`}</div>`;
+  }catch(e){$("storeDetail").innerHTML=`<div class="empty-search"><div>⚠️</div><h3>Store unavailable</h3><p>${esc(e.message||"Please try again.")}</p></div>`}
+}
+function trackOrderPrompt(){
+  const id=prompt("Enter your BASSE order number (example: BOS-AB12CD34):");
+  if(id&&id.trim())openOrderTracking(id.trim());
+}
+async function openOrderTracking(id){
+  const modal=$("modal");
+  modal.innerHTML=`<div class="sheet tracking-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="mini-bag">🚚</span><div><small>BASSE DELIVERY</small><h2>Track Order</h2></div></div><div id="trackingBody"><div class="store-loading">Loading tracking…</div></div></div>`;
+  modal.classList.add("show");
+  try{
+    const r=await fetch("/api/order/"+encodeURIComponent(id)+"/tracking",{cache:"no-store"});const d=await r.json();if(!r.ok)throw Error(d.error||"Order not found");
+    const status=d.delivery?.status||d.order.order_status||"NEW";
+    const steps=["NEW","READY","PICKED_UP","ON_THE_WAY","ARRIVED","DELIVERED"];
+    const idx=Math.max(0,steps.indexOf(status));
+    const map=`<div class="live-map-wrap"><div id="customerMap" class="customer-map"><div class="map-placeholder">🗺️<br><b>Live delivery map</b><small>${d.delivery?.lat&&d.delivery?.lng?"Driver GPS is active.":"Waiting for driver location…"}</small></div></div></div>`;
+    $("trackingBody").innerHTML=`<div class="tracking-card"><div class="track-top"><b>#${esc(d.order.id)}</b><span class="badge">${esc(status.replaceAll("_"," "))}</span></div><h3>${esc(d.order.product_name)} × ${d.order.quantity}</h3><p>${esc(d.order.location||"Delivery location pending")}</p>${map}<div class="timeline">${steps.map((x,i)=>`<div class="timeline-step ${i<=idx?"done":""}"><span>${i<=idx?"✓":"•"}</span><b>${x.replaceAll("_"," ")}</b></div>`).join("")}</div><p class="muted">${d.delivery?.driver_name?`Driver: <b>${esc(d.delivery.driver_name)}</b>`:"A driver will be assigned after your order is confirmed."}</p></div>`;
+    if(d.delivery?.lat&&d.delivery?.lng){loadTrackingMap(d.delivery.lat,d.delivery.lng);}
+  }catch(e){$("trackingBody").innerHTML=`<div class="empty-search"><div>🔎</div><h3>Order not found</h3><p>${esc(e.message||"Check your order number.")}</p></div>`}
+}
+function loadTrackingMap(lat,lng){
+  const el=$("customerMap"); if(!el)return;
+  el.innerHTML=`<iframe title="Driver location" style="width:100%;height:100%;border:0" src="https://www.openstreetmap.org/export/embed.html?bbox=${lng-0.01}%2C${lat-0.01}%2C${lng+0.01}%2C${lat+0.01}&layer=mapnik&marker=${lat}%2C${lng}"></iframe>`;
+}
+
 async function placeOrder(){
   let q=Math.max(1,Math.min(selected.stock,+$("qty").value||1)),phone=$("phone").value.replace(/\D/g,"").replace(/^220/,"");
   if(!$('name').value.trim())return toast("Please enter your full name.");
@@ -143,7 +185,7 @@ Please confirm my order. Thank you.`}
 function showReturn(o,msg,paid,adminWhatsApp,note=""){
   let target=String(adminWhatsApp||o.whatsappSupport||"").replace(/\D/g,"");
   let href=target?`https://wa.me/${target}?text=${encodeURIComponent(msg||receiptMessage(o))}`:"#";
-  $("modal").innerHTML=`<div class="sheet return-sheet"><button class="close" onclick="closeModal()">×</button><div class="result-icon">${paid?"✓":"🧾"}</div><h2>${paid?"Payment successful!":"Order received"}</h2><p>${paid?"Your payment has been confirmed.":note||"Your order has been received."}</p>${o.id?`<div class="summary"><div class="row"><span>Order</span><b>${esc(o.id)}</b></div><div class="row"><span>Total</span><b>${money(o.total)}</b></div><div class="row"><span>Payment</span><b>${paid?"PAID":"PENDING"}</b></div></div>`:""}${target&&o.id?`<a class="whats" href="${href}" target="_blank" rel="noopener">💬 SEND ORDER TO BASSE SHOP</a>`:""}<button class="secondary-btn" onclick="closeModal()">CONTINUE SHOPPING</button></div>`;$('modal').classList.add('show')
+  $("modal").innerHTML=`<div class="sheet return-sheet"><button class="close" onclick="closeModal()">×</button><div class="result-icon">${paid?"✓":"🧾"}</div><h2>${paid?"Payment successful!":"Order received"}</h2><p>${paid?"Your payment has been confirmed.":note||"Your order has been received."}</p>${o.id?`<div class="summary"><div class="row"><span>Order</span><b>${esc(o.id)}</b></div><div class="row"><span>Total</span><b>${money(o.total)}</b></div><div class="row"><span>Payment</span><b>${paid?"PAID":"PENDING"}</b></div></div>`:""}${target&&o.id?`<a class="whats" href="${href}" target="_blank" rel="noopener">💬 SEND ORDER TO BASSE SHOP</a>`:""}${o.id?`<button class="secondary-btn" onclick="openOrderTracking('${o.id}')">🚚 TRACK ORDER</button>`:""}<button class="secondary-btn" onclick="closeModal()">CONTINUE SHOPPING</button></div>`;$('modal').classList.add('show')
 }
 async function waitForPayment(id,attempt=0){
   try{

@@ -82,3 +82,13 @@ Full backups now include the actual uploaded files from `server/data/uploads` as
 - Customer accounts can be created with a password and can log in later.
 - Logged-in customer details are prefilled at checkout.
 - Admin can still manage customer accounts and blocked accounts cannot place orders.
+
+
+## V6 Marketplace + Live Delivery
+- Stores directory and vendor storefronts
+- Optional guest shopping remains enabled
+- Admin Delivery Control Center and driver management
+- Driver mobile portal at `/driver/`
+- Live GPS sharing only during active deliveries
+- Customer order tracking at `/api/order/:id/tracking` and Track Order UI
+- Uses browser GPS + OpenStreetMap; no Google Maps API required
