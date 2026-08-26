@@ -100,3 +100,6 @@ Full backups now include the actual uploaded files from `server/data/uploads` as
 - Browser geolocation sends the driver's latest coordinates to the server without requiring Google Maps API.
 - Customer order tracking reads the same delivery status and latest GPS coordinates.
 - Full backup now includes driver accounts, delivery records, product images/uploads, orders, vendors and customer data.
+
+## Android app download
+The official APK is served from `/downloads/BASSE_ONLINE_SHOP.apk` and the website download page is `/download`.

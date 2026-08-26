@@ -21,17 +21,17 @@ h1{margin:0;font-size:30px;color:var(--navy)}p{color:var(--muted);line-height:1.
 </head>
 <body>
 <main class="card">
-<img class="logo" src="/basse-marketplace-logo.jpg" alt="BASSE ONLINE SHOP">
+<img class="logo" src="/basse-app-logo.png" alt="BASSE ONLINE SHOP">
 <div class="kicker">OFFICIAL ANDROID APP</div>
 <h1>Download BASSE ONLINE SHOP</h1>
 <p>Shop local products, place orders and get delivery directly from your Android phone.</p>
-<a id="downloadBtn" class="download" href="/downloads/BASSE_ONLINE_SHOP.apk">📱 DOWNLOAD ANDROID APP</a>
-<div id="note" class="note">Android app release file will appear here once the signed release APK is uploaded.</div>
+<a id="downloadBtn" class="download" href="/downloads/BASSE_ONLINE_SHOP.apk" download="BASSE_ONLINE_SHOP.apk">📱 DOWNLOAD ANDROID APP</a>
+<div id="note" class="note">Official BASSE ONLINE SHOP Android app · APK ready to download.</div>
 <a class="back" href="/">← Back to BASSE ONLINE SHOP</a>
 </main>
 <script>
 fetch('/downloads/BASSE_ONLINE_SHOP.apk',{method:'HEAD'}).then(r=>{
-  if(r.ok){document.getElementById('note').textContent='Version 5.0 · Android';}
+  if(r.ok){document.getElementById('note').textContent='Official Android APK · BASSE ONLINE SHOP';}
   else{document.getElementById('downloadBtn').classList.add('disabled');}
 }).catch(()=>document.getElementById('downloadBtn').classList.add('disabled'));
 </script>
