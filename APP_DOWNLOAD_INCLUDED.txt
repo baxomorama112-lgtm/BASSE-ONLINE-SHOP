@@ -1,13 +1,2 @@
-BASSE ONLINE SHOP — APP DOWNLOAD
-=================================
-Android APK: /public/downloads/BASSE_ONLINE_SHOP.apk
-Filename: BASSE_ONLINE_SHOP.apk
-
-Website download page:
-  /download
-
-The download page is designed as an official BASSE app landing page.
-Android users can download the APK directly.
-iPhone users are shown an explanation because APK files cannot be installed on iOS.
-
-The Google Play Store / Apple App Store buttons can be added later when the store releases are ready.
+BASSE_ONLINE_SHOP.apk included at /public/downloads/BASSE_ONLINE_SHOP.apk
+Size: 2085987 bytes

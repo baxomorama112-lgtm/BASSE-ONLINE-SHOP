@@ -45,9 +45,6 @@ CREATE TABLE IF NOT EXISTS deliveries(
   FOREIGN KEY(driver_id) REFERENCES delivery_drivers(id)
 );`);
 try{db.exec("ALTER TABLE products ADD COLUMN images TEXT DEFAULT ''")}catch(e){}
-try{db.exec("ALTER TABLE products ADD COLUMN option_config TEXT DEFAULT ''")}catch(e){}
-try{db.exec("ALTER TABLE products ADD COLUMN variants TEXT DEFAULT ''")}catch(e){}
-try{db.exec("ALTER TABLE orders ADD COLUMN selected_options TEXT DEFAULT ''")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_lat REAL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_lng REAL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_accuracy REAL")}catch(e){}
@@ -101,8 +98,8 @@ function restoreShopBackupIfEmpty(){
     const data=JSON.parse(fs.readFileSync(BACKUP_PATH,"utf8"));
     if(!data?.tables?.products)return false;
     const schemas={
-      products:["id","name","category","price","stock","description","image","active","created_at","images","vendor_id","option_config","variants"],
-      orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings","customer_lat","customer_lng","customer_accuracy","selected_options"],
+      products:["id","name","category","price","stock","description","image","active","created_at","images","vendor_id"],
+      orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings","customer_lat","customer_lng","customer_accuracy"],
       vendors:["id","full_name","business_name","whatsapp","email","email_verified","verification_code","verification_expires","location","category","description","password_hash","status","created_at"],
       vendor_products:["id","product_id","vendor_id","status","created_at"],
       customer_accounts:["id","full_name","whatsapp","password_hash","status","created_at"],
@@ -153,6 +150,33 @@ const sessions=new Map(); // retained only for backwards compatibility; auth is 
 // whenever products, vendors, orders or payments change. A short polling fallback remains
 // on the clients so the site still recovers automatically after a dropped connection.
 const liveClients=new Set();
+// Anonymous marketplace presence. No name, phone, IP or account data is stored.
+const liveViewers=new Map();
+function viewerSource(req,body={}){
+  const hinted=String(body.source||req.headers["x-basse-source"]||"").toLowerCase();
+  if(hinted==="app"||hinted==="android-app")return "app";
+  const ua=String(req.headers["user-agent"]||"").toLowerCase();
+  if(ua.includes("wv")||ua.includes("; wv")||(ua.includes("version/4.0")&&ua.includes("android")))return "app";
+  return "website";
+}
+app.post("/api/presence/heartbeat",(req,res)=>{
+  const id=String(req.body?.id||"").trim();
+  if(!id||id.length>80)return res.status(400).json({error:"Invalid viewer id"});
+  liveViewers.set(id,{source:viewerSource(req,req.body),lastSeen:Date.now()});
+  res.json({ok:true});
+});
+app.post("/api/presence/leave",(req,res)=>{
+  const id=String(req.body?.id||"").trim();
+  if(id)liveViewers.delete(id);
+  res.json({ok:true});
+});
+function liveViewerStats(){
+  const cutoff=Date.now()-60000;
+  for(const [id,v] of liveViewers){if(!v||v.lastSeen<cutoff)liveViewers.delete(id)}
+  let website=0,appViewers=0;
+  for(const v of liveViewers.values()){if(v.source==="app")appViewers++;else website++}
+  return {total:website+appViewers,website,app:appViewers,updatedAt:Date.now()};
+}
 function broadcastLive(type="refresh",payload={}){
   const data=`event: ${type}\ndata: ${JSON.stringify({type,...payload})}\n\n`;
   for(const res of liveClients){ try{res.write(data)}catch{liveClients.delete(res)} }
@@ -207,8 +231,8 @@ app.post("/api/admin/login",(req,res)=>{
 });
 app.get("/api/admin/products",guard,(req,res)=>res.json(db.prepare("SELECT * FROM products ORDER BY id DESC").all()));
 app.post("/api/admin/products",guard,upload.array("images",8),(req,res)=>{let b=req.body,files=req.files||[],fileImgs=files.map(f=>"/uploads/"+f.filename),img=fileImgs[0]||b.imageUrl||"",imgs=JSON.stringify(fileImgs.length?fileImgs:(b.images?String(b.images).split(",").map(x=>x.trim()).filter(Boolean):[]));
-let x=db.prepare("INSERT INTO products(name,category,price,stock,description,image,images,vendor_id,option_config,variants) VALUES(?,?,?,?,?,?,?,?,?,?)").run(b.name,b.category,+b.price,+b.stock||0,b.description||"",img,imgs,b.vendorId?+b.vendorId:null,b.optionConfig||"",b.variants||"[]");let created=db.prepare("SELECT * FROM products WHERE id=?").get(x.lastInsertRowid);backupCatalog();broadcastLive("catalog",{productId:created.id});res.json(created)});
-app.put("/api/admin/products/:id",guard,upload.array("images",8),(req,res)=>{let p=db.prepare("SELECT * FROM products WHERE id=?").get(req.params.id);if(!p)return res.status(404).json({error:"Product not found"});let b=req.body,files=req.files||[],fileImgs=files.map(f=>"/uploads/"+f.filename),img=fileImgs[0]||b.imageUrl||p.image,oldImgs=p.images||"[]",imgs=fileImgs.length?JSON.stringify(fileImgs):(b.images?JSON.stringify(String(b.images).split(",").map(x=>x.trim()).filter(Boolean)):oldImgs);db.prepare("UPDATE products SET name=?,category=?,price=?,stock=?,description=?,image=?,images=?,vendor_id=?,option_config=?,variants=? WHERE id=?").run(b.name,b.category,+b.price,+b.stock,b.description||"",img,imgs,b.vendorId?+b.vendorId:p.vendor_id||null,b.optionConfig??p.option_config??"",b.variants??p.variants??"[]",p.id);let updated=db.prepare("SELECT * FROM products WHERE id=?").get(p.id);backupCatalog();broadcastLive("catalog",{productId:p.id});res.json(updated)});
+let x=db.prepare("INSERT INTO products(name,category,price,stock,description,image,images,vendor_id) VALUES(?,?,?,?,?,?,?,?)").run(b.name,b.category,+b.price,+b.stock||0,b.description||"",img,imgs,b.vendorId?+b.vendorId:null);let created=db.prepare("SELECT * FROM products WHERE id=?").get(x.lastInsertRowid);backupCatalog();broadcastLive("catalog",{productId:created.id});res.json(created)});
+app.put("/api/admin/products/:id",guard,upload.array("images",8),(req,res)=>{let p=db.prepare("SELECT * FROM products WHERE id=?").get(req.params.id);if(!p)return res.status(404).json({error:"Product not found"});let b=req.body,files=req.files||[],fileImgs=files.map(f=>"/uploads/"+f.filename),img=fileImgs[0]||b.imageUrl||p.image,oldImgs=p.images||"[]",imgs=fileImgs.length?JSON.stringify(fileImgs):(b.images?JSON.stringify(String(b.images).split(",").map(x=>x.trim()).filter(Boolean)):oldImgs);db.prepare("UPDATE products SET name=?,category=?,price=?,stock=?,description=?,image=?,images=?,vendor_id=? WHERE id=?").run(b.name,b.category,+b.price,+b.stock,b.description||"",img,imgs,b.vendorId?+b.vendorId:p.vendor_id||null,p.id);let updated=db.prepare("SELECT * FROM products WHERE id=?").get(p.id);backupCatalog();broadcastLive("catalog",{productId:p.id});res.json(updated)});
 app.delete("/api/admin/products/:id",guard,(req,res)=>{db.prepare("UPDATE products SET active=0 WHERE id=?").run(req.params.id);backupCatalog();broadcastLive("catalog",{productId:Number(req.params.id)});res.json({ok:true})});
 app.get("/api/admin/orders",guard,(req,res)=>res.json(db.prepare("SELECT * FROM orders ORDER BY datetime(created_at) DESC").all()));
 app.get("/api/admin/backup",guard,(req,res)=>{
@@ -256,11 +280,11 @@ app.post("/api/admin/restore",guard,(req,res)=>{
     const tx=db.transaction(()=>{
       db.pragma("foreign_keys = OFF");
       for(const table of tables)db.prepare(`DELETE FROM ${table}`).run();
-      const productCols=["id","name","category","price","stock","description","image","active","created_at","images","vendor_id","option_config","variants"];
+      const productCols=["id","name","category","price","stock","description","image","active","created_at","images","vendor_id"];
       const productIns=db.prepare(`INSERT INTO products (${productCols.join(",")}) VALUES (${productCols.map(()=>"?").join(",")})`);
       for(const x of (data.tables.products||[]))productIns.run(...productCols.map(k=>x[k]??null));
       const schemas={
-        orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings","customer_lat","customer_lng","customer_accuracy","selected_options"],
+        orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings","customer_lat","customer_lng","customer_accuracy"],
         vendors:["id","full_name","business_name","whatsapp","email","email_verified","verification_code","verification_expires","location","category","description","password_hash","status","created_at"],
         vendor_products:["id","product_id","vendor_id","status","created_at"],
         customer_accounts:["id","full_name","whatsapp","password_hash","status","created_at"],
@@ -292,7 +316,8 @@ app.post("/api/admin/restore",guard,(req,res)=>{
     res.json({ok:true,message:`Backup restored successfully: ${data.tables.products.length} products, ${(data.tables.orders||[]).length} orders, ${(data.tables.vendors||[]).length} vendors, ${(data.tables.delivery_drivers||[]).length} drivers, ${(data.tables.deliveries||[]).length} deliveries and ${restoredFiles} image files.`});
   }catch(e){console.error("Backup restore failed:",e);res.status(500).json({error:"Restore failed. The backup format may not match this shop version."})}
 });
-app.get("/api/admin/stats",guard,(req,res)=>res.json({products:db.prepare("SELECT COUNT(*) c FROM products WHERE active=1").get().c,orders:db.prepare("SELECT COUNT(*) c FROM orders").get().c,customers:db.prepare("SELECT COUNT(*) c FROM (SELECT whatsapp FROM customer_accounts UNION SELECT whatsapp FROM orders WHERE whatsapp IS NOT NULL AND whatsapp!='')").get().c,pending:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PENDING'").get().c,paid:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PAID'").get().c,cancelled:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='CANCELLED' OR order_status='CANCELLED'").get().c,refunded:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='REFUNDED'").get().c,sales:db.prepare("SELECT COALESCE(SUM(total),0) s FROM orders WHERE payment_status='PAID' AND order_status!='CANCELLED' AND date(created_at)=date('now','localtime')").get().s}));
+app.get("/api/admin/stats",guard,(req,res)=>res.json({products:db.prepare("SELECT COUNT(*) c FROM products WHERE active=1").get().c,orders:db.prepare("SELECT COUNT(*) c FROM orders").get().c,customers:db.prepare("SELECT COUNT(*) c FROM (SELECT whatsapp FROM customer_accounts UNION SELECT whatsapp FROM orders WHERE whatsapp IS NOT NULL AND whatsapp!='')").get().c,pending:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PENDING'").get().c,paid:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PAID'").get().c,cancelled:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='CANCELLED' OR order_status='CANCELLED'").get().c,refunded:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='REFUNDED'").get().c,sales:db.prepare("SELECT COALESCE(SUM(total),0) s FROM orders WHERE payment_status='PAID' AND order_status!='CANCELLED' AND date(created_at)=date('now','localtime')").get().s,liveViewers:liveViewerStats()}));
+app.get("/api/admin/live-viewers",guard,(req,res)=>res.json(liveViewerStats()));
 app.post("/api/customers/register",(req,res)=>{
  const name=String(req.body?.name||req.body?.fullName||"").trim();
  const phone=String(req.body?.whatsapp||req.body?.phone||"").replace(/\D/g,"").replace(/^220/,"");
@@ -331,17 +356,6 @@ app.post("/api/orders",async(req,res)=>{
   if(q>p.stock)return res.status(400).json({error:"Not enough stock"});
   let rawPhone=String(req.body.whatsapp||"").replace(/\D/g,"").replace(/^220/,"");
   if(rawPhone.length<6)return res.status(400).json({error:"Enter a valid WhatsApp number"});
-  const selectedOptions = (req.body.selectedOptions && typeof req.body.selectedOptions === "object") ? req.body.selectedOptions : {};
-  let config={enabled:false,options:{}};
-  try{ config=JSON.parse(p.option_config||"{}"); }catch{}
-  if(!config.options)config.options={};
-  if(config.enabled){
-    for(const [key,values] of Object.entries(config.options)){
-      const value=String(selectedOptions[key]||"").trim();
-      if(!value)return res.status(400).json({error:`Please select ${key}.`});
-      if(Array.isArray(values) && values.length && !values.map(String).includes(value))return res.status(400).json({error:`Invalid ${key} selected.`});
-    }
-  }
   let id="BOS-"+crypto.randomBytes(4).toString("hex").toUpperCase();
   let phone="220"+rawPhone,total=p.price*q;
   const customerAccount=db.prepare("SELECT status FROM customer_accounts WHERE whatsapp=?").get(phone);
@@ -350,8 +364,8 @@ app.post("/api/orders",async(req,res)=>{
   const customerLat=Number.isFinite(Number(req.body.customerLat))?Number(req.body.customerLat):null;
   const customerLng=Number.isFinite(Number(req.body.customerLng))?Number(req.body.customerLng):null;
   const customerAccuracy=Number.isFinite(Number(req.body.customerAccuracy))?Number(req.body.customerAccuracy):null;
-  db.prepare("INSERT INTO orders(id,product_id,product_name,quantity,customer_name,whatsapp,location,total,vendor_id,commission,vendor_earnings,customer_lat,customer_lng,customer_accuracy,selected_options) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-    .run(id,p.id,p.name,q,String(req.body.name||"").trim(),phone,String(req.body.location||""),total,vendorId,commission,vendorEarnings,customerLat,customerLng,customerAccuracy,JSON.stringify(selectedOptions));
+  db.prepare("INSERT INTO orders(id,product_id,product_name,quantity,customer_name,whatsapp,location,total,vendor_id,commission,vendor_earnings,customer_lat,customer_lng,customer_accuracy) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    .run(id,p.id,p.name,q,String(req.body.name||"").trim(),phone,String(req.body.location||""),total,vendorId,commission,vendorEarnings,customerLat,customerLng,customerAccuracy);
   backupShopData("order-created");
   broadcastLive("orders",{orderId:id});
 
@@ -539,7 +553,7 @@ app.post("/api/vendor/products",vendorGuard,(req,res,next)=>{
  let b=req.body,files=req.files||[],imgs=files.map(f=>"/uploads/"+f.filename),img=imgs[0]||b.imageUrl||"";
  if(!b.name||!b.price)return res.status(400).json({error:"Product name and price are required."});
  const create=db.transaction(()=>{
-   let x=db.prepare("INSERT INTO products(name,category,price,stock,description,image,images,active,vendor_id,option_config,variants) VALUES(?,?,?,?,?,?,?,?,?,?,?)").run(String(b.name).trim(),b.category,+b.price,+b.stock||0,b.description||"",img,JSON.stringify(imgs),0,req.vendorId,b.optionConfig||"",b.variants||"[]");
+   let x=db.prepare("INSERT INTO products(name,category,price,stock,description,image,images,active,vendor_id) VALUES(?,?,?,?,?,?,?,?,?)").run(String(b.name).trim(),b.category,+b.price,+b.stock||0,b.description||"",img,JSON.stringify(imgs),0,req.vendorId);
    db.prepare("INSERT INTO vendor_products(product_id,vendor_id,status) VALUES(?,?,?)").run(x.lastInsertRowid,req.vendorId,"PENDING");backupCatalog();
    if(req.vendorIdempotencyKey){
      db.prepare("INSERT INTO vendor_submission_keys(idempotency_key,vendor_id,product_id) VALUES(?,?,?)").run(req.vendorIdempotencyKey,req.vendorId,x.lastInsertRowid);
@@ -561,7 +575,6 @@ app.post("/api/vendor/products",vendorGuard,(req,res,next)=>{
  }
 });
 app.get("/api/vendor/products",vendorGuard,(req,res)=>res.json(db.prepare("SELECT p.*,COALESCE(vp.status,'APPROVED') approval_status FROM products p LEFT JOIN vendor_products vp ON vp.product_id=p.id WHERE p.vendor_id=? ORDER BY p.id DESC").all(req.vendorId)));
-app.put("/api/vendor/products/:id",vendorGuard,upload.array("images",8),(req,res)=>{let p=db.prepare("SELECT * FROM products WHERE id=? AND vendor_id=?").get(req.params.id,req.vendorId);if(!p)return res.status(404).json({error:"Product not found"});let b=req.body,files=req.files||[],fileImgs=files.map(f=>"/uploads/"+f.filename),img=fileImgs[0]||b.imageUrl||p.image,oldImgs=p.images||"[]",imgs=fileImgs.length?JSON.stringify(fileImgs):(b.images?JSON.stringify(String(b.images).split(",").map(x=>x.trim()).filter(Boolean)):oldImgs);db.prepare("UPDATE products SET name=?,category=?,price=?,stock=?,description=?,image=?,images=?,option_config=?,variants=? WHERE id=?").run(b.name,b.category,+b.price,+b.stock,b.description||"",img,imgs,b.optionConfig??p.option_config??"",b.variants??p.variants??"[]",p.id);backupCatalog();broadcastLive("catalog",{productId:p.id});res.json(db.prepare("SELECT p.*,COALESCE(vp.status,'APPROVED') approval_status FROM products p LEFT JOIN vendor_products vp ON vp.product_id=p.id WHERE p.id=?").get(p.id))});
 
 
 function hashPin(pin){return crypto.createHash("sha256").update(String(pin)).digest("hex")}

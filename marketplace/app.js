@@ -1,4 +1,10 @@
 let category="All",selected=null,searchTimer=null,searchIndex=[];
+// Anonymous live-viewer heartbeat for the Admin Dashboard.
+const BASSE_VIEWER_ID=(()=>{try{let id=sessionStorage.getItem("basseViewerId");if(!id){id=(crypto.randomUUID?crypto.randomUUID():"v_"+Date.now()+"_"+Math.random().toString(36).slice(2));sessionStorage.setItem("basseViewerId",id)}return id}catch{return "v_"+Date.now()+"_"+Math.random().toString(36).slice(2)}})();
+const BASSE_VIEWER_SOURCE=((navigator.userAgent||"").toLowerCase().includes("android")&&((navigator.userAgent||"").includes("wv")||(navigator.userAgent||"").includes("Version/4.0")))?"app":"website";
+async function sendViewerHeartbeat(){try{await fetch("/api/presence/heartbeat",{method:"POST",headers:{"Content-Type":"application/json","X-BASSE-SOURCE":BASSE_VIEWER_SOURCE},body:JSON.stringify({id:BASSE_VIEWER_ID,source:BASSE_VIEWER_SOURCE}),keepalive:true})}catch{}}
+function startViewerPresence(){sendViewerHeartbeat();clearInterval(window.__viewerPresence);window.__viewerPresence=setInterval(()=>{if(document.visibilityState==="visible")sendViewerHeartbeat()},20000)}
+window.addEventListener("pagehide",()=>{try{navigator.sendBeacon("/api/presence/leave",new Blob([JSON.stringify({id:BASSE_VIEWER_ID})],{type:"application/json"}))}catch{}});
 const $=id=>document.getElementById(id),money=n=>"D"+Number(n||0).toLocaleString();
 let checkoutGps={lat:null,lng:null,accuracy:null},trackingMap=null,trackingPoll=null,trackingPhone="";
 
@@ -57,12 +63,6 @@ function normalizeProductImages(product){
   if(product.image&&!imgs.includes(product.image))imgs.unshift(product.image);
   return imgs.length?imgs:[""];
 }
-
-function productConfig(p){let c={enabled:false,options:{}};try{c=JSON.parse(p.option_config||"{}")}catch{};if(!c.options)c.options={};return c}
-function productOptionsHTML(p){const c=productConfig(p);if(!c.enabled||!Object.keys(c.options).length)return "";return `<div class="product-options"><div class="options-title">Choose your options</div>${Object.entries(c.options).map(([k,vals])=>`<label class="option-group"><span>${esc(k)}</span><select data-option="${esc(k)}" onchange="validateProductOptions()"><option value="">Select ${esc(k)}</option>${(vals||[]).map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("")}</select></label>`).join("")}<small id="optionHint" class="option-hint">Select all required options before buying.</small></div>`}
-function getSelectedOptions(){const out={};document.querySelectorAll('[data-option]').forEach(x=>{if(x.value)out[x.dataset.option]=x.value});return out}
-function validateProductOptions(){const c=productConfig(selected),ok=!c.enabled||Object.keys(c.options||{}).every(k=>getSelectedOptions()[k]);const b=document.querySelector('.buy-now-modern');if(b){b.disabled=!ok||selected.stock<1;b.classList.toggle('disabled',!ok)}const h=$("optionHint");if(h)h.textContent=ok?"✓ Ready to buy":"Select all required options before buying.";return ok}
-
 function renderProductDetail(product){
   selected=product;
   const imgs=normalizeProductImages(product);
@@ -71,7 +71,7 @@ function renderProductDetail(product){
     <button class="close modern-close" onclick="closeModal()" aria-label="Close">×</button>
     <div class="product-detail">
       <div class="gallery"><div class="main-photo-wrap"><img id="mainProductImage" src="${imgs[0]}" alt="${esc(product.name)}"></div>${thumbs}</div>
-      <div class="detail-info modern-detail-info"><span class="tagline">${esc(product.category)}</span><h2>${esc(product.name)}</h2><div class="detail-price">${money(product.price)}</div><p class="muted">${esc(product.description||"Quality product from BASSE MARKET.")}</p><div class="stock-note ${product.stock<1?'out':''}">${product.stock>0?`✓ ${product.stock} available`:"Out of stock"}</div>${productOptionsHTML(product)}<div class="detail-actions"><button class="pay buy-now-modern" ${product.stock<1?"disabled":""} onclick="openCheckout()"><span>🛒</span><b>BUY NOW</b><span class="arrow">→</span></button></div><div class="product-hint">Secure checkout · Pay with Waychit</div></div>
+      <div class="detail-info modern-detail-info"><span class="tagline">${esc(product.category)}</span><h2>${esc(product.name)}</h2><div class="detail-price">${money(product.price)}</div><p class="muted">${esc(product.description||"Quality product from BASSE MARKET.")}</p><div class="stock-note ${product.stock<1?'out':''}">${product.stock>0?`✓ ${product.stock} available`:"Out of stock"}</div><div class="detail-actions"><button class="pay buy-now-modern" ${product.stock<1?"disabled":""} onclick="openCheckout()"><span>🛒</span><b>BUY NOW</b><span class="arrow">→</span></button></div><div class="product-hint">Secure checkout · Pay with Waychit</div></div>
     </div></div>`;
   window.__productImages=imgs;
   $("modal").classList.add("show");
@@ -89,8 +89,6 @@ async function buy(id){
     // If the same product is already open, update only its data without
     // recreating the sheet, preventing flicker and keeping the UI instant.
     if(cached && $("modal").classList.contains("show") && Number(selected?.id)===Number(id)){
-      const optionsChanged=String(cached.option_config||"")!==String(fresh.option_config||"");
-      if(optionsChanged){renderProductDetail(fresh);return;}
       selected=fresh;
       const name=document.querySelector(".modern-detail-info h2");
       const price=document.querySelector(".modern-detail-info .detail-price");
@@ -108,14 +106,11 @@ async function buy(id){
 function pickImage(i){let im=window.__productImages?.[i];if(im){$("mainProductImage").src=im;document.querySelectorAll(".thumbs button").forEach((b,n)=>b.classList.toggle("active",n===i))}}
 function openCheckout(){
   if(!selected)return;
-  if(!validateProductOptions())return toast("Please select the required product options.");
   const savedCustomer=JSON.parse(localStorage.getItem("basseCustomer")||"null");
   const savedName=esc(savedCustomer?.name||"");
   const savedPhone=esc(String(savedCustomer?.phone||"").replace(/\D/g,"").replace(/^220/,""));
   checkoutGps={lat:null,lng:null,accuracy:null};
-  const selectedOptions=getSelectedOptions();
-  const optionsSummary=Object.entries(selectedOptions).map(([k,v])=>`<span>${esc(k)}: <b>${esc(v)}</b></span>`).join("");
-  $("modal").innerHTML=`<div class="sheet checkout-sheet"><button class="close" onclick="buy(${selected.id})">←</button><div class="checkout-head"><span class="mini-bag">🛍️</span><div><small>SECURE CHECKOUT</small><h2>Your order</h2></div></div><p class="muted">${esc(selected.name)}</p>${optionsSummary?`<div class="selected-options-summary">${optionsSummary}</div>`:""}<div class="form"><label>Quantity</label><div class="qty-row"><button type="button" onclick="changeQty(-1)">−</button><input id="qty" type="number" min="1" max="${selected.stock}" value="1"><button type="button" onclick="changeQty(1)">+</button></div><label>Full Name</label><input id="name" autocomplete="name" placeholder="Your name" value="${savedName}"><label>WhatsApp Number</label><input id="phone" inputmode="numeric" autocomplete="tel" placeholder="7XXXXXX" value="${savedPhone}"><small>+220 will be added automatically. No account/login is required.</small><label>Delivery Area</label><select id="loc"><option>Basse</option><option>Bansang</option><option>Fatoto</option><option>Other</option></select><button type="button" class="location-btn" onclick="captureCheckoutLocation()">📍 USE MY CURRENT GPS LOCATION</button><small id="checkoutGpsState" class="gps-note">GPS is optional. Your written delivery area can still be used.</small><div class="summary"><div class="row"><span>Product</span><b>${money(selected.price)}</b></div><div class="row total-row"><span>Total</span><b id="total">${money(selected.price)}</b></div></div><button class="pay pulse" onclick="placeOrder()">💳 PAY WITH WAYCHIT <span>→</span></button><div class="secure-note">🔒 Secure checkout · You will be redirected to Waychit</div></div></div>`;
+  $("modal").innerHTML=`<div class="sheet checkout-sheet"><button class="close" onclick="buy(${selected.id})">←</button><div class="checkout-head"><span class="mini-bag">🛍️</span><div><small>SECURE CHECKOUT</small><h2>Your order</h2></div></div><p class="muted">${esc(selected.name)}</p><div class="form"><label>Quantity</label><div class="qty-row"><button type="button" onclick="changeQty(-1)">−</button><input id="qty" type="number" min="1" max="${selected.stock}" value="1"><button type="button" onclick="changeQty(1)">+</button></div><label>Full Name</label><input id="name" autocomplete="name" placeholder="Your name" value="${savedName}"><label>WhatsApp Number</label><input id="phone" inputmode="numeric" autocomplete="tel" placeholder="7XXXXXX" value="${savedPhone}"><small>+220 will be added automatically. No account/login is required.</small><label>Delivery Area</label><select id="loc"><option>Basse</option><option>Bansang</option><option>Fatoto</option><option>Other</option></select><button type="button" class="location-btn" onclick="captureCheckoutLocation()">📍 USE MY CURRENT GPS LOCATION</button><small id="checkoutGpsState" class="gps-note">GPS is optional. Your written delivery area can still be used.</small><div class="summary"><div class="row"><span>Product</span><b>${money(selected.price)}</b></div><div class="row total-row"><span>Total</span><b id="total">${money(selected.price)}</b></div></div><button class="pay pulse" onclick="placeOrder()">💳 PAY WITH WAYCHIT <span>→</span></button><div class="secure-note">🔒 Secure checkout · You will be redirected to Waychit</div></div></div>`;
   $("modal").classList.add("show");$("qty").oninput=updateTotal;$("phone").addEventListener("keydown",e=>{if(e.key==="Enter")placeOrder()});
 }
 function changeQty(d){let q=Math.max(1,Math.min(selected.stock,(+$('qty').value||1)+d));$('qty').value=q;updateTotal()}
@@ -276,7 +271,7 @@ async function placeOrder(){
   if(phone.length<6)return toast("Please enter a valid WhatsApp number.");
   let btn=document.querySelector('.pay');if(btn){btn.disabled=true;btn.innerHTML="⏳ CONNECTING TO WAYCHIT…"}
   try{
-    let r=await fetch("/api/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({productId:selected.id,quantity:q,name:$('name').value.trim(),whatsapp:phone,location:$('loc').value,customerLat:checkoutGps.lat,customerLng:checkoutGps.lng,customerAccuracy:checkoutGps.accuracy,selectedOptions:getSelectedOptions()})});
+    let r=await fetch("/api/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({productId:selected.id,quantity:q,name:$('name').value.trim(),whatsapp:phone,location:$('loc').value,customerLat:checkoutGps.lat,customerLng:checkoutGps.lng,customerAccuracy:checkoutGps.accuracy})});
     let d=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(d.error||"Could not create your order.");
     localStorage.setItem("basseLastOrder",JSON.stringify(d.order));
@@ -290,13 +285,12 @@ async function placeOrder(){
     throw new Error(d.paymentError||"Waychit payment could not be started.");
   }catch(e){if(btn){btn.disabled=false;btn.innerHTML="💳 PAY WITH WAYCHIT <span>→</span>"}showReturn({id:"",total:selected.price*q,whatsappSupport:""},"",false,"",e.message||"Payment could not be started.")}
 }
-function orderOptionsText(o){try{const x=JSON.parse(o.selected_options||"{}");return Object.entries(x).map(([k,v])=>`${k}: ${v}`).join("\n")}catch{return ""}}
-function receiptMessage(o){const opts=orderOptionsText(o);return `Hello BASSE ONLINE SHOP 👋
+function receiptMessage(o){return `Hello BASSE ONLINE SHOP 👋
 
 I have paid for my order.
 
 Order: ${o.id}
-Product: ${o.product_name} × ${o.quantity}${opts?`\n${opts}`:""}
+Product: ${o.product_name} × ${o.quantity}
 Total: ${money(o.total)}
 Location: ${o.location}
 Customer WhatsApp: +${o.whatsapp}
@@ -306,7 +300,7 @@ Please confirm my order. Thank you.`}
 function showReturn(o,msg,paid,adminWhatsApp,note=""){
   let target=String(adminWhatsApp||o.whatsappSupport||"").replace(/\D/g,"");
   let href=target?`https://wa.me/${target}?text=${encodeURIComponent(msg||receiptMessage(o))}`:"#";
-  $("modal").innerHTML=`<div class="sheet return-sheet"><button class="close" onclick="closeModal()">×</button><div class="result-icon">${paid?"✓":"🧾"}</div><h2>${paid?"Payment successful!":"Order received"}</h2><p>${paid?"Your payment has been confirmed.":note||"Your order has been received."}</p>${o.id?`<div class="summary"><div class="row"><span>Order</span><b>${esc(o.id)}</b></div><div class="row"><span>Product</span><b>${esc(o.product_name)} × ${o.quantity}</b></div>${orderOptionsText(o)?`<div class="row"><span>Options</span><b style="white-space:pre-line;text-align:right">${esc(orderOptionsText(o))}</b></div>`:""}<div class="row"><span>Total</span><b>${money(o.total)}</b></div><div class="row"><span>Payment</span><b>${paid?"PAID":"PENDING"}</b></div></div>`:""}${target&&o.id?`<a class="whats" href="${href}" target="_blank" rel="noopener">💬 SEND ORDER TO BASSE SHOP</a>`:""}${o.id?`<button class="secondary-btn" onclick="openOrderTracking('${o.id}')">🚚 TRACK ORDER</button>`:""}<button class="secondary-btn" onclick="closeModal()">CONTINUE SHOPPING</button></div>`;$('modal').classList.add('show')
+  $("modal").innerHTML=`<div class="sheet return-sheet"><button class="close" onclick="closeModal()">×</button><div class="result-icon">${paid?"✓":"🧾"}</div><h2>${paid?"Payment successful!":"Order received"}</h2><p>${paid?"Your payment has been confirmed.":note||"Your order has been received."}</p>${o.id?`<div class="summary"><div class="row"><span>Order</span><b>${esc(o.id)}</b></div><div class="row"><span>Total</span><b>${money(o.total)}</b></div><div class="row"><span>Payment</span><b>${paid?"PAID":"PENDING"}</b></div></div>`:""}${target&&o.id?`<a class="whats" href="${href}" target="_blank" rel="noopener">💬 SEND ORDER TO BASSE SHOP</a>`:""}${o.id?`<button class="secondary-btn" onclick="openOrderTracking('${o.id}')">🚚 TRACK ORDER</button>`:""}<button class="secondary-btn" onclick="closeModal()">CONTINUE SHOPPING</button></div>`;$('modal').classList.add('show')
 }
 async function waitForPayment(id,attempt=0){
   try{
@@ -492,6 +486,7 @@ function connectLive(){
   }catch{setTimeout(connectLive,3000)}
 }
 connectLive();
+startViewerPresence();
 // Safety fallback for networks that block EventSource.
 setInterval(()=>{if(document.visibilityState==="visible"&&!$("modal").classList.contains("show"))loadProducts(true)},5000);
 

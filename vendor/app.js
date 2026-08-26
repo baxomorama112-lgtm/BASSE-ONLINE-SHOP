@@ -55,9 +55,9 @@ async function refresh(){
     $("pending").textContent=st.pendingProducts;
     $("sales").textContent=money(st.sales);
     $("earnings").textContent=money(st.earnings);
-    $("productsList").innerHTML=ps.map(p=>`<div class="product-row"><img src="${p.image||""}"><div><b>${esc(p.name)}</b><small>${money(p.price)} · Stock ${p.stock}</small></div><span class="badge">${p.approval_status}</span><button type="button" onclick="openEditProduct(${p.id})">✎ EDIT</button></div>`).join("")||"<p>No products yet.</p>";
-    $("orders").innerHTML=os.map(o=>`<div class="order-row"><div><b>${esc(o.id)}</b><br><small>${esc(o.product_name)} × ${o.quantity}${orderOptionsText(o)?` · ${orderOptionsText(o)}`:""} · ${esc(o.customer_name)}</small></div><b>${money(o.total)}</b><span class="badge">${o.payment_status}</span></div>`).join("")||"<p>No orders yet.</p>";
-    $("transactions").innerHTML=ts.map(t=>`<div class="order-row"><div><b>${esc(t.id)}</b><br><small>${esc(t.product_name)} × ${t.quantity}${orderOptionsText(t)?` · ${orderOptionsText(t)}`:""} · ${esc(t.created_at||"")}</small></div><div><b>${money(t.total)}</b><br><small>Commission ${money(t.commission)} · Earnings ${money(t.vendor_earnings)}</small></div><span class="badge">${t.payment_status}</span></div>`).join("")||"<p>No transactions yet.</p>";
+    $("productsList").innerHTML=ps.map(p=>`<div class="product-row"><img src="${p.image||""}"><div><b>${esc(p.name)}</b><small>${money(p.price)} · Stock ${p.stock}</small></div><span class="badge">${p.approval_status}</span></div>`).join("")||"<p>No products yet.</p>";
+    $("orders").innerHTML=os.map(o=>`<div class="order-row"><div><b>${esc(o.id)}</b><br><small>${esc(o.product_name)} × ${o.quantity} · ${esc(o.customer_name)}</small></div><b>${money(o.total)}</b><span class="badge">${o.payment_status}</span></div>`).join("")||"<p>No orders yet.</p>";
+    $("transactions").innerHTML=ts.map(t=>`<div class="order-row"><div><b>${esc(t.id)}</b><br><small>${esc(t.product_name)} × ${t.quantity} · ${esc(t.created_at||"")}</small></div><div><b>${money(t.total)}</b><br><small>Commission ${money(t.commission)} · Earnings ${money(t.vendor_earnings)}</small></div><span class="badge">${t.payment_status}</span></div>`).join("")||"<p>No transactions yet.</p>";
   }catch(e){
     if(/login|approved|unauthorized/i.test(e.message))showLogin();
   }
@@ -105,27 +105,18 @@ function closeModal(){
   if(submitBusy)return;
   $("modal")?.classList.add("hidden");
 }
-
-function parseProductConfig(p){let c={enabled:false,options:{}};try{c=JSON.parse(p?.option_config||"{}")}catch{};if(!c.options)c.options={};return c}
-function optionEditorHTML(p){const c=parseProductConfig(p);return `<div class="variant-box"><label><input type="checkbox" id="variantEnabled" ${c.enabled?'checked':''}> Product has options (Color, Size, Phone Model, etc.)</label><div id="variantFields"></div><input type="hidden" name="optionConfig" id="optionConfig"></div>`}
-function renderVariantFields(p){const c=parseProductConfig(p),wrap=$("variantFields");if(!wrap)return;const names=["Color","Size","Phone Model","Storage","Other"];wrap.innerHTML=(c.enabled?`<p class="submit-note">Enter options separated by commas.</p>`+names.map(n=>`<label>${n}<input data-varname="${n}" value="${esc((c.options||{})[n]?.join(', ')||'')}" placeholder="${n==='Size'?'40, 41, 42':n==='Color'?'Black, White, Red':n==='Phone Model'?'iPhone 13, Samsung A15':'Option 1, Option 2'}"></label>`).join(''):"");wrap.querySelectorAll('input[data-varname]').forEach(x=>x.addEventListener('input',syncVariants))}
-function syncVariants(){const en=$("variantEnabled")?.checked,options={};document.querySelectorAll('[data-varname]').forEach(x=>{const vals=x.value.split(',').map(v=>v.trim()).filter(Boolean);if(vals.length)options[x.dataset.varname]=vals});if($("optionConfig"))$("optionConfig").value=JSON.stringify({enabled:!!en,options})}
-
 function openAdd(){
   submitBusy=false;
   currentSubmissionKey="";
   $("modal").classList.remove("hidden");
-  $("form").innerHTML=`<button class="modal-close" type="button" aria-label="Close" onclick="closeModal()">×</button><div class="modal-title"><h2>Add Product</h2><p>Submit your product once. It will stay saved while waiting for Admin approval.</p></div><form class="form" id="pf"><input name="name" placeholder="Product name" autocomplete="off" required><select name="category"><option>Fashion</option><option>Electronics</option><option>Phones</option><option>Beauty</option><option>Home & Living</option><option>Accessories</option></select><input name="price" type="number" min="0" step="1" inputmode="numeric" placeholder="Price" required><input name="stock" type="number" min="0" step="1" inputmode="numeric" placeholder="Stock" required><label class="file-label"><span>Product photos</span><input name="images" type="file" accept="image/*" multiple></label><textarea name="description" placeholder="Description"></textarea>${optionEditorHTML(null)}<button class="submit-product" type="submit"><span>✓</span> SUBMIT FOR APPROVAL <b>→</b></button><div class="submit-note">One click • Saved securely • Admin approval required</div></form>`;
+  $("form").innerHTML=`<button class="modal-close" type="button" aria-label="Close" onclick="closeModal()">×</button><div class="modal-title"><h2>Add Product</h2><p>Submit your product once. It will stay saved while waiting for Admin approval.</p></div><form class="form" id="pf"><input name="name" placeholder="Product name" autocomplete="off" required><select name="category"><option>Fashion</option><option>Electronics</option><option>Phones</option><option>Beauty</option><option>Home & Living</option><option>Accessories</option></select><input name="price" type="number" min="0" step="1" inputmode="numeric" placeholder="Price" required><input name="stock" type="number" min="0" step="1" inputmode="numeric" placeholder="Stock" required><label class="file-label"><span>Product photos</span><input name="images" type="file" accept="image/*" multiple></label><textarea name="description" placeholder="Description"></textarea><button class="submit-product" type="submit"><span>✓</span> SUBMIT FOR APPROVAL <b>→</b></button><div class="submit-note">One click • Saved securely • Admin approval required</div></form>`;
   const form=$("pf");
   restoreDraft(form);
   form.addEventListener("input",()=>saveDraft(form));
   form.addEventListener("change",()=>saveDraft(form));
-  renderVariantFields(null);$("variantEnabled")?.addEventListener("change",()=>{renderVariantFields(null);syncVariants()});syncVariants();form.onsubmit=submitProduct;
+  form.onsubmit=submitProduct;
   setTimeout(()=>form.elements.name?.focus(),50);
 }
-
-async function openEditProduct(id){try{const ps=await api('/api/vendor/products');const p=ps.find(x=>Number(x.id)===Number(id));if(!p)return showToast('Product not found','error');submitBusy=false;$("modal").classList.remove('hidden');$("form").innerHTML=`<button class="modal-close" type="button" onclick="closeModal()">×</button><div class="modal-title"><h2>Edit Product</h2><p>Update your product and options.</p></div><form class="form" id="editPf"><input name="name" value="${esc(p.name)}" required><select name="category">${["Fashion","Electronics","Phones","Beauty","Home & Living","Accessories"].map(c=>`<option ${c===p.category?'selected':''}>${c}</option>`).join('')}</select><input name="price" type="number" min="0" value="${p.price}" required><input name="stock" type="number" min="0" value="${p.stock}" required><textarea name="description">${esc(p.description||'')}</textarea>${optionEditorHTML(p)}<button class="submit-product" type="submit">SAVE CHANGES</button></form>`;renderVariantFields(p);$("variantEnabled")?.addEventListener('change',()=>{renderVariantFields(p);syncVariants()});syncVariants();$("editPf").onsubmit=async e=>{e.preventDefault();const btn=e.target.querySelector('.submit-product');btn.disabled=true;try{await api('/api/vendor/products/'+id,{method:'PUT',body:new FormData(e.target)});closeModal();refresh();showToast('Product updated successfully ✓')}catch(x){btn.disabled=false;showToast(x.message,'error')}}}catch(e){showToast(e.message,'error')}}
-
 async function submitProduct(e){
   e.preventDefault();
   if(submitBusy)return;
@@ -152,7 +143,6 @@ async function submitProduct(e){
     showToast(x.message||"Network problem. Your product is still here — press submit again.","error");
   }
 }
-function orderOptionsText(o){try{const x=JSON.parse(o.selected_options||"{}");return Object.entries(x).map(([k,v])=>`${esc(k)}: ${esc(v)}`).join(" · ")}catch{return ""}}
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 async function boot(){
   if(!token){showLogin();return}
