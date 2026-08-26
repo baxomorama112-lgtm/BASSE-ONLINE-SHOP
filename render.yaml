@@ -6,7 +6,12 @@ services:
     buildCommand: npm install
     startCommand: npm start
     autoDeployTrigger: commit
-    plan: free
+    plan: starter
+    disk:
+      name: basse-shop-data
+      mountPath: /var/data
+      sizeGB: 1
+    healthCheckPath: /api/health
     envVars:
       - key: ADMIN_EMAIL
         sync: false
@@ -23,4 +28,4 @@ services:
       - key: BASSE_MARKET_WHATSAPP
         value: 2206963349
       - key: DATA_DIR
-        value: /opt/render/project/src/server/data
+        value: /var/data

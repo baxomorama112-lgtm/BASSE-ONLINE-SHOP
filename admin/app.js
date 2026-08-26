@@ -82,6 +82,11 @@ async function restoreBackup(input){
   }catch(e){notify(e.message||"Restore failed.",true);input.value=""}
 }
 let liveDeliveryStream=null,liveDeliveryTimer=null,liveDeliveryMap=null,liveDeliveryMarker=null,liveCustomerMarker=null,liveDeliveryLine=null,liveDeliveryId=null,liveDeliveryOrderId=null;
+const adminFallbackMaps={};
+function adminMercator(lat,lng,z){const n=Math.pow(2,z),x=(lng+180)/360*n,rad=lat*Math.PI/180,y=(1-Math.asinh(Math.tan(rad))/Math.PI)/2*n;return{x:x*256,y:y*256}}
+function adminFallbackTile(x,y,z){const n=Math.pow(2,z);return `https://tile.openstreetmap.org/${z}/${((x%n)+n)%n}/${Math.max(0,Math.min(n-1,y))}.png`}
+function initAdminFallbackMap(dlat,dlng,clat,clng){const el=$("adminLiveMap");if(!el)return;el.innerHTML="";el.classList.add("admin-fallback-map");const wrap=document.createElement("div");wrap.className="admin-fallback-inner";el.appendChild(wrap);const z=15,c=adminMercator(clat,clng,z),tx=Math.floor(c.x/256),ty=Math.floor(c.y/256);for(let yy=-1;yy<=1;yy++)for(let xx=-1;xx<=1;xx++){const img=document.createElement("img");img.src=adminFallbackTile(tx+xx,ty+yy,z);img.className="admin-fallback-tile";img.style.left=((tx+xx)*256-c.x+el.clientWidth/2)+"px";img.style.top=((ty+yy)*256-c.y+el.clientHeight/2)+"px";wrap.appendChild(img)}const cust=document.createElement("div");cust.className="admin-fallback-marker admin-fallback-customer";cust.textContent="📍 Customer";wrap.appendChild(cust);const drv=document.createElement("div");drv.className="admin-fallback-marker admin-fallback-driver";drv.textContent="🛵 Driver";wrap.appendChild(drv);const line=document.createElement("div");line.className="admin-fallback-line";wrap.appendChild(line);adminFallbackMaps.current={el,wrap,z,clat,clng,cust,drv,line};updateAdminFallbackMap(dlat,dlng)}
+function updateAdminFallbackMap(dlat,dlng){const f=adminFallbackMaps.current;if(!f)return;const cp=adminMercator(f.clat,f.clng,f.z),ox=f.el.clientWidth/2-cp.x,oy=f.el.clientHeight/2-cp.y;const cx=cp.x+ox,cy=cp.y+oy;f.cust.style.left=(cx-45)+"px";f.cust.style.top=(cy-16)+"px";if(Number.isFinite(dlat)&&Number.isFinite(dlng)){const dp=adminMercator(dlat,dlng,f.z),dx=dp.x+ox,dy=dp.y+oy;f.drv.style.left=(dx-40)+"px";f.drv.style.top=(dy-16)+"px";const dist=Math.hypot(dx-cx,dy-cy);f.line.style.left=cx+"px";f.line.style.top=cy+"px";f.line.style.width=dist+"px";f.line.style.transform="rotate("+Math.atan2(dy-cy,dx-cx)+"rad)"}}
 function liveMapTiles(map){
   const providers=[
     ["https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png","© OpenStreetMap contributors"],
@@ -120,7 +125,10 @@ async function refreshLiveDelivery(initial){
     if(meta)meta.innerHTML=`<b>#${esc(row.order_id)}</b> · ${esc(row.customer_name||"Customer")} · Driver: <b>${esc(row.driver_name||"Unassigned")}</b> · <b>${esc(String(row.status||"").replaceAll("_"," "))}</b>`;
     const clat=Number(row.customer_lat),clng=Number(row.customer_lng),dlat=Number(row.lat),dlng=Number(row.lng),hc=Number.isFinite(clat)&&Number.isFinite(clng),hd=Number.isFinite(dlat)&&Number.isFinite(dlng);
     if(!el)return;
-    if(!window.L){el.innerHTML='<div class="map-placeholder">📍<br><b>Map service unavailable</b><small>Refresh to retry.</small></div>';return}
+    if(!window.L){
+      if(hc||hd){initAdminFallbackMap(hd?dlat:clat,hd?dlng:clng,clat,clng);if(status)status.textContent=hd?"● LIVE GPS":"● WAITING FOR GPS";return}
+      el.innerHTML='<div class="map-placeholder">📍<br><b>Waiting for GPS</b><small>The driver has not shared a location yet.</small></div>';return
+    }
     if(!hc&&!hd){el.innerHTML='<div class="map-placeholder">📍<br><b>Waiting for GPS</b><small>The driver has not shared a location yet.</small></div>';return}
     if(!liveDeliveryMap){el.innerHTML="";const center=hd?[dlat,dlng]:[clat,clng];liveDeliveryMap=L.map(el,{zoomControl:true,scrollWheelZoom:true,preferCanvas:true,fadeAnimation:false,zoomAnimation:true,markerZoomAnimation:false}).setView(center,15);liveMapTiles(liveDeliveryMap);requestAnimationFrame(()=>liveDeliveryMap?.invalidateSize({pan:false}));}
     if(hc){if(!liveCustomerMarker)liveCustomerMarker=L.marker([clat,clng],{icon:L.divIcon({className:"basse-map-marker customer-marker",html:"<span>📍</span><b>Customer</b>",iconSize:[82,30],iconAnchor:[12,28],zIndexOffset:500})}).addTo(liveDeliveryMap);else liveCustomerMarker.setLatLng([clat,clng])}

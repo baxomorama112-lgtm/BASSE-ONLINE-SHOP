@@ -9,9 +9,13 @@ app.use("/downloads",express.static(path.join(ROOT,"../downloads"),{fallthrough:
 app.get("/download",(req,res)=>{
   res.sendFile(path.join(ROOT,"../marketplace/download.html"));
 });
+app.get("/api/health",(req,res)=>{
+  const productCount=Number(db.prepare("SELECT COUNT(*) c FROM products").get().c);
+  res.json({ok:true,productCount,dataDir:DATA_DIR,persistentDataDir:DATA_DIR});
+});
 app.use("/admin",express.static(path.join(ROOT,"../admin")));app.use("/vendor",express.static(path.join(ROOT,"../vendor")));app.use("/driver",express.static(path.join(ROOT,"../driver")));
 app.use("/",express.static(path.join(ROOT,"../marketplace")));
-const DB_PATH=path.join(DATA_DIR,"basse-shop.db"),BACKUP_PATH=path.join(DATA_DIR,"catalog-backup.json");
+const DB_PATH=path.join(DATA_DIR,"basse-shop.db"),BACKUP_PATH=path.join(DATA_DIR,"catalog-backup.json"),PREV_BACKUP_PATH=path.join(DATA_DIR,"catalog-backup.previous.json");
 const db=new Database(DB_PATH);db.pragma("journal_mode=WAL");db.pragma("synchronous=FULL");db.pragma("busy_timeout=5000");
 db.exec(`CREATE TABLE IF NOT EXISTS products(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT,category TEXT,price INTEGER,stock INTEGER,description TEXT,image TEXT,active INTEGER DEFAULT 1,created_at TEXT DEFAULT CURRENT_TIMESTAMP,options_json TEXT DEFAULT '{}');
 CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY,product_id INTEGER,product_name TEXT,quantity INTEGER,customer_name TEXT,whatsapp TEXT,location TEXT,total INTEGER,payment_status TEXT DEFAULT 'PENDING',order_status TEXT DEFAULT 'NEW',waychit_request_id TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,vendor_id INTEGER DEFAULT NULL,commission INTEGER DEFAULT 0,vendor_earnings INTEGER DEFAULT 0);
@@ -81,8 +85,16 @@ function buildFullBackupSnapshot(reason="auto"){
 function backupShopData(reason="auto"){
   try{
     const data=buildFullBackupSnapshot(reason);
+    // Never overwrite a healthy non-empty backup with an empty shop after a restart.
+    const currentBackup=fs.existsSync(BACKUP_PATH)?JSON.parse(fs.readFileSync(BACKUP_PATH,"utf8")):null;
+    const currentProducts=Number(data.meta?.productCount||0), previousProducts=Number(currentBackup?.meta?.productCount||0);
+    if(currentProducts===0 && previousProducts>0){
+      console.warn("BASSE backup protection: refusing to replace a non-empty backup with an empty database.");
+      return {ok:true,protected:true,createdAt:currentBackup.createdAt,meta:currentBackup.meta,cloudConfigured:false,cloudStatus:"disabled"};
+    }
     const tmp=BACKUP_PATH+".tmp";
     fs.writeFileSync(tmp,JSON.stringify(data,null,2),"utf8");
+    if(fs.existsSync(BACKUP_PATH)) fs.renameSync(BACKUP_PATH,PREV_BACKUP_PATH);
     fs.renameSync(tmp,BACKUP_PATH);
     return {ok:true,createdAt:data.createdAt,meta:data.meta,cloudConfigured:false,cloudStatus:"disabled"};
   }catch(e){
@@ -96,10 +108,18 @@ function restoreShopBackupIfEmpty(){
   try{
     const counts=BACKUP_TABLES.map(t=>Number(db.prepare(`SELECT COUNT(*) c FROM ${t}`).get().c));
     if(counts.some(Boolean)||!fs.existsSync(BACKUP_PATH))return false;
-    const data=JSON.parse(fs.readFileSync(BACKUP_PATH,"utf8"));
+    let data=null;
+    const candidates=[BACKUP_PATH,PREV_BACKUP_PATH];
+    for(const candidate of candidates){
+      try{
+        if(!fs.existsSync(candidate))continue;
+        const parsed=JSON.parse(fs.readFileSync(candidate,"utf8"));
+        if(parsed?.tables?.products && Number(parsed?.meta?.productCount||parsed.tables.products.length)>0){data=parsed;break;}
+      }catch{}
+    }
     if(!data?.tables?.products)return false;
     const schemas={
-      products:["id","name","category","price","stock","description","image","active","created_at","images","vendor_id"],
+      products:["id","name","category","price","stock","description","image","active","created_at","images","vendor_id","options_json"],
       orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings","customer_lat","customer_lng","customer_accuracy"],
       vendors:["id","full_name","business_name","whatsapp","email","email_verified","verification_code","verification_expires","location","category","description","password_hash","status","created_at"],
       vendor_products:["id","product_id","vendor_id","status","created_at"],

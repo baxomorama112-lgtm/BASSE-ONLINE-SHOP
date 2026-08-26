@@ -24,7 +24,22 @@ function mapTileLayer(map){
   let switched=false;layer.on("tileerror",()=>{if(switched)return;switched=true;try{map.removeLayer(layer)}catch{}layer=L.tileLayer(providers[1][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[1][1]}).addTo(map)});
   return layer;
 }
-function initMap(d){if(!window.L)return;const el=$("map-"+d.id);if(!el||!Number.isFinite(Number(d.customer_lat))||!Number.isFinite(Number(d.customer_lng)))return;const clat=Number(d.customer_lat),clng=Number(d.customer_lng);const map=L.map(el,{zoomControl:true,scrollWheelZoom:false,dragging:true,doubleClickZoom:false,boxZoom:false,keyboard:true,preferCanvas:true}).setView([clat,clng],15);mapTileLayer(map);const customer=L.marker([clat,clng],{icon:L.divIcon({className:"basse-map-marker customer-marker",html:"<span>📍</span><b>Customer</b>",iconSize:[82,30],iconAnchor:[12,28]})}).addTo(map).bindPopup("📍 Customer delivery location");let driver=null,line=null;let initialFit=true;if(Number.isFinite(Number(d.lat))&&Number.isFinite(Number(d.lng))){driver=L.marker([Number(d.lat),Number(d.lng)],{icon:L.divIcon({className:"basse-map-marker driver-marker",html:"<span>🛵</span><b>Driver</b>",iconSize:[70,30],iconAnchor:[12,28]})}).addTo(map).bindPopup("🛵 Driver");line=L.polyline([[Number(d.lat),Number(d.lng)],[clat,clng]],{weight:4,dashArray:"8 8"}).addTo(map);map.fitBounds(L.latLngBounds([[Number(d.lat),Number(d.lng)],[clat,clng]]),{padding:[25,25],maxZoom:16});initialFit=false}else{customer.openPopup()} requestAnimationFrame(()=>map.invalidateSize({pan:false}));maps[d.id]={map,customer,driver,line,clat,clng,initialFit};setTimeout(()=>map.invalidateSize({pan:false}),150);setTimeout(()=>map.invalidateSize({pan:false}),500)}
+function initMap(d){
+  if(!window.L){initFallbackMap(d);return}
+  const el=$("map-"+d.id);if(!el||!Number.isFinite(Number(d.customer_lat))||!Number.isFinite(Number(d.customer_lng)))return;
+  try{
+    if(maps[d.id]){try{maps[d.id].map.remove()}catch{}delete maps[d.id]}
+    const clat=Number(d.customer_lat),clng=Number(d.customer_lng);
+    const map=L.map(el,{zoomControl:true,scrollWheelZoom:false,dragging:true,doubleClickZoom:false,boxZoom:false,keyboard:true,preferCanvas:true,fadeAnimation:false,zoomAnimation:false,markerZoomAnimation:false}).setView([clat,clng],15);
+    mapTileLayer(map);
+    const customer=L.marker([clat,clng],{icon:L.divIcon({className:"basse-map-marker customer-marker",html:"<span>📍</span><b>Customer</b>",iconSize:[82,30],iconAnchor:[12,28],zIndexOffset:500})}).addTo(map).bindPopup("📍 Customer delivery location");
+    let driver=null,line=null;let initialFit=true;
+    if(Number.isFinite(Number(d.lat))&&Number.isFinite(Number(d.lng))){driver=L.marker([Number(d.lat),Number(d.lng)],{icon:L.divIcon({className:"basse-map-marker driver-marker",html:"<span>🛵</span><b>Driver</b>",iconSize:[70,30],iconAnchor:[12,28],zIndexOffset:1000})}).addTo(map).bindPopup("🛵 Driver");line=L.polyline([[Number(d.lat),Number(d.lng)],[clat,clng]],{weight:4,dashArray:"8 8"}).addTo(map);map.fitBounds(L.latLngBounds([[Number(d.lat),Number(d.lng)],[clat,clng]]),{padding:[25,25],maxZoom:16});initialFit=false}
+    maps[d.id]={map,customer,driver,line,clat,clng,initialFit};
+    const resize=()=>{try{map.invalidateSize({pan:false})}catch{}};
+    map.whenReady(()=>{resize();setTimeout(resize,150);setTimeout(resize,500)});requestAnimationFrame(resize);
+  }catch(e){console.warn("Driver Leaflet map init failed",e);delete maps[d.id];initFallbackMap(d)}
+}
 function syncMapData(d){const m=maps[d.id];if(!m||!window.L)return;requestAnimationFrame(()=>{try{m.map.invalidateSize({pan:false})}catch{}});const lat=Number(d.lat),lng=Number(d.lng);if(Number.isFinite(lat)&&Number.isFinite(lng)){if(!m.driver)m.driver=L.marker([lat,lng],{icon:L.divIcon({className:"basse-map-marker driver-marker",html:"<span>🛵</span><b>Driver</b>",iconSize:[70,30],iconAnchor:[12,28]})}).addTo(m.map).bindPopup("🛵 Driver");else m.driver.setLatLng([lat,lng]);if(!m.line)m.line=L.polyline([[lat,lng],[m.clat,m.clng]],{weight:4,dashArray:"8 8"}).addTo(m.map);else m.line.setLatLngs([[lat,lng],[m.clat,m.clng]]);if(m.initialFit){m.map.fitBounds(L.latLngBounds([[lat,lng],[m.clat,m.clng]]),{padding:[25,25],maxZoom:16});m.initialFit=false}}}
 function updateDriverMap(id,lat,lng){if(!window.L){updateFallbackMap(id,lat,lng);return}const m=maps[id];if(!m)return;if(!m.driver)m.driver=L.marker([lat,lng],{icon:L.divIcon({className:"basse-map-marker driver-marker",html:"<span>🛵</span><b>Driver</b>",iconSize:[70,30],iconAnchor:[12,28]})}).addTo(m.map).bindPopup("🛵 Driver");else m.driver.setLatLng([lat,lng]);if(!m.line)m.line=L.polyline([[lat,lng],[m.clat,m.clng]],{weight:4,dashArray:"8 8"}).addTo(m.map);else m.line.setLatLngs([[lat,lng],[m.clat,m.clng]]);m.initialFit=false}
 async function setStatus(id,status){try{await api("/api/driver/deliveries/"+id+"/status",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status})});if(status==="ON_THE_WAY")startGps(id);if(status==="DELIVERED")stopGps();lastStructure="";load()}catch(e){alert(e.message)}}
@@ -33,6 +48,10 @@ function stopGps(){if(activeGps!==null&&navigator.geolocation){navigator.geoloca
 function logout(){stopGps();if(window.__driverTimer)clearInterval(window.__driverTimer);Object.values(maps).forEach(m=>{try{m.map.remove()}catch{}});maps={};localStorage.removeItem("basseDriverToken");token="";$("app").classList.add("hidden");$("login").classList.remove("hidden")}
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
 if(token)start();
-
+function ensureDriverMaps(){
+  deliveries.forEach(d=>{if(!Number.isFinite(Number(d.customer_lat))||!Number.isFinite(Number(d.customer_lng)))return;if(window.L&&maps[d.id]){try{maps[d.id].map.invalidateSize({pan:false})}catch{}}else if(window.L)initMap(d);else if(!fallbackMaps[d.id])initFallbackMap(d)});
+}
+window.addEventListener("pageshow",()=>setTimeout(ensureDriverMaps,150));
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)setTimeout(ensureDriverMaps,150)});
 window.addEventListener("resize",()=>Object.values(maps).forEach(m=>{try{m.map.invalidateSize({pan:false})}catch{}}));
 window.addEventListener("orientationchange",()=>setTimeout(()=>Object.values(maps).forEach(m=>{try{m.map.invalidateSize({pan:false})}catch{}}),300));
