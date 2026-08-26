@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS deliveries(
   FOREIGN KEY(driver_id) REFERENCES delivery_drivers(id)
 );`);
 try{db.exec("ALTER TABLE products ADD COLUMN images TEXT DEFAULT ''")}catch(e){}
+try{db.exec("ALTER TABLE orders ADD COLUMN customer_lat REAL")}catch(e){}
+try{db.exec("ALTER TABLE orders ADD COLUMN customer_lng REAL")}catch(e){}
+try{db.exec("ALTER TABLE orders ADD COLUMN customer_accuracy REAL")}catch(e){}
 const BACKUP_TABLES=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys","delivery_drivers","deliveries"];
 function buildShopSnapshot(){
   const data={version:3,createdAt:new Date().toISOString(),tables:{}};
@@ -92,7 +95,7 @@ function restoreShopBackupIfEmpty(){
     if(!data?.tables?.products)return false;
     const schemas={
       products:["id","name","category","price","stock","description","image","active","created_at","images","vendor_id"],
-      orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings"],
+      orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings","customer_lat","customer_lng","customer_accuracy"],
       vendors:["id","full_name","business_name","whatsapp","email","email_verified","verification_code","verification_expires","location","category","description","password_hash","status","created_at"],
       vendor_products:["id","product_id","vendor_id","status","created_at"],
       customer_accounts:["id","full_name","whatsapp","password_hash","status","created_at"],
@@ -250,7 +253,7 @@ app.post("/api/admin/restore",guard,(req,res)=>{
       const productIns=db.prepare(`INSERT INTO products (${productCols.join(",")}) VALUES (${productCols.map(()=>"?").join(",")})`);
       for(const x of (data.tables.products||[]))productIns.run(...productCols.map(k=>x[k]??null));
       const schemas={
-        orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings"],
+        orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings","customer_lat","customer_lng","customer_accuracy"],
         vendors:["id","full_name","business_name","whatsapp","email","email_verified","verification_code","verification_expires","location","category","description","password_hash","status","created_at"],
         vendor_products:["id","product_id","vendor_id","status","created_at"],
         customer_accounts:["id","full_name","whatsapp","password_hash","status","created_at"],
@@ -326,8 +329,11 @@ app.post("/api/orders",async(req,res)=>{
   const customerAccount=db.prepare("SELECT status FROM customer_accounts WHERE whatsapp=?").get(phone);
   if(customerAccount?.status==='BLOCKED')return res.status(403).json({error:"This customer account is blocked. Please contact BASSE Admin."});
   let vendorId=p.vendor_id||null, commission=Math.round(total*0.10), vendorEarnings=total-commission;
-  db.prepare("INSERT INTO orders(id,product_id,product_name,quantity,customer_name,whatsapp,location,total,vendor_id,commission,vendor_earnings) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
-    .run(id,p.id,p.name,q,String(req.body.name||"").trim(),phone,String(req.body.location||""),total,vendorId,commission,vendorEarnings);
+  const customerLat=Number.isFinite(Number(req.body.customerLat))?Number(req.body.customerLat):null;
+  const customerLng=Number.isFinite(Number(req.body.customerLng))?Number(req.body.customerLng):null;
+  const customerAccuracy=Number.isFinite(Number(req.body.customerAccuracy))?Number(req.body.customerAccuracy):null;
+  db.prepare("INSERT INTO orders(id,product_id,product_name,quantity,customer_name,whatsapp,location,total,vendor_id,commission,vendor_earnings,customer_lat,customer_lng,customer_accuracy) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    .run(id,p.id,p.name,q,String(req.body.name||"").trim(),phone,String(req.body.location||""),total,vendorId,commission,vendorEarnings,customerLat,customerLng,customerAccuracy);
   backupShopData("order-created");
   broadcastLive("orders",{orderId:id});
 
@@ -374,7 +380,7 @@ app.post("/api/orders",async(req,res)=>{
 app.get("/api/order/:id",(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);o?res.json({...o,whatsappSupport:SHOP_WHATSAPP}):res.status(404).json({error:"Order not found"})});
 
 app.get("/api/order/:id/tracking",(req,res)=>{
-  const o=db.prepare("SELECT id,product_name,quantity,customer_name,whatsapp,location,total,payment_status,order_status,created_at FROM orders WHERE id=?").get(req.params.id);
+  const o=db.prepare("SELECT id,product_name,quantity,customer_name,whatsapp,location,total,payment_status,order_status,created_at,customer_lat,customer_lng,customer_accuracy FROM orders WHERE id=?").get(req.params.id);
   if(!o)return res.status(404).json({error:"Order not found"});
   const d=db.prepare(`
     SELECT d.*,dr.full_name AS driver_name,dr.whatsapp AS driver_whatsapp
@@ -450,7 +456,7 @@ app.get("/api/driver/me",driverGuard,(req,res)=>{
 });
 app.get("/api/driver/deliveries",driverGuard,(req,res)=>{
   res.json(db.prepare(`
-    SELECT d.*,o.product_name,o.quantity,o.customer_name,o.whatsapp,o.location,o.total,o.payment_status,o.order_status,
+    SELECT d.*,o.product_name,o.quantity,o.customer_name,o.whatsapp,o.location,o.total,o.payment_status,o.order_status,o.customer_lat,o.customer_lng,o.customer_accuracy,
            v.business_name
     FROM deliveries d JOIN orders o ON o.id=d.order_id
     LEFT JOIN vendors v ON v.id=o.vendor_id
@@ -602,7 +608,7 @@ app.get("/api/admin/deliveries",guard,(req,res)=>{
   const readyOrders=db.prepare("SELECT id FROM orders WHERE payment_status='PAID' AND order_status='READY'").all();
   const tx=db.transaction(rows=>{for(const row of rows)ensureDeliveryForReadyOrder(row.id)}); tx(readyOrders);
   res.json(db.prepare(`
-    SELECT d.*,o.product_name,o.quantity,o.customer_name,o.whatsapp,o.location,o.total,o.payment_status,o.order_status,
+    SELECT d.*,o.product_name,o.quantity,o.customer_name,o.whatsapp,o.location,o.total,o.payment_status,o.order_status,o.customer_lat,o.customer_lng,o.customer_accuracy,
            v.business_name,dr.full_name AS driver_name,dr.whatsapp AS driver_whatsapp
     FROM deliveries d
     JOIN orders o ON o.id=d.order_id

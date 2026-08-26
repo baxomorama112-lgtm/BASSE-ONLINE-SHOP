@@ -1,5 +1,6 @@
 let category="All",selected=null,searchTimer=null,searchIndex=[];
 const $=id=>document.getElementById(id),money=n=>"D"+Number(n||0).toLocaleString();
+let checkoutGps={lat:null,lng:null,accuracy:null},trackingMap=null,trackingPoll=null;
 
 function renderProductGrid(ps, silent=false){
   const grid=$("grid");
@@ -102,7 +103,8 @@ function openCheckout(){
   const savedCustomer=JSON.parse(localStorage.getItem("basseCustomer")||"null");
   const savedName=esc(savedCustomer?.name||"");
   const savedPhone=esc(String(savedCustomer?.phone||"").replace(/\D/g,"").replace(/^220/,""));
-  $("modal").innerHTML=`<div class="sheet checkout-sheet"><button class="close" onclick="buy(${selected.id})">←</button><div class="checkout-head"><span class="mini-bag">🛍️</span><div><small>SECURE CHECKOUT</small><h2>Your order</h2></div></div><p class="muted">${esc(selected.name)}</p><div class="form"><label>Quantity</label><div class="qty-row"><button type="button" onclick="changeQty(-1)">−</button><input id="qty" type="number" min="1" max="${selected.stock}" value="1"><button type="button" onclick="changeQty(1)">+</button></div><label>Full Name</label><input id="name" autocomplete="name" placeholder="Your name" value="${savedName}"><label>WhatsApp Number</label><input id="phone" inputmode="numeric" autocomplete="tel" placeholder="7XXXXXX" value="${savedPhone}"><small>+220 will be added automatically. No account/login is required.</small><label>Location</label><select id="loc"><option>Basse</option><option>Bansang</option><option>Fatoto</option><option>Other</option></select><div class="summary"><div class="row"><span>Product</span><b>${money(selected.price)}</b></div><div class="row total-row"><span>Total</span><b id="total">${money(selected.price)}</b></div></div><button class="pay pulse" onclick="placeOrder()">💳 PAY WITH WAYCHIT <span>→</span></button><div class="secure-note">🔒 Secure checkout · You will be redirected to Waychit</div></div></div>`;
+  checkoutGps={lat:null,lng:null,accuracy:null};
+  $("modal").innerHTML=`<div class="sheet checkout-sheet"><button class="close" onclick="buy(${selected.id})">←</button><div class="checkout-head"><span class="mini-bag">🛍️</span><div><small>SECURE CHECKOUT</small><h2>Your order</h2></div></div><p class="muted">${esc(selected.name)}</p><div class="form"><label>Quantity</label><div class="qty-row"><button type="button" onclick="changeQty(-1)">−</button><input id="qty" type="number" min="1" max="${selected.stock}" value="1"><button type="button" onclick="changeQty(1)">+</button></div><label>Full Name</label><input id="name" autocomplete="name" placeholder="Your name" value="${savedName}"><label>WhatsApp Number</label><input id="phone" inputmode="numeric" autocomplete="tel" placeholder="7XXXXXX" value="${savedPhone}"><small>+220 will be added automatically. No account/login is required.</small><label>Delivery Area</label><select id="loc"><option>Basse</option><option>Bansang</option><option>Fatoto</option><option>Other</option></select><button type="button" class="location-btn" onclick="captureCheckoutLocation()">📍 USE MY CURRENT GPS LOCATION</button><small id="checkoutGpsState" class="gps-note">GPS is optional. Your written delivery area can still be used.</small><div class="summary"><div class="row"><span>Product</span><b>${money(selected.price)}</b></div><div class="row total-row"><span>Total</span><b id="total">${money(selected.price)}</b></div></div><button class="pay pulse" onclick="placeOrder()">💳 PAY WITH WAYCHIT <span>→</span></button><div class="secure-note">🔒 Secure checkout · You will be redirected to Waychit</div></div></div>`;
   $("modal").classList.add("show");$("qty").oninput=updateTotal;$("phone").addEventListener("keydown",e=>{if(e.key==="Enter")placeOrder()});
 }
 function changeQty(d){let q=Math.max(1,Math.min(selected.stock,(+$('qty').value||1)+d));$('qty').value=q;updateTotal()}
@@ -132,22 +134,48 @@ function trackOrderPrompt(){
   if(id&&id.trim())openOrderTracking(id.trim());
 }
 async function openOrderTracking(id){
+  stopTrackingPolling();
   const modal=$("modal");
   modal.innerHTML=`<div class="sheet tracking-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="mini-bag">🚚</span><div><small>BASSE DELIVERY</small><h2>Track Order</h2></div></div><div id="trackingBody"><div class="store-loading">Loading tracking…</div></div></div>`;
   modal.classList.add("show");
+  await refreshTracking(id,true);
+  trackingPoll=setInterval(()=>{if(document.visibilityState!=="hidden")refreshTracking(id,false)},5000);
+}
+async function refreshTracking(id,initial){
   try{
     const r=await fetch("/api/order/"+encodeURIComponent(id)+"/tracking",{cache:"no-store"});const d=await r.json();if(!r.ok)throw Error(d.error||"Order not found");
     const status=d.delivery?.status||d.order.order_status||"NEW";
     const steps=["NEW","READY","ACCEPTED","PICKED_UP","ON_THE_WAY","ARRIVED","DELIVERED"];
     const idx=Math.max(0,steps.indexOf(status));
-    const map=`<div class="live-map-wrap"><div id="customerMap" class="customer-map"><div class="map-placeholder">🗺️<br><b>Live delivery map</b><small>${d.delivery?.lat&&d.delivery?.lng?"Driver GPS is active.":"Waiting for driver location…"}</small></div></div></div>`;
-    $("trackingBody").innerHTML=`<div class="tracking-card"><div class="track-top"><b>#${esc(d.order.id)}</b><span class="badge">${esc(status.replaceAll("_"," "))}</span></div><h3>${esc(d.order.product_name)} × ${d.order.quantity}</h3><p>${esc(d.order.location||"Delivery location pending")}</p>${map}<div class="timeline">${steps.map((x,i)=>`<div class="timeline-step ${i<=idx?"done":""}"><span>${i<=idx?"✓":"•"}</span><b>${x.replaceAll("_"," ")}</b></div>`).join("")}</div><p class="muted">${d.delivery?.driver_name?`Driver: <b>${esc(d.delivery.driver_name)}</b>`:"A driver will be assigned after your order is confirmed."}</p></div>`;
-    if(d.delivery?.lat&&d.delivery?.lng){loadTrackingMap(d.delivery.lat,d.delivery.lng);}
-  }catch(e){$("trackingBody").innerHTML=`<div class="empty-search"><div>🔎</div><h3>Order not found</h3><p>${esc(e.message||"Check your order number.")}</p></div>`}
+    const hasCustomer=Number.isFinite(Number(d.order.customer_lat))&&Number.isFinite(Number(d.order.customer_lng));
+    const hasDriver=Number.isFinite(Number(d.delivery?.lat))&&Number.isFinite(Number(d.delivery?.lng));
+    const map=`<div class="live-map-wrap"><div id="customerMap" class="customer-map"><div class="map-placeholder">🗺️<br><b>Live delivery map</b><small>${hasDriver?"Driver GPS is live — updates every few seconds.":"Waiting for driver location…"}</small></div></div></div>`;
+    const note=hasDriver?`Driver: <b>${esc(d.delivery.driver_name||"Assigned driver")}</b> · ${d.delivery.last_seen?`last update ${new Date(d.delivery.last_seen).toLocaleTimeString()}`:"live"}`:(d.delivery?.driver_name?`Driver: <b>${esc(d.delivery.driver_name)}</b> · Waiting for GPS`:"A driver will be assigned after your order is confirmed.");
+    $("trackingBody").innerHTML=`<div class="tracking-card"><div class="track-top"><b>#${esc(d.order.id)}</b><span class="badge">${esc(status.replaceAll("_"," "))}</span></div><h3>${esc(d.order.product_name)} × ${d.order.quantity}</h3><p>${esc(d.order.location||"Delivery location pending")}${hasCustomer?" · 📍 GPS location saved":""}</p>${map}<div class="timeline">${steps.map((x,i)=>`<div class="timeline-step ${i<=idx?"done":""}"><span>${i<=idx?"✓":"•"}</span><b>${x.replaceAll("_"," ")}</b></div>`).join("")}</div><p class="muted">${note}</p></div>`;
+    if(window.L){loadTrackingMap(d.order.customer_lat,d.order.customer_lng,d.delivery?.lat,d.delivery?.lng);}
+    if(status==="DELIVERED")stopTrackingPolling();
+  }catch(e){if(initial)$("trackingBody").innerHTML=`<div class="empty-search"><div>🔎</div><h3>Order not found</h3><p>${esc(e.message||"Check your order number.")}</p></div>`}
 }
-function loadTrackingMap(lat,lng){
-  const el=$("customerMap"); if(!el)return;
-  el.innerHTML=`<iframe title="Driver location" style="width:100%;height:100%;border:0" src="https://www.openstreetmap.org/export/embed.html?bbox=${lng-0.01}%2C${lat-0.01}%2C${lng+0.01}%2C${lat+0.01}&layer=mapnik&marker=${lat}%2C${lng}"></iframe>`;
+function loadTrackingMap(customerLat,customerLng,driverLat,driverLng){
+  const el=$("customerMap");if(!el||!window.L)return;
+  if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}
+  const hasCustomer=Number.isFinite(Number(customerLat))&&Number.isFinite(Number(customerLng));const hasDriver=Number.isFinite(Number(driverLat))&&Number.isFinite(Number(driverLng));
+  if(!hasCustomer&&!hasDriver){el.innerHTML='<div class="map-placeholder">📍<br><b>Waiting for location</b><small>The order has no GPS location yet.</small></div>';return}
+  const center=[hasDriver?Number(driverLat):Number(customerLat),hasDriver?Number(driverLng):Number(customerLng)];
+  trackingMap=L.map(el,{zoomControl:true,scrollWheelZoom:false}).setView(center,15);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(trackingMap);
+  const points=[];
+  if(hasCustomer){L.marker([Number(customerLat),Number(customerLng)]).addTo(trackingMap).bindPopup("📍 Your delivery location");points.push([Number(customerLat),Number(customerLng)])}
+  if(hasDriver){L.circleMarker([Number(driverLat),Number(driverLng)],{radius:9,weight:3}).addTo(trackingMap).bindPopup("🛵 Driver — live");points.push([Number(driverLat),Number(driverLng)])}
+  if(points.length===2)L.polyline(points,{weight:4,dashArray:"9 8"}).addTo(trackingMap);
+  if(points.length>1)trackingMap.fitBounds(L.latLngBounds(points),{padding:[25,25],maxZoom:16});
+}
+function stopTrackingPolling(){if(trackingPoll){clearInterval(trackingPoll);trackingPoll=null}if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}}
+function captureCheckoutLocation(){
+  const state=$("checkoutGpsState");
+  if(!navigator.geolocation){if(state)state.textContent="This phone/browser does not support GPS.";return}
+  if(state)state.textContent="Getting your location…";
+  navigator.geolocation.getCurrentPosition(p=>{checkoutGps={lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy};if(state)state.textContent=`✓ GPS location saved (±${Math.round(p.coords.accuracy||0)}m).`;},()=>{if(state)state.textContent="GPS permission was not granted. You can continue with the delivery area."},{enableHighAccuracy:true,maximumAge:10000,timeout:15000});
 }
 
 async function placeOrder(){
@@ -156,7 +184,7 @@ async function placeOrder(){
   if(phone.length<6)return toast("Please enter a valid WhatsApp number.");
   let btn=document.querySelector('.pay');if(btn){btn.disabled=true;btn.innerHTML="⏳ CONNECTING TO WAYCHIT…"}
   try{
-    let r=await fetch("/api/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({productId:selected.id,quantity:q,name:$('name').value.trim(),whatsapp:phone,location:$('loc').value})});
+    let r=await fetch("/api/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({productId:selected.id,quantity:q,name:$('name').value.trim(),whatsapp:phone,location:$('loc').value,customerLat:checkoutGps.lat,customerLng:checkoutGps.lng,customerAccuracy:checkoutGps.accuracy})});
     let d=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(d.error||"Could not create your order.");
     localStorage.setItem("basseLastOrder",JSON.stringify(d.order));
@@ -234,7 +262,7 @@ function resumePendingPayment(){
     waitForPayment(p.orderId,0);
   }catch{}
 }
-function closeModal(){$("modal").classList.remove("show")}
+function closeModal(){stopTrackingPolling();$("modal").classList.remove("show")}
 function openCart(){toast("Cart checkout is coming next — Buy Now is fully active.")}
 async function openOrders(){let raw=localStorage.getItem("basseLastOrder");if(!raw)return toast("No recent order found on this phone.");try{let old=JSON.parse(raw),r=await fetch("/api/order/"+encodeURIComponent(old.id)),o=await r.json();if(!r.ok)throw new Error(o.error||"Order not found");showReturn(o,"",o.payment_status==="PAID",o.whatsappSupport,o.payment_status==="PENDING"?"Your order is waiting for payment confirmation.":"")}catch(e){toast(e.message)}}
 
