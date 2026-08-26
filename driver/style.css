@@ -11,3 +11,7 @@ input{-webkit-user-select:text;user-select:text}
 .basse-map-marker{background:transparent!important;border:0!important;display:flex;align-items:center;gap:2px;font-size:11px;white-space:nowrap;text-shadow:0 1px 2px #fff}
 .basse-map-marker span{font-size:21px}.basse-map-marker b{font-size:9px;background:#fff;padding:3px 5px;border-radius:6px;box-shadow:0 2px 8px #0002}
 .map-empty{height:100%;display:grid;place-content:center;text-align:center;color:#687389;font-size:12px;gap:6px;padding:20px}
+
+.fallback-map{position:relative;background:#e9edf2}.fallback-map-inner{position:absolute;inset:0;overflow:hidden}.fallback-tile{position:absolute;width:256px;height:256px;max-width:none;border:0}.fallback-marker{position:absolute;z-index:20;background:#fff;border:1px solid #d7deea;border-radius:14px;padding:5px 8px;box-shadow:0 3px 10px #0003;white-space:nowrap;font-size:11px;color:#18346d}.customer-fallback{border-color:#3b82f6}.driver-fallback{border-color:#7c3aed;z-index:30}.fallback-map:after{content:'© OpenStreetMap contributors';position:absolute;right:4px;bottom:2px;background:#fff9;padding:2px 4px;font-size:8px;color:#555;z-index:40}
+
+.fallback-line{position:absolute;height:4px;background:#7c3aed;opacity:.65;transform-origin:0 50%;z-index:10;border-radius:4px;pointer-events:none}

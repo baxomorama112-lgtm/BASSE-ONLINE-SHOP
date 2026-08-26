@@ -7,7 +7,7 @@ async function sendViewerHeartbeat(){try{await fetch("/api/presence/heartbeat",{
 function startViewerPresence(){sendViewerHeartbeat();clearInterval(window.__viewerPresence);window.__viewerPresence=setInterval(sendViewerHeartbeat,15000);window.addEventListener("pageshow",sendViewerHeartbeat);document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")sendViewerHeartbeat()})}
 window.addEventListener("pagehide",()=>{try{navigator.sendBeacon("/api/presence/leave",new Blob([JSON.stringify({id:BASSE_VIEWER_ID})],{type:"application/json"}))}catch{}});
 const $=id=>document.getElementById(id),money=n=>"D"+Number(n||0).toLocaleString();
-let checkoutGps={lat:null,lng:null,accuracy:null},trackingMap=null,trackingPoll=null,trackingStream=null,trackingPhone="",trackingRefreshing=false,trackingLastEvent=0;
+let checkoutGps={lat:null,lng:null,accuracy:null},selectedChoices=[],trackingMap=null,trackingPoll=null,trackingStream=null,trackingPhone="",trackingRefreshing=false,trackingLastEvent=0;
 
 function renderProductGrid(ps, silent=false){
   const grid=$("grid");
@@ -64,6 +64,11 @@ function normalizeProductImages(product){
   if(product.image&&!imgs.includes(product.image))imgs.unshift(product.image);
   return imgs.length?imgs:[""];
 }
+function productOptions(product){try{return typeof product.options_json==="string"?JSON.parse(product.options_json||"{}"):((product.options_json&&typeof product.options_json==="object")?product.options_json:{})}catch{return {}}}
+function optionValues(v){return String(v||"").split(",").map(x=>x.trim()).filter(Boolean)}
+function renderOptionFields(product){const o=productOptions(product),defs=[["option_colors","Color"],["option_sizes","Size"],["option_phone_type","Phone Type / Brand"],["option_phone_model","Phone Model"],["option_storage","Storage / Variant"],["option_other","Other Option"]];return defs.filter(x=>optionValues(o[x[0]]).length).map(([key,label])=>`<label>${esc(label)}<select id="${key}"><option value="">Select ${esc(label)}</option>${optionValues(o[key]).map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("")}</select></label>`).join("")}
+function getSelectedOptionSummary(){const labels=[["option_colors","Color"],["option_sizes","Size"],["option_phone_type","Phone Type / Brand"],["option_phone_model","Phone Model"],["option_storage","Storage / Variant"],["option_other","Option"]];return labels.map(([id,label])=>{const e=$(id);return e&&e.value?label+": "+e.value:null}).filter(Boolean)}
+function validateProductOptions(){const o=productOptions(selected);const defs=[["option_colors","Color"],["option_sizes","Size"],["option_phone_type","Phone Type / Brand"],["option_phone_model","Phone Model"],["option_storage","Storage / Variant"],["option_other","Option"]];for(const [id,label] of defs){if(optionValues(o[id]).length&&$(id)&&!$(id).value){toast("Please select a "+label+".");return false}}return true}
 function renderProductDetail(product){
   selected=product;
   const imgs=normalizeProductImages(product);
@@ -72,7 +77,7 @@ function renderProductDetail(product){
     <button class="close modern-close" onclick="closeModal()" aria-label="Close">×</button>
     <div class="product-detail">
       <div class="gallery"><div class="main-photo-wrap"><img id="mainProductImage" src="${imgs[0]}" alt="${esc(product.name)}"></div>${thumbs}</div>
-      <div class="detail-info modern-detail-info"><span class="tagline">${esc(product.category)}</span><h2>${esc(product.name)}</h2><div class="detail-price">${money(product.price)}</div><p class="muted">${esc(product.description||"Quality product from BASSE MARKET.")}</p><div class="stock-note ${product.stock<1?'out':''}">${product.stock>0?`✓ ${product.stock} available`:"Out of stock"}</div><div class="detail-actions"><button class="pay buy-now-modern" ${product.stock<1?"disabled":""} onclick="openCheckout()"><span>🛒</span><b>BUY NOW</b><span class="arrow">→</span></button></div><div class="product-hint">Secure checkout · Pay with Waychit</div></div>
+      <div class="detail-info modern-detail-info"><span class="tagline">${esc(product.category)}</span><h2>${esc(product.name)}</h2><div class="detail-price">${money(product.price)}</div><p class="muted">${esc(product.description||"Quality product from BASSE MARKET.")}</p>${renderOptionFields(product)?`<div class="product-options"><b>Choose options</b>${renderOptionFields(product)}</div>`:""}<div class="stock-note ${product.stock<1?'out':''}">${product.stock>0?`✓ ${product.stock} available`:"Out of stock"}</div><div class="detail-actions"><button class="pay buy-now-modern" ${product.stock<1?"disabled":""} onclick="openCheckout()"><span>🛒</span><b>BUY NOW</b><span class="arrow">→</span></button></div><div class="product-hint">Secure checkout · Pay with Waychit</div></div>
     </div></div>`;
   window.__productImages=imgs;
   $("modal").classList.add("show");
@@ -107,11 +112,13 @@ async function buy(id){
 function pickImage(i){let im=window.__productImages?.[i];if(im){$("mainProductImage").src=im;document.querySelectorAll(".thumbs button").forEach((b,n)=>b.classList.toggle("active",n===i))}}
 function openCheckout(){
   if(!selected)return;
+  if(!validateProductOptions())return;
+  selectedChoices=getSelectedOptionSummary();
   const savedCustomer=JSON.parse(localStorage.getItem("basseCustomer")||"null");
   const savedName=esc(savedCustomer?.name||"");
   const savedPhone=esc(String(savedCustomer?.phone||"").replace(/\D/g,"").replace(/^220/,""));
   checkoutGps={lat:null,lng:null,accuracy:null};
-  $("modal").innerHTML=`<div class="sheet checkout-sheet"><button class="close" onclick="buy(${selected.id})">←</button><div class="checkout-head"><span class="mini-bag">🛍️</span><div><small>SECURE CHECKOUT</small><h2>Your order</h2></div></div><p class="muted">${esc(selected.name)}</p><div class="form"><label>Quantity</label><div class="qty-row"><button type="button" onclick="changeQty(-1)">−</button><input id="qty" type="number" min="1" max="${selected.stock}" value="1"><button type="button" onclick="changeQty(1)">+</button></div><label>Full Name</label><input id="name" autocomplete="name" placeholder="Your name" value="${savedName}"><label>WhatsApp Number</label><input id="phone" inputmode="numeric" autocomplete="tel" placeholder="7XXXXXX" value="${savedPhone}"><small>+220 will be added automatically. No account/login is required.</small><label>Delivery Area</label><select id="loc"><option>Basse</option><option>Bansang</option><option>Fatoto</option><option>Other</option></select><button type="button" class="location-btn" onclick="captureCheckoutLocation()">📍 USE MY CURRENT GPS LOCATION</button><small id="checkoutGpsState" class="gps-note">GPS is optional. Your written delivery area can still be used.</small><div class="summary"><div class="row"><span>Product</span><b>${money(selected.price)}</b></div><div class="row total-row"><span>Total</span><b id="total">${money(selected.price)}</b></div></div><button class="pay pulse" onclick="placeOrder()">💳 PAY WITH WAYCHIT <span>→</span></button><div class="secure-note">🔒 Secure checkout · You will be redirected to Waychit</div></div></div>`;
+  $("modal").innerHTML=`<div class="sheet checkout-sheet"><button class="close" onclick="buy(${selected.id})">←</button><div class="checkout-head"><span class="mini-bag">🛍️</span><div><small>SECURE CHECKOUT</small><h2>Your order</h2></div></div><p class="muted">${esc(selected.name)}</p><div class="selected-options-summary" id="selectedOptionsSummary"></div><div class="form"><label>Quantity</label><div class="qty-row"><button type="button" onclick="changeQty(-1)">−</button><input id="qty" type="number" min="1" max="${selected.stock}" value="1"><button type="button" onclick="changeQty(1)">+</button></div><label>Full Name</label><input id="name" autocomplete="name" placeholder="Your name" value="${savedName}"><label>WhatsApp Number</label><input id="phone" inputmode="numeric" autocomplete="tel" placeholder="7XXXXXX" value="${savedPhone}"><small>+220 will be added automatically. No account/login is required.</small><label>Delivery Area</label><select id="loc"><option>Basse</option><option>Bansang</option><option>Fatoto</option><option>Other</option></select><button type="button" class="location-btn" onclick="captureCheckoutLocation()">📍 USE MY CURRENT GPS LOCATION</button><small id="checkoutGpsState" class="gps-note">GPS is optional. Your written delivery area can still be used.</small><div class="summary"><div class="row"><span>Product</span><b>${money(selected.price)}</b></div><div class="row total-row"><span>Total</span><b id="total">${money(selected.price)}</b></div></div><button class="pay pulse" onclick="placeOrder()">💳 PAY WITH WAYCHIT <span>→</span></button><div class="secure-note">🔒 Secure checkout · You will be redirected to Waychit</div></div></div>`;
   $("modal").classList.add("show");$("qty").oninput=updateTotal;$("phone").addEventListener("keydown",e=>{if(e.key==="Enter")placeOrder()});
 }
 function changeQty(d){let q=Math.max(1,Math.min(selected.stock,(+$('qty').value||1)+d));$('qty').value=q;updateTotal()}
@@ -288,7 +295,7 @@ async function placeOrder(){
   if(phone.length<6)return toast("Please enter a valid WhatsApp number.");
   let btn=document.querySelector('.pay');if(btn){btn.disabled=true;btn.innerHTML="⏳ CONNECTING TO WAYCHIT…"}
   try{
-    let r=await fetch("/api/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({productId:selected.id,quantity:q,name:$('name').value.trim(),whatsapp:phone,location:$('loc').value,customerLat:checkoutGps.lat,customerLng:checkoutGps.lng,customerAccuracy:checkoutGps.accuracy})});
+    let r=await fetch("/api/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({productId:selected.id,quantity:q,name:$('name').value.trim(),whatsapp:phone,location:$('loc').value,customerLat:checkoutGps.lat,customerLng:checkoutGps.lng,customerAccuracy:checkoutGps.accuracy,options:selectedChoices})});
     let d=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(d.error||"Could not create your order.");
     localStorage.setItem("basseLastOrder",JSON.stringify(d.order));
