@@ -7,7 +7,7 @@ async function sendViewerHeartbeat(){try{await fetch("/api/presence/heartbeat",{
 function startViewerPresence(){sendViewerHeartbeat();clearInterval(window.__viewerPresence);window.__viewerPresence=setInterval(sendViewerHeartbeat,15000);window.addEventListener("pageshow",sendViewerHeartbeat);document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")sendViewerHeartbeat()})}
 window.addEventListener("pagehide",()=>{try{navigator.sendBeacon("/api/presence/leave",new Blob([JSON.stringify({id:BASSE_VIEWER_ID})],{type:"application/json"}))}catch{}});
 const $=id=>document.getElementById(id),money=n=>"D"+Number(n||0).toLocaleString();
-let checkoutGps={lat:null,lng:null,accuracy:null},selectedChoices=[],trackingMap=null,trackingPoll=null,trackingStream=null,trackingPhone="",trackingRefreshing=false,trackingLastEvent=0;
+let checkoutGps={lat:null,lng:null,accuracy:null},selectedChoices=[],trackingMap=null,trackingPoll=null,trackingStream=null,trackingPhone="",trackingOrderId="",trackingRefreshing=false,trackingLastEvent=0;
 
 function renderProductGrid(ps, silent=false){
   const grid=$("grid");
@@ -186,6 +186,7 @@ async function submitGuestTracking(){
 async function openOrderTracking(id,phone=""){
   stopTrackingPolling();
   trackingPhone=phone;
+  trackingOrderId=String(id||"");
   const modal=$("modal");
   modal.innerHTML=`<div class="sheet tracking-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="mini-bag">🚚</span><div><small>BASSE DELIVERY</small><h2>Track Order</h2></div></div><div id="trackingBody"><div class="store-loading">Loading tracking…</div></div></div>`;
   modal.classList.add("show");
@@ -281,7 +282,7 @@ function loadTrackingMap(customerLat,customerLng,driverLat,driverLng){
   }else if(hasCustomer&&m.__initialFit){m.setView([clat,clng],15);m.__initialFit=false}
   requestAnimationFrame(()=>{try{m.invalidateSize({pan:false})}catch(e){}});
 }
-function stopTrackingPolling(){if(trackingPoll){clearInterval(trackingPoll);trackingPoll=null}if(trackingStream){try{trackingStream.close()}catch{}trackingStream=null}if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}trackingPhone=""}
+function stopTrackingPolling(){if(trackingPoll){clearInterval(trackingPoll);trackingPoll=null}if(trackingStream){try{trackingStream.close()}catch{}trackingStream=null}if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}trackingPhone="";trackingOrderId="";trackingRefreshing=false}
 function captureCheckoutLocation(){
   const state=$("checkoutGpsState");
   if(!navigator.geolocation){if(state)state.textContent="This phone/browser does not support GPS.";return}
@@ -505,7 +506,12 @@ function connectLive(){
   try{
     const es=new EventSource("/api/live");
     es.addEventListener("catalog",()=>{loadSearchIndex();if(document.visibilityState==="visible"&&!$("modal").classList.contains("show"))loadProducts(true);});
-    es.addEventListener("orders",()=>{if(document.visibilityState==="visible"&&localStorage.getItem("basseLastOrder"))openOrders().catch(()=>{});});
+    es.addEventListener("orders",()=>{
+      // Never replace the customer's live Track Order screen with the order sheet.
+      // Delivery/GPS events are handled by the dedicated tracking stream above.
+      if(trackingOrderId)return;
+      if(document.visibilityState==="visible"&&localStorage.getItem("basseLastOrder"))openOrders().catch(()=>{});
+    });
     es.onerror=()=>{es.close();setTimeout(connectLive,3000)};
   }catch{setTimeout(connectLive,3000)}
 }
