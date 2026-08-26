@@ -81,7 +81,57 @@ async function restoreBackup(input){
     refreshBackupStatus();
   }catch(e){notify(e.message||"Restore failed.",true);input.value=""}
 }
-function closeModal(){$("modal").classList.add("hidden")}
+let liveDeliveryStream=null,liveDeliveryTimer=null,liveDeliveryMap=null,liveDeliveryMarker=null,liveCustomerMarker=null,liveDeliveryLine=null,liveDeliveryId=null,liveDeliveryOrderId=null;
+function liveMapTiles(map){
+  const providers=[
+    ["https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png","© OpenStreetMap contributors"],
+    ["https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png","© OpenStreetMap contributors © CARTO"]
+  ];
+  let layer=L.tileLayer(providers[0][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[0][1]}).addTo(map);
+  let switched=false;
+  layer.on("tileerror",()=>{if(switched)return;switched=true;try{map.removeLayer(layer)}catch{};layer=L.tileLayer(providers[1][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[1][1]}).addTo(map)});
+}
+function stopLiveDelivery(){
+  if(liveDeliveryStream){try{liveDeliveryStream.close()}catch{}liveDeliveryStream=null}
+  if(liveDeliveryTimer){clearInterval(liveDeliveryTimer);liveDeliveryTimer=null}
+  if(liveDeliveryMap){try{liveDeliveryMap.remove()}catch{}liveDeliveryMap=null}
+  liveDeliveryMarker=null;liveCustomerMarker=null;liveDeliveryLine=null;liveDeliveryId=null;liveDeliveryOrderId=null;
+}
+async function openLiveDelivery(deliveryId){
+  stopLiveDelivery(); liveDeliveryId=deliveryId;
+  const modal=$("modal"),editor=$("editor");
+  modal.classList.remove("hidden");
+  editor.innerHTML=`<div class="modal-title"><span>🗺️</span><div><small>LIVE DELIVERY TRACKING</small><h2>Driver Live Location</h2></div></div><div id="adminLiveMeta" class="admin-live-meta">Connecting to live delivery…</div><div id="adminLiveMap" class="admin-live-map"><div class="map-placeholder">🗺️<br><b>Loading live map…</b><small>Waiting for driver GPS</small></div></div><div class="admin-live-footer"><span id="adminLiveStatus" class="live-status">● CONNECTING</span><span id="adminLiveDistance">Distance —</span><span id="adminLiveUpdated">Last update —</span></div>`;
+  await refreshLiveDelivery(true);
+  try{
+    const es=new EventSource("/api/live");
+    const onEvent=ev=>{try{const x=JSON.parse(ev.data||"{}");if(String(x.orderId||"")===String(liveDeliveryOrderId))refreshLiveDelivery(false)}catch{}};
+    es.addEventListener("orders",onEvent); es.onopen=()=>{const e=$("adminLiveStatus");if(e)e.textContent="● LIVE"}; es.onerror=()=>{const e=$("adminLiveStatus");if(e)e.textContent="● RECONNECTING"}; liveDeliveryStream=es;
+  }catch{}
+  liveDeliveryTimer=setInterval(()=>refreshLiveDelivery(false),8000);
+}
+function adminDistanceKm(a,b,c,d){const R=6371,rad=x=>x*Math.PI/180,p1=rad(a),p2=rad(c),dp=rad(c-a),dl=rad(d-b),h=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;return R*2*Math.atan2(Math.sqrt(h),Math.sqrt(1-h))}
+async function refreshLiveDelivery(initial){
+  if(!liveDeliveryId)return;
+  try{
+    const d=await api("/api/admin/deliveries"); const row=(Array.isArray(d)?d:[]).find(x=>Number(x.id)===Number(liveDeliveryId));
+    if(!row)throw new Error("Delivery is no longer active."); liveDeliveryOrderId=row.order_id;
+    const meta=$("adminLiveMeta"),status=$("adminLiveStatus"),dist=$("adminLiveDistance"),updated=$("adminLiveUpdated"),el=$("adminLiveMap");
+    if(meta)meta.innerHTML=`<b>#${esc(row.order_id)}</b> · ${esc(row.customer_name||"Customer")} · Driver: <b>${esc(row.driver_name||"Unassigned")}</b> · <b>${esc(String(row.status||"").replaceAll("_"," "))}</b>`;
+    const clat=Number(row.customer_lat),clng=Number(row.customer_lng),dlat=Number(row.lat),dlng=Number(row.lng),hc=Number.isFinite(clat)&&Number.isFinite(clng),hd=Number.isFinite(dlat)&&Number.isFinite(dlng);
+    if(!el)return;
+    if(!window.L){el.innerHTML='<div class="map-placeholder">📍<br><b>Map service unavailable</b><small>Refresh to retry.</small></div>';return}
+    if(!hc&&!hd){el.innerHTML='<div class="map-placeholder">📍<br><b>Waiting for GPS</b><small>The driver has not shared a location yet.</small></div>';return}
+    if(!liveDeliveryMap){el.innerHTML="";const center=hd?[dlat,dlng]:[clat,clng];liveDeliveryMap=L.map(el,{zoomControl:true,scrollWheelZoom:true,preferCanvas:true,fadeAnimation:false,zoomAnimation:true,markerZoomAnimation:false}).setView(center,15);liveMapTiles(liveDeliveryMap);requestAnimationFrame(()=>liveDeliveryMap?.invalidateSize({pan:false}));}
+    if(hc){if(!liveCustomerMarker)liveCustomerMarker=L.marker([clat,clng],{icon:L.divIcon({className:"basse-map-marker customer-marker",html:"<span>📍</span><b>Customer</b>",iconSize:[82,30],iconAnchor:[12,28],zIndexOffset:500})}).addTo(liveDeliveryMap);else liveCustomerMarker.setLatLng([clat,clng])}
+    if(hd){if(!liveDeliveryMarker)liveDeliveryMarker=L.marker([dlat,dlng],{icon:L.divIcon({className:"basse-map-marker driver-marker admin-driver-marker",html:"<span>🛵</span><b>Driver</b>",iconSize:[72,30],iconAnchor:[12,28],zIndexOffset:1000})}).addTo(liveDeliveryMap);else liveDeliveryMarker.setLatLng([dlat,dlng]);if(!liveDeliveryLine)liveDeliveryLine=L.polyline([[dlat,dlng],[clat,clng]],{weight:4,dashArray:"8 8"}).addTo(liveDeliveryMap);else if(hc)liveDeliveryLine.setLatLngs([[dlat,dlng],[clat,clng]]);if(initial)liveDeliveryMap.fitBounds(hc?L.latLngBounds([[dlat,dlng],[clat,clng]]):L.latLngBounds([[dlat,dlng]]),{padding:[35,35],maxZoom:17})}
+    if(dist)dist.textContent=hc&&hd?`Distance ${adminDistanceKm(dlat,dlng,clat,clng)<1?Math.round(adminDistanceKm(dlat,dlng,clat,clng)*1000)+" m":adminDistanceKm(dlat,dlng,clat,clng).toFixed(1)+" km"}`:"Distance —";
+    if(updated)updated.textContent=row.last_seen?`Last update ${new Date(row.last_seen).toLocaleTimeString()}`:"Last update —";
+    if(status)status.textContent=hd?"● LIVE GPS":"● WAITING FOR GPS";
+  }catch(e){const m=$("adminLiveMeta");if(m)m.textContent=e.message||"Unable to load live delivery."}
+}
+function closeModal(){stopLiveDelivery();$("modal").classList.add("hidden")}
+
 async function customerStatus(id,status){try{await api("/api/admin/customers/"+id+"/status",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status})});notify(status==="BLOCKED"?"Customer blocked.":"Customer activated.");refresh()}catch(e){notify(e.message,true)}}
 async function deleteCustomer(id){if(!confirm("Delete this customer account? Their existing orders will remain in the system."))return;try{await api("/api/admin/customers/"+id,{method:"DELETE"});notify("Customer account deleted.");refresh()}catch(e){notify(e.message,true)}}
 async function vendorAction(id,action){try{await api(`/api/admin/vendors/${id}/${action}`,{method:"POST"});notify("Vendor updated ✓");refresh()}catch(e){notify(e.message,true)}}
@@ -92,7 +142,7 @@ function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&l
 async function loadDelivery(){
   try{
     const [ds,drs]=await Promise.all([api("/api/admin/deliveries"),api("/api/admin/drivers")]);
-    $("deliveryTable").innerHTML=ds.length?ds.map(d=>`<div class="delivery-row"><div><b>#${esc(d.order_id)}</b> · ${esc(d.customer_name||"Customer")}<br><small>${esc(d.business_name||"Direct order")} · ${esc(d.location||"")}</small></div><span class="badge">${esc(d.status.replaceAll("_"," "))}</span><div><small>Driver: ${esc(d.driver_name||"Unassigned")}</small><br>${d.lat&&d.lng?`<a target="_blank" href="https://www.openstreetmap.org/?mlat=${d.lat}&mlon=${d.lng}#map=17/${d.lat}/${d.lng}">📍 Live location</a>`:"Waiting for GPS"}</div><select onchange="assignDelivery(${d.order_id?`'${d.order_id}'`:"''"},this.value)"><option value="">Assign driver…</option>${drs.filter(x=>x.status==="ACTIVE").map(x=>`<option value="${x.id}" ${Number(x.id)===Number(d.driver_id)?"selected":""}>${esc(x.full_name)}</option>`).join("")}</select></div>`).join(""):"<p>No active deliveries yet. Mark a PAID order READY and it will appear here automatically.</p>";
+    $("deliveryTable").innerHTML=ds.length?ds.map(d=>`<div class="delivery-row"><div><b>#${esc(d.order_id)}</b> · ${esc(d.customer_name||"Customer")}<br><small>${esc(d.business_name||"Direct order")} · ${esc(d.location||"")}</small></div><span class="badge">${esc(d.status.replaceAll("_"," "))}</span><div><small>Driver: ${esc(d.driver_name||"Unassigned")}</small><br>${d.lat&&d.lng?`<button class="live-location-btn" type="button" onclick="openLiveDelivery(${Number(d.id)})">🔴 SEE LIVE</button>`:`<span class="waiting-gps">Waiting for GPS</span>`}</div><select onchange="assignDelivery(${d.order_id?`'${d.order_id}'`:"''"},this.value)"><option value="">Assign driver…</option>${drs.filter(x=>x.status==="ACTIVE").map(x=>`<option value="${x.id}" ${Number(x.id)===Number(d.driver_id)?"selected":""}>${esc(x.full_name)}</option>`).join("")}</select></div>`).join(""):"<p>No active deliveries yet. Mark a PAID order READY and it will appear here automatically.</p>";
     $("driverTable").innerHTML=drs.map(d=>`<div class="driver-row"><div><b>${esc(d.full_name)}</b><small>+${esc(d.whatsapp)} · ${d.status}</small></div><button onclick="driverStatus(${d.id},'${d.status==="ACTIVE"?"BLOCKED":"ACTIVE"}')">${d.status==="ACTIVE"?"BLOCK":"ACTIVATE"}</button></div>`).join("")||"<p>No drivers yet.</p>";
   }catch(e){if($("deliveryTable"))$("deliveryTable").innerHTML=`<p>${esc(e.message)}</p>`}
 }
