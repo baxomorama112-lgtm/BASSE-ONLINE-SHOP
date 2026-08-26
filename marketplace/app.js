@@ -1,9 +1,10 @@
 let category="All",selected=null,searchTimer=null,searchIndex=[];
 // Anonymous live-viewer heartbeat for the Admin Dashboard.
 const BASSE_VIEWER_ID=(()=>{try{let id=sessionStorage.getItem("basseViewerId");if(!id){id=(crypto.randomUUID?crypto.randomUUID():"v_"+Date.now()+"_"+Math.random().toString(36).slice(2));sessionStorage.setItem("basseViewerId",id)}return id}catch{return "v_"+Date.now()+"_"+Math.random().toString(36).slice(2)}})();
-const BASSE_VIEWER_SOURCE=((navigator.userAgent||"").toLowerCase().includes("android")&&((navigator.userAgent||"").includes("wv")||(navigator.userAgent||"").includes("Version/4.0")))?"app":"website";
-async function sendViewerHeartbeat(){try{await fetch("/api/presence/heartbeat",{method:"POST",headers:{"Content-Type":"application/json","X-BASSE-SOURCE":BASSE_VIEWER_SOURCE},body:JSON.stringify({id:BASSE_VIEWER_ID,source:BASSE_VIEWER_SOURCE}),keepalive:true})}catch{}}
-function startViewerPresence(){sendViewerHeartbeat();clearInterval(window.__viewerPresence);window.__viewerPresence=setInterval(()=>{if(document.visibilityState==="visible")sendViewerHeartbeat()},20000)}
+const BASSE_UA=(navigator.userAgent||"").toLowerCase();
+const BASSE_VIEWER_SOURCE=(window.__BASSE_APP__===true||/android/.test(BASSE_UA)&&(/\bwv\b|version\/4\.0|; wv|webview/.test(BASSE_UA))||window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches)?"app":"website";
+async function sendViewerHeartbeat(){try{await fetch("/api/presence/heartbeat",{method:"POST",headers:{"Content-Type":"application/json","X-BASSE-SOURCE":BASSE_VIEWER_SOURCE},body:JSON.stringify({id:BASSE_VIEWER_ID,source:BASSE_VIEWER_SOURCE}),cache:"no-store",keepalive:true})}catch{}}
+function startViewerPresence(){sendViewerHeartbeat();clearInterval(window.__viewerPresence);window.__viewerPresence=setInterval(sendViewerHeartbeat,15000);window.addEventListener("pageshow",sendViewerHeartbeat);document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")sendViewerHeartbeat()})}
 window.addEventListener("pagehide",()=>{try{navigator.sendBeacon("/api/presence/leave",new Blob([JSON.stringify({id:BASSE_VIEWER_ID})],{type:"application/json"}))}catch{}});
 const $=id=>document.getElementById(id),money=n=>"D"+Number(n||0).toLocaleString();
 let checkoutGps={lat:null,lng:null,accuracy:null},trackingMap=null,trackingPoll=null,trackingPhone="";

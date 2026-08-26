@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS deliveries(
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(driver_id) REFERENCES delivery_drivers(id)
 );`);
+try{db.exec(`CREATE TABLE IF NOT EXISTS login_attempts(id INTEGER PRIMARY KEY AUTOINCREMENT,portal TEXT NOT NULL,identifier TEXT NOT NULL,success INTEGER DEFAULT 0,reason TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP); CREATE INDEX IF NOT EXISTS idx_login_attempts_created ON login_attempts(created_at);`)}catch(e){console.error('Login log setup failed:',e.message)}
 try{db.exec("ALTER TABLE products ADD COLUMN images TEXT DEFAULT ''")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_lat REAL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_lng REAL")}catch(e){}
@@ -196,6 +197,17 @@ function getSession(req){
   if(!s){ if(token)db.prepare("DELETE FROM auth_sessions WHERE token=?").run(token); return null; }
   return s;
 }
+function maskLoginIdentifier(value){
+  const raw=String(value||'').trim();
+  if(!raw)return 'Unknown';
+  if(raw.includes('@')){const [u,d]=raw.split('@');return `${(u||'').slice(0,2)}***@${d||''}`;}
+  const digits=raw.replace(/\D/g,'');
+  if(digits.length>=4)return `+${digits.slice(0,3)}***${digits.slice(-2)}`;
+  return raw.length>3?raw.slice(0,2)+'***':raw;
+}
+function recordLoginAttempt(portal,identifier,success,reason=''){
+  try{db.prepare('INSERT INTO login_attempts(portal,identifier,success,reason) VALUES(?,?,?,?)').run(String(portal||'unknown'),maskLoginIdentifier(identifier),success?1:0,String(reason||'').slice(0,180));}catch(e){}
+}
 function guard(req,res,next){const s=getSession(req);if(!s||s.type!=="admin")return res.status(401).json({error:"Admin login required"});req.sessionToken=s.token;next()}
 function vendorGuard(req,res,next){const s=getSession(req);if(!s||s.type!=="vendor")return res.status(401).json({error:"Vendor login required"});req.vendorId=s.vendor_id;req.sessionToken=s.token;next()}
 function driverGuard(req,res,next){const s=getSession(req);if(!s||s.type!=="driver")return res.status(401).json({error:"Driver login required"});req.driverId=s.vendor_id;req.sessionToken=s.token;next()}
@@ -226,8 +238,9 @@ app.post("/api/admin/login",(req,res)=>{
   if(req.body.email===process.env.ADMIN_EMAIL&&req.body.password===process.env.ADMIN_PASSWORD){
     const t=crypto.randomBytes(32).toString("hex"),exp=Date.now()+30*24*60*60*1000;
     db.prepare("INSERT OR REPLACE INTO auth_sessions(token,type,vendor_id,expires_at) VALUES(?,?,NULL,?)").run(t,"admin",exp);
+    recordLoginAttempt('Admin',req.body?.email,true,'Login successful');
     res.json({token:t,expiresAt:exp});
-  }else res.status(401).json({error:"Invalid admin login"})
+  }else { recordLoginAttempt('Admin',req.body?.email,false,'Invalid email or password'); res.status(401).json({error:"Invalid admin login"}) }
 });
 app.get("/api/admin/products",guard,(req,res)=>res.json(db.prepare("SELECT * FROM products ORDER BY id DESC").all()));
 app.post("/api/admin/products",guard,upload.array("images",8),(req,res)=>{let b=req.body,files=req.files||[],fileImgs=files.map(f=>"/uploads/"+f.filename),img=fileImgs[0]||b.imageUrl||"",imgs=JSON.stringify(fileImgs.length?fileImgs:(b.images?String(b.images).split(",").map(x=>x.trim()).filter(Boolean):[]));
@@ -318,6 +331,7 @@ app.post("/api/admin/restore",guard,(req,res)=>{
 });
 app.get("/api/admin/stats",guard,(req,res)=>res.json({products:db.prepare("SELECT COUNT(*) c FROM products WHERE active=1").get().c,orders:db.prepare("SELECT COUNT(*) c FROM orders").get().c,customers:db.prepare("SELECT COUNT(*) c FROM (SELECT whatsapp FROM customer_accounts UNION SELECT whatsapp FROM orders WHERE whatsapp IS NOT NULL AND whatsapp!='')").get().c,pending:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PENDING'").get().c,paid:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PAID'").get().c,cancelled:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='CANCELLED' OR order_status='CANCELLED'").get().c,refunded:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='REFUNDED'").get().c,sales:db.prepare("SELECT COALESCE(SUM(total),0) s FROM orders WHERE payment_status='PAID' AND order_status!='CANCELLED' AND date(created_at)=date('now','localtime')").get().s,liveViewers:liveViewerStats()}));
 app.get("/api/admin/live-viewers",guard,(req,res)=>res.json(liveViewerStats()));
+app.get("/api/admin/login-attempts",guard,(req,res)=>{const rows=db.prepare("SELECT id,portal,identifier,success,reason,created_at FROM login_attempts ORDER BY id DESC LIMIT 30").all();res.json(rows)});
 app.post("/api/customers/register",(req,res)=>{
  const name=String(req.body?.name||req.body?.fullName||"").trim();
  const phone=String(req.body?.whatsapp||req.body?.phone||"").replace(/\D/g,"").replace(/^220/,"");
@@ -339,13 +353,14 @@ app.post("/api/customers/register",(req,res)=>{
 app.post("/api/customers/login",(req,res)=>{
  const phone=String(req.body?.whatsapp||req.body?.phone||"").replace(/\D/g,"").replace(/^220/,"");
  const password=String(req.body?.password||"");
- if(phone.length<6||password.length<4)return res.status(400).json({error:"Enter your WhatsApp number and password."});
+ if(phone.length<6||password.length<4){recordLoginAttempt('Customer',req.body?.whatsapp||req.body?.phone,false,'Missing/invalid login details');return res.status(400).json({error:"Enter your WhatsApp number and password."});}
  const fullPhone="220"+phone;
  const c=db.prepare("SELECT id,full_name,whatsapp,password_hash,status FROM customer_accounts WHERE whatsapp=?").get(fullPhone);
- if(!c)return res.status(401).json({error:"Customer account not found. You can create one or continue as a guest."});
- if(c.status==='BLOCKED')return res.status(403).json({error:"This customer account is blocked. Please contact BASSE Admin."});
+ if(!c){recordLoginAttempt('Customer',fullPhone,false,'Account not found');return res.status(401).json({error:"Customer account not found. You can create one or continue as a guest."});}
+ if(c.status==='BLOCKED'){recordLoginAttempt('Customer',fullPhone,false,'Account blocked');return res.status(403).json({error:"This customer account is blocked. Please contact BASSE Admin."});}
  const hash=crypto.createHash("sha256").update(password).digest("hex");
- if(!c.password_hash||hash!==String(c.password_hash))return res.status(401).json({error:"Incorrect customer password."});
+ if(!c.password_hash||hash!==String(c.password_hash)){recordLoginAttempt('Customer',fullPhone,false,'Incorrect password');return res.status(401).json({error:"Incorrect customer password."});}
+ recordLoginAttempt('Customer',fullPhone,true,'Login successful');
  res.json({ok:true,id:c.id,full_name:c.full_name,whatsapp:c.whatsapp,status:c.status||"ACTIVE"});
 });
 
@@ -478,11 +493,12 @@ app.post("/api/driver/login",(req,res)=>{
   const phone=String(req.body.whatsapp||"").replace(/\D/g,"").replace(/^220/,"");
   const pin=String(req.body.pin||"");
   const d= db.prepare("SELECT * FROM delivery_drivers WHERE whatsapp=? AND status='ACTIVE'").get("220"+phone);
-  if(!d)return res.status(401).json({error:"Driver account not found or blocked."});
+  if(!d){recordLoginAttempt('Driver',"220"+phone,false,'Account not found or blocked');return res.status(401).json({error:"Driver account not found or blocked."});}
   const hash=crypto.createHash("sha256").update(pin).digest("hex");
-  if(hash!==d.pin_hash)return res.status(401).json({error:"Incorrect PIN."});
+  if(hash!==d.pin_hash){recordLoginAttempt('Driver',d.whatsapp,false,'Incorrect PIN');return res.status(401).json({error:"Incorrect PIN."});}
   const t=crypto.randomBytes(32).toString("hex"),exp=Date.now()+30*24*60*60*1000;
   db.prepare("INSERT OR REPLACE INTO auth_sessions(token,type,vendor_id,expires_at) VALUES(?,?,?,?)").run(t,"driver",d.id,exp);
+  recordLoginAttempt('Driver',d.whatsapp,true,'Login successful');
   res.json({token:t,expiresAt:exp,driver:{id:d.id,full_name:d.full_name,whatsapp:d.whatsapp}});
 });
 app.get("/api/driver/me",driverGuard,(req,res)=>{
@@ -518,12 +534,13 @@ app.post("/api/driver/deliveries/:id/location",driverGuard,(req,res)=>{
 });
 app.post("/api/vendor/login",(req,res)=>{
  const phone=String(req.body.whatsapp||req.body.phone||"").replace(/\D/g,"").replace(/^220/,""),pin=String(req.body.pin||req.body.password||"");
- if(phone.length<6||!/^\d{4,5}$/.test(pin))return res.status(400).json({error:"Enter your phone number and 4 or 5 digit PIN."});
+ if(phone.length<6||!/^\d{4,5}$/.test(pin)){recordLoginAttempt('Vendor',req.body?.whatsapp||req.body?.phone,false,'Missing/invalid login details');return res.status(400).json({error:"Enter your phone number and 4 or 5 digit PIN."});}
  const v=db.prepare("SELECT * FROM vendors WHERE whatsapp=? AND status='APPROVED'").get("220"+phone);
  const ok=v && v.password_hash && crypto.createHash("sha256").update(pin).digest("hex")===String(v.password_hash);
- if(!ok)return res.status(401).json({error:"Invalid vendor phone/PIN, or the vendor has not been approved yet."});
+ if(!ok){recordLoginAttempt('Vendor',"220"+phone,false,'Invalid phone/PIN or not approved');return res.status(401).json({error:"Invalid vendor phone/PIN, or the vendor has not been approved yet."});}
  const t=crypto.randomBytes(32).toString("hex"),exp=Date.now()+30*24*60*60*1000;
  db.prepare("INSERT OR REPLACE INTO auth_sessions(token,type,vendor_id,expires_at) VALUES(?,?,?,?)").run(t,"vendor",v.id,exp);
+ recordLoginAttempt('Vendor',v.whatsapp,true,'Login successful');
  res.json({token:t,expiresAt:exp,vendor:{id:v.id,business_name:v.business_name,full_name:v.full_name,email:v.email||""}});
 });
 app.get("/api/vendor/me",vendorGuard,(req,res)=>{let v=db.prepare("SELECT id,full_name,business_name,whatsapp,location,category,status FROM vendors WHERE id=?").get(req.vendorId);res.json(v)});
