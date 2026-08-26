@@ -139,8 +139,9 @@ async function openOrderTracking(id){
   modal.innerHTML=`<div class="sheet tracking-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="mini-bag">🚚</span><div><small>BASSE DELIVERY</small><h2>Track Order</h2></div></div><div id="trackingBody"><div class="store-loading">Loading tracking…</div></div></div>`;
   modal.classList.add("show");
   await refreshTracking(id,true);
-  trackingPoll=setInterval(()=>{if(document.visibilityState!=="hidden")refreshTracking(id,false)},5000);
+  trackingPoll=setInterval(()=>{if(document.visibilityState!=="hidden")refreshTracking(id,false)},7000);
 }
+function trackingDistanceKm(a,b,c,d){const R=6371,rad=x=>x*Math.PI/180;const p1=rad(a),p2=rad(c),dp=rad(c-a),dl=rad(d-b);const h=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;return R*2*Math.atan2(Math.sqrt(h),Math.sqrt(1-h))}
 async function refreshTracking(id,initial){
   try{
     const r=await fetch("/api/order/"+encodeURIComponent(id)+"/tracking",{cache:"no-store"});const d=await r.json();if(!r.ok)throw Error(d.error||"Order not found");
@@ -149,26 +150,44 @@ async function refreshTracking(id,initial){
     const idx=Math.max(0,steps.indexOf(status));
     const hasCustomer=Number.isFinite(Number(d.order.customer_lat))&&Number.isFinite(Number(d.order.customer_lng));
     const hasDriver=Number.isFinite(Number(d.delivery?.lat))&&Number.isFinite(Number(d.delivery?.lng));
-    const map=`<div class="live-map-wrap"><div id="customerMap" class="customer-map"><div class="map-placeholder">🗺️<br><b>Live delivery map</b><small>${hasDriver?"Driver GPS is live — updates every few seconds.":"Waiting for driver location…"}</small></div></div></div>`;
-    const note=hasDriver?`Driver: <b>${esc(d.delivery.driver_name||"Assigned driver")}</b> · ${d.delivery.last_seen?`last update ${new Date(d.delivery.last_seen).toLocaleTimeString()}`:"live"}`:(d.delivery?.driver_name?`Driver: <b>${esc(d.delivery.driver_name)}</b> · Waiting for GPS`:"A driver will be assigned after your order is confirmed.");
-    $("trackingBody").innerHTML=`<div class="tracking-card"><div class="track-top"><b>#${esc(d.order.id)}</b><span class="badge">${esc(status.replaceAll("_"," "))}</span></div><h3>${esc(d.order.product_name)} × ${d.order.quantity}</h3><p>${esc(d.order.location||"Delivery location pending")}${hasCustomer?" · 📍 GPS location saved":""}</p>${map}<div class="timeline">${steps.map((x,i)=>`<div class="timeline-step ${i<=idx?"done":""}"><span>${i<=idx?"✓":"•"}</span><b>${x.replaceAll("_"," ")}</b></div>`).join("")}</div><p class="muted">${note}</p></div>`;
-    if(window.L){loadTrackingMap(d.order.customer_lat,d.order.customer_lng,d.delivery?.lat,d.delivery?.lng);}
+    if(initial){
+      const map=`<div class="live-map-wrap"><div id="customerMap" class="customer-map"><div class="map-placeholder">🗺️<br><b>Live delivery map</b><small>Loading map…</small></div></div></div>`;
+      $("trackingBody").innerHTML=`<div class="tracking-card"><div class="track-top"><b>#${esc(d.order.id)}</b><span id="trackingStatus" class="badge"></span></div><h3 id="trackingProduct"></h3><p id="trackingLocation"></p>${map}<div class="timeline" id="trackingTimeline"></div><p class="muted" id="trackingNote"></p></div>`;
+    }
+    const statusEl=$("trackingStatus"),productEl=$("trackingProduct"),locationEl=$("trackingLocation"),timelineEl=$("trackingTimeline"),noteEl=$("trackingNote");
+    if(!statusEl||!productEl||!locationEl||!timelineEl||!noteEl)return;
+    statusEl.textContent=status.replaceAll("_"," ");productEl.textContent=`${d.order.product_name} × ${d.order.quantity}`;locationEl.textContent=(d.order.location||"Delivery location pending")+(hasCustomer?" · 📍 GPS location saved":"");
+    timelineEl.innerHTML=steps.map((x,i)=>`<div class="timeline-step ${i<=idx?"done":""}"><span>${i<=idx?"✓":"•"}</span><b>${x.replaceAll("_"," ")}</b></div>`).join("");
+    const distance=hasCustomer&&hasDriver?trackingDistanceKm(Number(d.delivery.lat),Number(d.delivery.lng),Number(d.order.customer_lat),Number(d.order.customer_lng)):null;
+    noteEl.innerHTML=hasDriver?`Driver: <b>${esc(d.delivery.driver_name||"Assigned driver")}</b> · ${distance!==null?`<b>${distance<1?Math.round(distance*1000)+" m":distance.toFixed(1)+" km"}</b> away · `:""}${d.delivery.last_seen?`last update ${new Date(d.delivery.last_seen).toLocaleTimeString()}`:"live"}`:(d.delivery?.driver_name?`Driver: <b>${esc(d.delivery.driver_name)}</b> · Waiting for GPS`:"A driver will be assigned after your order is confirmed.");
+    if(window.L)loadTrackingMap(d.order.customer_lat,d.order.customer_lng,d.delivery?.lat,d.delivery?.lng);
     if(status==="DELIVERED")stopTrackingPolling();
   }catch(e){if(initial)$("trackingBody").innerHTML=`<div class="empty-search"><div>🔎</div><h3>Order not found</h3><p>${esc(e.message||"Check your order number.")}</p></div>`}
 }
 function loadTrackingMap(customerLat,customerLng,driverLat,driverLng){
   const el=$("customerMap");if(!el||!window.L)return;
-  if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}
   const hasCustomer=Number.isFinite(Number(customerLat))&&Number.isFinite(Number(customerLng));const hasDriver=Number.isFinite(Number(driverLat))&&Number.isFinite(Number(driverLng));
-  if(!hasCustomer&&!hasDriver){el.innerHTML='<div class="map-placeholder">📍<br><b>Waiting for location</b><small>The order has no GPS location yet.</small></div>';return}
-  const center=[hasDriver?Number(driverLat):Number(customerLat),hasDriver?Number(driverLng):Number(customerLng)];
-  trackingMap=L.map(el,{zoomControl:true,scrollWheelZoom:false}).setView(center,15);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(trackingMap);
-  const points=[];
-  if(hasCustomer){L.marker([Number(customerLat),Number(customerLng)]).addTo(trackingMap).bindPopup("📍 Your delivery location");points.push([Number(customerLat),Number(customerLng)])}
-  if(hasDriver){L.circleMarker([Number(driverLat),Number(driverLng)],{radius:9,weight:3}).addTo(trackingMap).bindPopup("🛵 Driver — live");points.push([Number(driverLat),Number(driverLng)])}
-  if(points.length===2)L.polyline(points,{weight:4,dashArray:"9 8"}).addTo(trackingMap);
-  if(points.length>1)trackingMap.fitBounds(L.latLngBounds(points),{padding:[25,25],maxZoom:16});
+  if(!hasCustomer&&!hasDriver){el.innerHTML='<div class="map-placeholder">📍<br><b>Waiting for location</b><small>The order has no GPS location yet.</small></div>';if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}return}
+  const clat=Number(customerLat),clng=Number(customerLng),dlat=Number(driverLat),dlng=Number(driverLng);
+  if(!trackingMap){
+    const center=[hasDriver?dlat:clat,hasDriver?dlng:clng];
+    trackingMap=L.map(el,{zoomControl:true,scrollWheelZoom:false,dragging:true,doubleClickZoom:false,boxZoom:false,keyboard:true,preferCanvas:true}).setView(center,15);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,maxNativeZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,crossOrigin:true,attribution:'© OpenStreetMap contributors'}).addTo(trackingMap);
+    trackingMap.__customer=null;trackingMap.__driver=null;trackingMap.__line=null;trackingMap.__initialFit=true;trackingMap.__customerLat=clat;trackingMap.__customerLng=clng;
+  }
+  const m=trackingMap;
+  if(hasCustomer){
+    if(!m.__customer)m.__customer=L.marker([clat,clng]).addTo(m).bindPopup("📍 Your delivery location");else m.__customer.setLatLng([clat,clng]);
+    m.__customerLat=clat;m.__customerLng=clng;
+  }
+  if(hasDriver){
+    if(!m.__driver)m.__driver=L.circleMarker([dlat,dlng],{radius:9,weight:3}).addTo(m).bindPopup("🛵 Driver — live");else m.__driver.setLatLng([dlat,dlng]);
+    if(hasCustomer){
+      if(!m.__line)m.__line=L.polyline([[dlat,dlng],[clat,clng]],{weight:4,dashArray:"9 8"}).addTo(m);else m.__line.setLatLngs([[dlat,dlng],[clat,clng]]);
+      if(m.__initialFit){m.fitBounds(L.latLngBounds([[dlat,dlng],[clat,clng]]),{padding:[25,25],maxZoom:16});m.__initialFit=false}
+    }
+  }else if(hasCustomer&&m.__initialFit){m.setView([clat,clng],15);m.__initialFit=false}
+  setTimeout(()=>m.invalidateSize({pan:false}),50);
 }
 function stopTrackingPolling(){if(trackingPoll){clearInterval(trackingPoll);trackingPoll=null}if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}}
 function captureCheckoutLocation(){
