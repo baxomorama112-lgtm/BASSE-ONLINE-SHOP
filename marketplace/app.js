@@ -1,6 +1,6 @@
 let category="All",selected=null,searchTimer=null,searchIndex=[];
 const $=id=>document.getElementById(id),money=n=>"D"+Number(n||0).toLocaleString();
-let checkoutGps={lat:null,lng:null,accuracy:null},trackingMap=null,trackingPoll=null;
+let checkoutGps={lat:null,lng:null,accuracy:null},trackingMap=null,trackingPoll=null,trackingPhone="";
 
 function renderProductGrid(ps, silent=false){
   const grid=$("grid");
@@ -130,11 +130,25 @@ async function openStore(id){
   }catch(e){$("storeDetail").innerHTML=`<div class="empty-search"><div>⚠️</div><h3>Store unavailable</h3><p>${esc(e.message||"Please try again.")}</p></div>`}
 }
 function trackOrderPrompt(){
-  const id=prompt("Enter your BASSE order number (example: BOS-AB12CD34):");
-  if(id&&id.trim())openOrderTracking(id.trim());
+  const modal=$("modal");
+  modal.innerHTML=`<div class="sheet form-sheet tracking-entry-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="mini-bag">🚚</span><div><small>BASSE DELIVERY</small><h2>Track Your Order</h2></div></div><p class="muted">No account is required. Enter the order number and the WhatsApp number used when you placed the order.</p><div class="form"><label>Order Number</label><input id="trackOrderId" autocomplete="off" placeholder="BOS-AB12CD34"><label>WhatsApp Number</label><input id="trackPhone" inputmode="numeric" autocomplete="tel" placeholder="7XXXXXX"><button class="pay" type="button" onclick="submitGuestTracking()">🚚 TRACK ORDER <span>→</span></button><button class="secondary-btn" type="button" onclick="closeModal()">CANCEL</button></div></div>`;
+  modal.classList.add('show');
 }
-async function openOrderTracking(id){
+async function submitGuestTracking(){
+  const id=$("trackOrderId").value.trim().toUpperCase();
+  const phone=$("trackPhone").value.replace(/\D/g,"").replace(/^220/,"");
+  if(!id)return toast("Enter your order number.");
+  if(phone.length<6)return toast("Enter the WhatsApp number used for the order.");
+  try{
+    const r=await fetch(`/api/order/${encodeURIComponent(id)}/tracking?phone=${encodeURIComponent(phone)}`,{cache:"no-store"});
+    const d=await r.json();
+    if(!r.ok)throw Error(d.error||"Order not found.");
+    openOrderTracking(id,phone);
+  }catch(e){toast(e.message)}
+}
+async function openOrderTracking(id,phone=""){
   stopTrackingPolling();
+  trackingPhone=phone;
   const modal=$("modal");
   modal.innerHTML=`<div class="sheet tracking-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="mini-bag">🚚</span><div><small>BASSE DELIVERY</small><h2>Track Order</h2></div></div><div id="trackingBody"><div class="store-loading">Loading tracking…</div></div></div>`;
   modal.classList.add("show");
@@ -144,7 +158,7 @@ async function openOrderTracking(id){
 function trackingDistanceKm(a,b,c,d){const R=6371,rad=x=>x*Math.PI/180;const p1=rad(a),p2=rad(c),dp=rad(c-a),dl=rad(d-b);const h=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;return R*2*Math.atan2(Math.sqrt(h),Math.sqrt(1-h))}
 async function refreshTracking(id,initial){
   try{
-    const r=await fetch("/api/order/"+encodeURIComponent(id)+"/tracking",{cache:"no-store"});const d=await r.json();if(!r.ok)throw Error(d.error||"Order not found");
+    const r=await fetch("/api/order/"+encodeURIComponent(id)+"/tracking"+(trackingPhone?"?phone="+encodeURIComponent(trackingPhone):""),{cache:"no-store"});const d=await r.json();if(!r.ok)throw Error(d.error||"Order not found");
     const status=d.delivery?.status||d.order.order_status||"NEW";
     const steps=["NEW","READY","ACCEPTED","PICKED_UP","ON_THE_WAY","ARRIVED","DELIVERED"];
     const idx=Math.max(0,steps.indexOf(status));
@@ -172,24 +186,24 @@ function loadTrackingMap(customerLat,customerLng,driverLat,driverLng){
   if(!trackingMap){
     const center=[hasDriver?dlat:clat,hasDriver?dlng:clng];
     trackingMap=L.map(el,{zoomControl:true,scrollWheelZoom:false,dragging:true,doubleClickZoom:false,boxZoom:false,keyboard:true,preferCanvas:true}).setView(center,15);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,maxNativeZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,crossOrigin:true,attribution:'© OpenStreetMap contributors'}).addTo(trackingMap);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,keepBuffer:3,updateWhenIdle:true,updateWhenZooming:false,attribution:'© OpenStreetMap contributors'}).addTo(trackingMap);
     trackingMap.__customer=null;trackingMap.__driver=null;trackingMap.__line=null;trackingMap.__initialFit=true;trackingMap.__customerLat=clat;trackingMap.__customerLng=clng;
   }
   const m=trackingMap;
   if(hasCustomer){
-    if(!m.__customer)m.__customer=L.marker([clat,clng]).addTo(m).bindPopup("📍 Your delivery location");else m.__customer.setLatLng([clat,clng]);
+    if(!m.__customer)m.__customer=L.marker([clat,clng],{icon:L.divIcon({className:"basse-map-marker customer-marker",html:"<span>📍</span><b>Customer</b>",iconSize:[82,30],iconAnchor:[12,28]})}).addTo(m).bindPopup("📍 Your delivery location");else m.__customer.setLatLng([clat,clng]);
     m.__customerLat=clat;m.__customerLng=clng;
   }
   if(hasDriver){
-    if(!m.__driver)m.__driver=L.circleMarker([dlat,dlng],{radius:9,weight:3}).addTo(m).bindPopup("🛵 Driver — live");else m.__driver.setLatLng([dlat,dlng]);
+    if(!m.__driver)m.__driver=L.marker([dlat,dlng],{icon:L.divIcon({className:"basse-map-marker driver-marker",html:"<span>🛵</span><b>Driver</b>",iconSize:[70,30],iconAnchor:[12,28]})}).addTo(m).bindPopup("🛵 Driver — live");else m.__driver.setLatLng([dlat,dlng]);
     if(hasCustomer){
       if(!m.__line)m.__line=L.polyline([[dlat,dlng],[clat,clng]],{weight:4,dashArray:"9 8"}).addTo(m);else m.__line.setLatLngs([[dlat,dlng],[clat,clng]]);
       if(m.__initialFit){m.fitBounds(L.latLngBounds([[dlat,dlng],[clat,clng]]),{padding:[25,25],maxZoom:16});m.__initialFit=false}
     }
   }else if(hasCustomer&&m.__initialFit){m.setView([clat,clng],15);m.__initialFit=false}
-  setTimeout(()=>m.invalidateSize({pan:false}),50);
+  setTimeout(()=>m.invalidateSize({pan:false}),150);setTimeout(()=>m.invalidateSize({pan:false}),500);window.addEventListener("resize",()=>m.invalidateSize({pan:false}),{once:false});
 }
-function stopTrackingPolling(){if(trackingPoll){clearInterval(trackingPoll);trackingPoll=null}if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}}
+function stopTrackingPolling(){if(trackingPoll){clearInterval(trackingPoll);trackingPoll=null}if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}trackingPhone=""}
 function captureCheckoutLocation(){
   const state=$("checkoutGpsState");
   if(!navigator.geolocation){if(state)state.textContent="This phone/browser does not support GPS.";return}

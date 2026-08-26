@@ -382,6 +382,8 @@ app.get("/api/order/:id",(req,res)=>{let o=db.prepare("SELECT * FROM orders WHER
 app.get("/api/order/:id/tracking",(req,res)=>{
   const o=db.prepare("SELECT id,product_name,quantity,customer_name,whatsapp,location,total,payment_status,order_status,created_at,customer_lat,customer_lng,customer_accuracy FROM orders WHERE id=?").get(req.params.id);
   if(!o)return res.status(404).json({error:"Order not found"});
+  const suppliedPhone=String(req.query.phone||"").replace(/\D/g,"").replace(/^220/,"");
+  if(suppliedPhone && suppliedPhone!==String(o.whatsapp||"").replace(/\D/g,"").replace(/^220/,""))return res.status(403).json({error:"The WhatsApp number does not match this order."});
   const d=db.prepare(`
     SELECT d.*,dr.full_name AS driver_name,dr.whatsapp AS driver_whatsapp
     FROM deliveries d LEFT JOIN delivery_drivers dr ON dr.id=d.driver_id
