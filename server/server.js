@@ -151,6 +151,7 @@ const sessions=new Map(); // retained only for backwards compatibility; auth is 
 // whenever products, vendors, orders or payments change. A short polling fallback remains
 // on the clients so the site still recovers automatically after a dropped connection.
 const liveClients=new Set();
+const lastLocationBroadcast=new Map();
 // Anonymous marketplace presence. No name, phone, IP or account data is stored.
 const liveViewers=new Map();
 function viewerSource(req,body={}){
@@ -530,7 +531,9 @@ app.post("/api/driver/deliveries/:id/location",driverGuard,(req,res)=>{
   const lat=Number(req.body.lat),lng=Number(req.body.lng),accuracy=Number(req.body.accuracy||0);
   if(!Number.isFinite(lat)||!Number.isFinite(lng)||lat<-90||lat>90||lng<-180||lng>180)return res.status(400).json({error:"Invalid GPS coordinates."});
   db.prepare("UPDATE deliveries SET lat=?,lng=?,accuracy=?,last_seen=? WHERE id=?").run(lat,lng,accuracy,new Date().toISOString(),d.id);
-  broadcastLive("orders",{orderId:d.order_id,location:true});res.json({ok:true});
+  const now=Date.now(), last=lastLocationBroadcast.get(String(d.order_id))||0;
+  if(now-last>=2000){lastLocationBroadcast.set(String(d.order_id),now);broadcastLive("orders",{orderId:d.order_id,location:true});}
+  res.json({ok:true});
 });
 app.post("/api/vendor/login",(req,res)=>{
  const phone=String(req.body.whatsapp||req.body.phone||"").replace(/\D/g,"").replace(/^220/,""),pin=String(req.body.pin||req.body.password||"");
