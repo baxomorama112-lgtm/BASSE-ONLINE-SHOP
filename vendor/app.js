@@ -47,8 +47,8 @@ function logout(){
 }
 async function refresh(){
   try{
-    let [me,st,ps,os]=await Promise.all([
-      api("/api/vendor/me"),api("/api/vendor/stats"),api("/api/vendor/products"),api("/api/vendor/orders")
+    let [me,st,ps,os,ts]=await Promise.all([
+      api("/api/vendor/me"),api("/api/vendor/stats"),api("/api/vendor/products"),api("/api/vendor/orders"),api("/api/vendor/transactions")
     ]);
     $("shop").textContent=me.business_name;
     $("products").textContent=st.products;
@@ -57,6 +57,7 @@ async function refresh(){
     $("earnings").textContent=money(st.earnings);
     $("productsList").innerHTML=ps.map(p=>`<div class="product-row"><img src="${p.image||""}"><div><b>${esc(p.name)}</b><small>${money(p.price)} · Stock ${p.stock}</small></div><span class="badge">${p.approval_status}</span></div>`).join("")||"<p>No products yet.</p>";
     $("orders").innerHTML=os.map(o=>`<div class="order-row"><div><b>${esc(o.id)}</b><br><small>${esc(o.product_name)} × ${o.quantity} · ${esc(o.customer_name)}</small></div><b>${money(o.total)}</b><span class="badge">${o.payment_status}</span></div>`).join("")||"<p>No orders yet.</p>";
+    $("transactions").innerHTML=ts.map(t=>`<div class="order-row"><div><b>${esc(t.id)}</b><br><small>${esc(t.product_name)} × ${t.quantity} · ${esc(t.created_at||"")}</small></div><div><b>${money(t.total)}</b><br><small>Commission ${money(t.commission)} · Earnings ${money(t.vendor_earnings)}</small></div><span class="badge">${t.payment_status}</span></div>`).join("")||"<p>No transactions yet.</p>";
   }catch(e){
     if(/login|approved|unauthorized/i.test(e.message))showLogin();
   }

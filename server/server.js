@@ -72,7 +72,7 @@ function restoreShopBackupIfEmpty(){
       orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings"],
       vendors:["id","full_name","business_name","whatsapp","email","email_verified","verification_code","verification_expires","location","category","description","password_hash","status","created_at"],
       vendor_products:["id","product_id","vendor_id","status","created_at"],
-      customer_accounts:["id","full_name","whatsapp","password_hash","created_at"],
+      customer_accounts:["id","full_name","whatsapp","password_hash","status","created_at"],
       payout_requests:["id","vendor_id","amount","status","created_at"],
       vendor_submission_keys:["idempotency_key","vendor_id","product_id","created_at"]
     };
@@ -100,6 +100,7 @@ function restoreShopBackupIfEmpty(){
 }
 
 try{db.exec("ALTER TABLE products ADD COLUMN vendor_id INTEGER DEFAULT NULL")}catch(e){}
+try{db.exec("ALTER TABLE customer_accounts ADD COLUMN status TEXT DEFAULT 'ACTIVE'")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN vendor_id INTEGER DEFAULT NULL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN commission INTEGER DEFAULT 0")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN vendor_earnings INTEGER DEFAULT 0")}catch(e){}
@@ -233,7 +234,38 @@ app.post("/api/admin/restore",guard,(req,res)=>{
     res.json({ok:true,message:`Backup restored successfully: ${data.tables.products.length} products, ${(data.tables.orders||[]).length} orders, ${(data.tables.vendors||[]).length} vendors and ${restoredFiles} image files.`});
   }catch(e){console.error("Backup restore failed:",e);res.status(500).json({error:"Restore failed. The backup format may not match this shop version."})}
 });
-app.get("/api/admin/stats",guard,(req,res)=>res.json({products:db.prepare("SELECT COUNT(*) c FROM products WHERE active=1").get().c,orders:db.prepare("SELECT COUNT(*) c FROM orders").get().c,pending:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PENDING'").get().c,paid:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PAID'").get().c,cancelled:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='CANCELLED' OR order_status='CANCELLED'").get().c,refunded:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='REFUNDED'").get().c,sales:db.prepare("SELECT COALESCE(SUM(total),0) s FROM orders WHERE payment_status='PAID' AND order_status!='CANCELLED' AND date(created_at)=date('now','localtime')").get().s}));
+app.get("/api/admin/stats",guard,(req,res)=>res.json({products:db.prepare("SELECT COUNT(*) c FROM products WHERE active=1").get().c,orders:db.prepare("SELECT COUNT(*) c FROM orders").get().c,customers:db.prepare("SELECT COUNT(*) c FROM (SELECT whatsapp FROM customer_accounts UNION SELECT whatsapp FROM orders WHERE whatsapp IS NOT NULL AND whatsapp!='')").get().c,pending:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PENDING'").get().c,paid:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PAID'").get().c,cancelled:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='CANCELLED' OR order_status='CANCELLED'").get().c,refunded:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='REFUNDED'").get().c,sales:db.prepare("SELECT COALESCE(SUM(total),0) s FROM orders WHERE payment_status='PAID' AND order_status!='CANCELLED' AND date(created_at)=date('now','localtime')").get().s}));
+app.post("/api/customers/register",(req,res)=>{
+ const name=String(req.body?.name||req.body?.fullName||"").trim();
+ const phone=String(req.body?.whatsapp||req.body?.phone||"").replace(/\D/g,"").replace(/^220/,"");
+ const password=String(req.body?.password||"");
+ if(!name||phone.length<6)return res.status(400).json({error:"Enter your name and valid WhatsApp number."});
+ if(password.length<4)return res.status(400).json({error:"Customer password must be at least 4 characters."});
+ const fullPhone="220"+phone;
+ const hash=crypto.createHash("sha256").update(password).digest("hex");
+ const existing=db.prepare("SELECT id,full_name,whatsapp,password_hash,status FROM customer_accounts WHERE whatsapp=?").get(fullPhone);
+ if(existing){
+   if(existing.status==='BLOCKED')return res.status(403).json({error:"This customer account is blocked. Please contact BASSE Admin."});
+   db.prepare("UPDATE customer_accounts SET full_name=?,password_hash=? WHERE id=?").run(name,hash,existing.id);
+   backupShopData("customer-registered");
+   return res.json({ok:true,id:existing.id,full_name:name,whatsapp:fullPhone,status:existing.status||'ACTIVE'});
+ }
+ const x=db.prepare("INSERT INTO customer_accounts(full_name,whatsapp,password_hash,status) VALUES(?,?,?,?)").run(name,fullPhone,hash,"ACTIVE"); backupShopData("customer-registered");
+ res.status(201).json({ok:true,id:Number(x.lastInsertRowid),full_name:name,whatsapp:fullPhone,status:"ACTIVE"});
+});
+app.post("/api/customers/login",(req,res)=>{
+ const phone=String(req.body?.whatsapp||req.body?.phone||"").replace(/\D/g,"").replace(/^220/,"");
+ const password=String(req.body?.password||"");
+ if(phone.length<6||password.length<4)return res.status(400).json({error:"Enter your WhatsApp number and password."});
+ const fullPhone="220"+phone;
+ const c=db.prepare("SELECT id,full_name,whatsapp,password_hash,status FROM customer_accounts WHERE whatsapp=?").get(fullPhone);
+ if(!c)return res.status(401).json({error:"Customer account not found. You can create one or continue as a guest."});
+ if(c.status==='BLOCKED')return res.status(403).json({error:"This customer account is blocked. Please contact BASSE Admin."});
+ const hash=crypto.createHash("sha256").update(password).digest("hex");
+ if(!c.password_hash||hash!==String(c.password_hash))return res.status(401).json({error:"Incorrect customer password."});
+ res.json({ok:true,id:c.id,full_name:c.full_name,whatsapp:c.whatsapp,status:c.status||"ACTIVE"});
+});
+
 app.post("/api/orders",async(req,res)=>{
   let p=db.prepare("SELECT * FROM products WHERE id=? AND active=1").get(req.body.productId);
   let q=Math.max(1,+req.body.quantity||1);
@@ -243,6 +275,8 @@ app.post("/api/orders",async(req,res)=>{
   if(rawPhone.length<6)return res.status(400).json({error:"Enter a valid WhatsApp number"});
   let id="BOS-"+crypto.randomBytes(4).toString("hex").toUpperCase();
   let phone="220"+rawPhone,total=p.price*q;
+  const customerAccount=db.prepare("SELECT status FROM customer_accounts WHERE whatsapp=?").get(phone);
+  if(customerAccount?.status==='BLOCKED')return res.status(403).json({error:"This customer account is blocked. Please contact BASSE Admin."});
   let vendorId=p.vendor_id||null, commission=Math.round(total*0.10), vendorEarnings=total-commission;
   db.prepare("INSERT INTO orders(id,product_id,product_name,quantity,customer_name,whatsapp,location,total,vendor_id,commission,vendor_earnings) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
     .run(id,p.id,p.name,q,String(req.body.name||"").trim(),phone,String(req.body.location||""),total,vendorId,commission,vendorEarnings);
@@ -314,6 +348,16 @@ app.post("/api/waychit/webhook",(req,res)=>{
 });
 
 
+app.get("/api/admin/customers",guard,(req,res)=>{
+ const accounts=db.prepare( `SELECT c.id,c.full_name,c.whatsapp,c.status,c.created_at,(SELECT COUNT(*) FROM orders o WHERE o.whatsapp=c.whatsapp) order_count,(SELECT COALESCE(SUM(o.total),0) FROM orders o WHERE o.whatsapp=c.whatsapp AND o.payment_status='PAID') total_spent,(SELECT MAX(o.created_at) FROM orders o WHERE o.whatsapp=c.whatsapp) last_order FROM customer_accounts c ORDER BY datetime(c.created_at) DESC`).all();
+ const known=new Set(accounts.map(x=>x.whatsapp));
+ const guests=db.prepare(`SELECT whatsapp,MAX(customer_name) customer_name,COUNT(*) order_count,COALESCE(SUM(CASE WHEN payment_status='PAID' THEN total ELSE 0 END),0) total_spent,MAX(created_at) last_order FROM orders WHERE whatsapp IS NOT NULL AND whatsapp!='' GROUP BY whatsapp ORDER BY last_order DESC`).all();
+ for(const g of guests)if(!known.has(g.whatsapp))accounts.push({id:null,full_name:g.customer_name||'Guest customer',whatsapp:g.whatsapp,status:'GUEST',created_at:null,order_count:g.order_count,total_spent:g.total_spent,last_order:g.last_order});
+ res.json(accounts);
+});
+app.patch("/api/admin/customers/:id/status",guard,(req,res)=>{const status=String(req.body?.status||'').toUpperCase();if(!['ACTIVE','BLOCKED'].includes(status))return res.status(400).json({error:'Invalid customer status'});const r=db.prepare("UPDATE customer_accounts SET status=? WHERE id=?").run(status,req.params.id);if(!r.changes)return res.status(404).json({error:'Customer account not found'});backupShopData("customer-status");res.json({ok:true,status});});
+app.delete("/api/admin/customers/:id",guard,(req,res)=>{const r=db.prepare("DELETE FROM customer_accounts WHERE id=?").run(req.params.id);if(!r.changes)return res.status(404).json({error:'Customer account not found'});backupShopData("customer-deleted");res.json({ok:true});});
+
 app.post("/api/vendor/login",(req,res)=>{
  const phone=String(req.body.whatsapp||req.body.phone||"").replace(/\D/g,"").replace(/^220/,""),pin=String(req.body.pin||req.body.password||"");
  if(phone.length<6||!/^\d{4,5}$/.test(pin))return res.status(400).json({error:"Enter your phone number and 4 or 5 digit PIN."});
@@ -326,6 +370,7 @@ app.post("/api/vendor/login",(req,res)=>{
 });
 app.get("/api/vendor/me",vendorGuard,(req,res)=>{let v=db.prepare("SELECT id,full_name,business_name,whatsapp,location,category,status FROM vendors WHERE id=?").get(req.vendorId);res.json(v)});
 app.get("/api/vendor/orders",vendorGuard,(req,res)=>res.json(db.prepare("SELECT * FROM orders WHERE vendor_id=? ORDER BY datetime(created_at) DESC").all(req.vendorId)));
+app.get("/api/vendor/transactions",vendorGuard,(req,res)=>res.json(db.prepare("SELECT id,product_name,quantity,total,commission,vendor_earnings,payment_status,order_status,created_at FROM orders WHERE vendor_id=? ORDER BY datetime(created_at) DESC").all(req.vendorId)));
 app.get("/api/vendor/stats",vendorGuard,(req,res)=>res.json({
  products:db.prepare("SELECT COUNT(*) c FROM products WHERE vendor_id=? AND active=1").get(req.vendorId).c,
  pendingProducts:db.prepare("SELECT COUNT(*) c FROM products WHERE vendor_id=? AND active=0").get(req.vendorId).c,

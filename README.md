@@ -75,3 +75,10 @@ Do not delete the existing Render disk when deploying. On the Free Render instan
 
 ### Image-safe backups
 Full backups now include the actual uploaded files from `server/data/uploads` as base64 data, and restore writes those files back before products are served. Cloud snapshots use the same file bundle. This is designed to prevent products from returning without their pictures after a Render restart.
+
+## Customer access update
+- Customer login is optional.
+- Customers can browse and place orders as guests without creating/logging into an account.
+- Customer accounts can be created with a password and can log in later.
+- Logged-in customer details are prefilled at checkout.
+- Admin can still manage customer accounts and blocked accounts cannot place orders.
