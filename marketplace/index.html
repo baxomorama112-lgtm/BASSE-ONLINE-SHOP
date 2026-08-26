@@ -4,7 +4,7 @@
 <header class="top">
 <a class="brand" href="#" aria-label="BASSE Marketplace"><img class="brand-logo" src="/basse-marketplace-logo.jpg" alt="BASSE Marketplace"></a>
 <div class="search-wrap"><div class="search"><input id="search" autocomplete="off" placeholder="Search products, phones, fashion, beauty..." aria-label="Search products"><button id="searchBtn" type="button" aria-label="Search">⌕</button><button id="clearSearch" class="clear-search" type="button" aria-label="Clear search">×</button></div><div id="searchSuggestions" class="search-suggestions"></div></div>
-<button class="stores-top" type="button" onclick="openStores()" aria-label="View stores">🏪 Stores</button><button class="track-top" type="button" onclick="trackOrderPrompt()" aria-label="Track order">🚚 Track</button><a class="support" href="tel:+2206963349" aria-label="Call support">☎ Support</a><button class="cart" onclick="openCart()" aria-label="Cart">🛒<i id="cartCount">0</i></button>
+<button class="stores-top" type="button" onclick="openStores()" aria-label="View stores">🏪 Stores</button><a class="app-download-top" href="/download" aria-label="Download BASSE ONLINE SHOP Android app">📱 App</a><button class="track-top" type="button" onclick="trackOrderPrompt()" aria-label="Track order">🚚 Track</button><a class="support" href="tel:+2206963349" aria-label="Call support">☎ Support</a><button class="cart" onclick="openCart()" aria-label="Cart">🛒<i id="cartCount">0</i></button>
 </header>
 <main>
 <section class="hero market-banner" aria-label="BASSE Marketplace promotion">
@@ -23,6 +23,15 @@
 <button onclick="setCat('Accessories',this)" aria-label="Accessories"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10l2 3v10H5V10zM9 7a3 3 0 016 0" fill="none" stroke="currentColor" stroke-width="2"/></svg><b>Accessories</b></button>
 </div></section>
 <section id="products"><div class="section-title"><div><h2>Featured products</h2><span>Fresh products from BASSE ONLINE SHOP</span></div><small id="count"></small></div><div id="grid"></div></section>
+<section class="app-promo" aria-label="BASSE ONLINE SHOP Android app">
+  <div class="app-promo-icon">📱</div>
+  <div class="app-promo-copy">
+    <small>BASSE ONLINE SHOP APP</small>
+    <h2>Shop faster on Android</h2>
+    <p>Download the BASSE ONLINE SHOP app and keep shopping from your phone.</p>
+  </div>
+  <a class="app-promo-btn" href="/download">DOWNLOAD APP <b>→</b></a>
+</section>
 <section class="trust"><div>🔒<b>Secure payment</b><span>Pay with Waychit</span></div><div>☎<b>Telephone support</b><span>+220 6963349</span></div><div>🚚<b>Local delivery</b><span>Delivery based on location</span></div></section>
 </main>
 <nav class="bottom" aria-label="Main navigation">
@@ -32,5 +41,14 @@
 <a href="tel:+2206963349" aria-label="Telephone support"><svg viewBox="0 0 24 24"><path d="M6.5 3.5l3 2-2 3c1.4 3 3 4.6 6 6l3-2 2 3c-4 4-11 0-14-4-3-4-2-7 2-8z" fill="none" stroke="currentColor" stroke-width="2"/></svg><small>Support</small></a>
 <button onclick="openAccount()" aria-label="Account"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3"/><path d="M5 21c.5-4 2.8-6 7-6s6.5 2 7 6" fill="none" stroke="currentColor" stroke-width="2"/></svg><small>Account</small></button>
 </nav>
-<div id="modal" class="modal"></div><div id="toast" class="toast"></div><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script>if(!window.L){var s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js";document.head.appendChild(s);}</script><script src="app.js"></script>
+<div id="modal" class="modal"></div><div id="toast" class="toast"></div><script>
+(function(){
+  function load(src,done,fail){var s=document.createElement("script");s.src=src;s.onload=done;s.onerror=fail;document.head.appendChild(s);}
+  load("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",function(){window.__leafletReady=true;load("app.js",function(){},function(){});},function(){
+    load("https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js",function(){window.__leafletReady=true;load("app.js",function(){},function(){});},function(){
+      window.__leafletReady=false;load("app.js",function(){},function(){});
+    });
+  });
+})();
+</script>
 </body></html>

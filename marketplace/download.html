@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Download BASSE ONLINE SHOP App</title>
+<meta name="description" content="Download the BASSE ONLINE SHOP Android app.">
+<meta name="theme-color" content="#071a4a">
+<style>
+:root{--navy:#071a4a;--blue:#1748a8;--gold:#f5b400;--bg:#f6f8fc;--text:#101827;--muted:#687386;--line:#e5e9f0}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(160deg,#f6f8fc,#fff);font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;color:var(--text);min-height:100vh;display:grid;place-items:center;padding:24px}
+.card{width:min(560px,100%);background:#fff;border:1px solid var(--line);border-radius:28px;box-shadow:0 20px 60px #071a4a16;padding:30px;text-align:center}
+.logo{width:78px;height:78px;border-radius:22px;object-fit:cover;margin:auto;display:block;box-shadow:0 8px 25px #071a4a18}
+.kicker{margin:18px 0 5px;font-size:10px;font-weight:950;color:var(--blue);letter-spacing:1.5px}
+h1{margin:0;font-size:30px;color:var(--navy)}p{color:var(--muted);line-height:1.55;font-size:14px}
+.download{display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;background:var(--navy);color:#fff;padding:15px 18px;border-radius:14px;font-weight:950;margin:22px 0 10px}
+.download.disabled{opacity:.6;pointer-events:none}
+.note{font-size:11px;color:var(--muted);background:#f5f7fb;border-radius:12px;padding:11px}
+.back{display:inline-block;margin-top:15px;color:var(--blue);text-decoration:none;font-size:12px;font-weight:850}
+</style>
+</head>
+<body>
+<main class="card">
+<img class="logo" src="/basse-marketplace-logo.jpg" alt="BASSE ONLINE SHOP">
+<div class="kicker">OFFICIAL ANDROID APP</div>
+<h1>Download BASSE ONLINE SHOP</h1>
+<p>Shop local products, place orders and get delivery directly from your Android phone.</p>
+<a id="downloadBtn" class="download" href="/downloads/BASSE_ONLINE_SHOP.apk">📱 DOWNLOAD ANDROID APP</a>
+<div id="note" class="note">Android app release file will appear here once the signed release APK is uploaded.</div>
+<a class="back" href="/">← Back to BASSE ONLINE SHOP</a>
+</main>
+<script>
+fetch('/downloads/BASSE_ONLINE_SHOP.apk',{method:'HEAD'}).then(r=>{
+  if(r.ok){document.getElementById('note').textContent='Version 5.0 · Android';}
+  else{document.getElementById('downloadBtn').classList.add('disabled');}
+}).catch(()=>document.getElementById('downloadBtn').classList.add('disabled'));
+</script>
+</body>
+</html>

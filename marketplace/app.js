@@ -111,23 +111,46 @@ function changeQty(d){let q=Math.max(1,Math.min(selected.stock,(+$('qty').value|
 function updateTotal(){$("total").textContent=money(selected.price*Math.max(1,Math.min(selected.stock,+$("qty").value||1)))}
 
 
+function storeInitials(name){
+  const parts=String(name||"BASSE").trim().split(/\s+/).filter(Boolean);
+  return (parts.slice(0,2).map(x=>x[0]).join("")||"BS").toUpperCase();
+}
+function storeCoverClass(id){return "store-cover c"+(Number(id)%6)}
 async function openStores(){
   const modal=$("modal");
-  modal.innerHTML=`<div class="sheet stores-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="mini-bag">🏪</span><div><small>BASSE MARKETPLACE</small><h2>All Stores</h2></div></div><p class="muted">Discover approved local vendors and shop directly from their stores.</p><div id="storeGrid" class="store-grid"><div class="store-loading">Loading stores…</div></div></div>`;
+  modal.innerHTML=`<div class="sheet stores-sheet"><button class="close" onclick="closeModal()">×</button>
+    <div class="stores-heading"><div><small>BASSE MARKETPLACE</small><h2>All Stores</h2><p>Discover trusted local stores and shop directly from them.</p></div><span class="store-heading-icon">🏪</span></div>
+    <div id="storeGrid" class="store-grid"><div class="store-loading">Loading stores…</div></div></div>`;
   modal.classList.add("show");
   try{
     const r=await fetch("/api/stores",{cache:"no-store"});const stores=await r.json();if(!r.ok)throw Error(stores.error||"Could not load stores");
     const grid=$("storeGrid");
-    grid.innerHTML=stores.length?stores.map(s=>`<button class="store-card" type="button" onclick="openStore(${s.id})"><div class="store-icon">🏪</div><div class="store-main"><b>${esc(s.business_name||"BASSE Store")}</b><span>${esc(s.category||"Local Store")}</span><small>${s.product_count||0} approved products${s.location?" · "+esc(s.location):""}</small></div><span class="store-arrow">→</span></button>`).join(""):`<div class="empty-search"><div>🏪</div><h3>No stores yet</h3><p>Approved vendors will appear here automatically.</p></div>`;
-  }catch(e){$("storeGrid").innerHTML=`<div class="empty-search"><div>⚠️</div><h3>Stores unavailable</h3><p>${esc(e.message||"Please try again.")}</p></div>`}
+    grid.innerHTML=stores.length?stores.map(s=>`
+      <article class="store-card-pro" tabindex="0" role="button" onclick="openStore(${s.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openStore(${s.id})}">
+        <div class="${storeCoverClass(s.id)}">
+          <div class="store-cover-badge">VERIFIED STORE</div>
+          <div class="store-logo">${esc(storeInitials(s.business_name))}</div>
+        </div>
+        <div class="store-card-body">
+          <div class="store-title-row"><div><h3>${esc(s.business_name||"BASSE Store")}</h3><span>${esc(s.category||"Local Store")}</span></div><span class="store-chevron">›</span></div>
+          <p>${esc(s.description||"Shop quality products from this local BASSE vendor.")}</p>
+          <div class="store-meta"><span>🛍️ ${s.product_count||0} products</span><span>📍 ${esc(s.location||"Basse")}</span></div>
+          <button type="button" class="view-store-btn" onclick="event.stopPropagation();openStore(${s.id})">VIEW STORE <span>→</span></button>
+        </div>
+      </article>`).join(""):`<div class="empty-search"><div>🏪</div><h3>No stores yet</h3><p>Approved vendors will appear here automatically.</p></div>`;
+  }catch(e){$("storeGrid").innerHTML=`<div class="empty-search"><div>⚠️</div><h3>Stores unavailable</h3><p>${esc(e.message||"Please try again.")}</p><button class="view-store-btn" onclick="openStores()">TRY AGAIN</button></div>`}
 }
 async function openStore(id){
   const modal=$("modal");
   modal.innerHTML=`<div class="sheet stores-sheet"><button class="close" onclick="openStores()">←</button><div id="storeDetail"><div class="store-loading">Loading store…</div></div></div>`;
+  modal.classList.add("show");
   try{
     const r=await fetch("/api/stores/"+id,{cache:"no-store"});const s=await r.json();if(!r.ok)throw Error(s.error||"Store unavailable");
-    $("storeDetail").innerHTML=`<div class="store-hero"><div class="store-icon big">🏪</div><div><small>OFFICIAL BASSE STORE</small><h2>${esc(s.business_name)}</h2><p>${esc(s.description||s.category||"Local vendor")}</p><span>${esc(s.location||"Basse")} · ${s.products.length} products</span></div></div><div class="store-products">${s.products.length?s.products.map(p=>`<article class="product" data-id="${p.id}" tabindex="0" role="button" onclick="buy(${p.id})"><div class="pic"><img src="${p.image||""}" alt="${esc(p.name)}" loading="lazy"><span class="tag">${esc(p.category)}</span></div><div class="info"><h3>${esc(p.name)}</h3><div class="price">${money(p.price)}</div></div></article>`).join(""):`<div class="empty-search"><div>🛍️</div><h3>No products yet</h3></div>`}</div>`;
-  }catch(e){$("storeDetail").innerHTML=`<div class="empty-search"><div>⚠️</div><h3>Store unavailable</h3><p>${esc(e.message||"Please try again.")}</p></div>`}
+    const initials=storeInitials(s.business_name);
+    $("storeDetail").innerHTML=`<div class="store-detail-head"><div class="${storeCoverClass(s.id)} detail-cover"><div class="store-logo big">${esc(initials)}</div></div><div class="store-detail-info"><small>VERIFIED BASSE STORE</small><h2>${esc(s.business_name)}</h2><p>${esc(s.description||s.category||"Local vendor")}</p><div class="store-meta"><span>📍 ${esc(s.location||"Basse")}</span><span>🛍️ ${s.products.length} products</span></div></div></div>
+      <div class="store-products-head"><h3>Products</h3><span>${s.products.length} available</span></div>
+      <div class="store-products">${s.products.length?s.products.map(p=>`<article class="product" data-id="${p.id}" tabindex="0" role="button" onclick="buy(${p.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();buy(${p.id})}"><div class="pic"><img src="${p.image||""}" alt="${esc(p.name)}" loading="lazy"><span class="tag">${esc(p.category)}</span></div><div class="info"><h3>${esc(p.name)}</h3><div class="price">${money(p.price)}</div><button class="buy" type="button" onclick="event.stopPropagation();buy(${p.id})">VIEW PRODUCT →</button></div></article>`).join(""):`<div class="empty-search"><div>🛍️</div><h3>No products yet</h3><p>This store has no approved products available right now.</p></div>`}</div>`;
+  }catch(e){$("storeDetail").innerHTML=`<div class="empty-search"><div>⚠️</div><h3>Store unavailable</h3><p>${esc(e.message||"Please try again.")}</p><button class="view-store-btn" onclick="openStore(${id})">TRY AGAIN</button></div>`}
 }
 function trackOrderPrompt(){
   const modal=$("modal");
@@ -178,30 +201,55 @@ async function refreshTracking(id,initial){
     if(status==="DELIVERED")stopTrackingPolling();
   }catch(e){if(initial)$("trackingBody").innerHTML=`<div class="empty-search"><div>🔎</div><h3>Order not found</h3><p>${esc(e.message||"Check your order number.")}</p></div>`}
 }
+function mapTiles(map){
+  const providers=[
+    ["https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",'© OpenStreetMap contributors'],
+    ["https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",'© OpenStreetMap contributors © CARTO']
+  ];
+  let layer=L.tileLayer(providers[0][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[0][1]}).addTo(map);
+  let switched=false;
+  layer.on("tileerror",function(){
+    if(switched)return;
+    switched=true;try{map.removeLayer(layer)}catch(e){}
+    layer=L.tileLayer(providers[1][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[1][1]}).addTo(map);
+  });
+  return layer;
+}
 function loadTrackingMap(customerLat,customerLng,driverLat,driverLng){
-  const el=$("customerMap");if(!el||!window.L)return;
-  const hasCustomer=Number.isFinite(Number(customerLat))&&Number.isFinite(Number(customerLng));const hasDriver=Number.isFinite(Number(driverLat))&&Number.isFinite(Number(driverLng));
-  if(!hasCustomer&&!hasDriver){el.innerHTML='<div class="map-placeholder">📍<br><b>Waiting for location</b><small>The order has no GPS location yet.</small></div>';if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}return}
+  const el=$("customerMap");if(!el)return;
+  const hasCustomer=Number.isFinite(Number(customerLat))&&Number.isFinite(Number(customerLng));
+  const hasDriver=Number.isFinite(Number(driverLat))&&Number.isFinite(Number(driverLng));
+  if(!window.L){
+    el.innerHTML='<div class="map-placeholder">📍<br><b>Map service is loading</b><small>Please wait a moment and tap Track Order again.</small></div>';
+    return;
+  }
+  if(!hasCustomer&&!hasDriver){
+    el.innerHTML='<div class="map-placeholder">📍<br><b>Waiting for location</b><small>The order has no GPS location yet.</small></div>';
+    if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}return;
+  }
   const clat=Number(customerLat),clng=Number(customerLng),dlat=Number(driverLat),dlng=Number(driverLng);
   if(!trackingMap){
+    el.innerHTML="";
     const center=[hasDriver?dlat:clat,hasDriver?dlng:clng];
-    trackingMap=L.map(el,{zoomControl:true,scrollWheelZoom:false,dragging:true,doubleClickZoom:false,boxZoom:false,keyboard:true,preferCanvas:true}).setView(center,15);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,keepBuffer:3,updateWhenIdle:true,updateWhenZooming:false,attribution:'© OpenStreetMap contributors'}).addTo(trackingMap);
-    trackingMap.__customer=null;trackingMap.__driver=null;trackingMap.__line=null;trackingMap.__initialFit=true;trackingMap.__customerLat=clat;trackingMap.__customerLng=clng;
+    trackingMap=L.map(el,{zoomControl:true,scrollWheelZoom:false,dragging:true,doubleClickZoom:false,boxZoom:false,keyboard:true,preferCanvas:true,fadeAnimation:false,zoomAnimation:true,markerZoomAnimation:false}).setView(center,15);
+    mapTiles(trackingMap);
+    trackingMap.__customer=null;trackingMap.__driver=null;trackingMap.__line=null;trackingMap.__initialFit=true;
   }
   const m=trackingMap;
   if(hasCustomer){
-    if(!m.__customer)m.__customer=L.marker([clat,clng],{icon:L.divIcon({className:"basse-map-marker customer-marker",html:"<span>📍</span><b>Customer</b>",iconSize:[82,30],iconAnchor:[12,28]})}).addTo(m).bindPopup("📍 Your delivery location");else m.__customer.setLatLng([clat,clng]);
-    m.__customerLat=clat;m.__customerLng=clng;
+    if(!m.__customer)m.__customer=L.marker([clat,clng],{icon:L.divIcon({className:"basse-map-marker customer-marker",html:"<span>📍</span><b>Customer</b>",iconSize:[82,30],iconAnchor:[12,28]})}).addTo(m).bindPopup("📍 Your delivery location");
+    else m.__customer.setLatLng([clat,clng]);
   }
   if(hasDriver){
-    if(!m.__driver)m.__driver=L.marker([dlat,dlng],{icon:L.divIcon({className:"basse-map-marker driver-marker",html:"<span>🛵</span><b>Driver</b>",iconSize:[70,30],iconAnchor:[12,28]})}).addTo(m).bindPopup("🛵 Driver — live");else m.__driver.setLatLng([dlat,dlng]);
-    if(hasCustomer){
-      if(!m.__line)m.__line=L.polyline([[dlat,dlng],[clat,clng]],{weight:4,dashArray:"9 8"}).addTo(m);else m.__line.setLatLngs([[dlat,dlng],[clat,clng]]);
-      if(m.__initialFit){m.fitBounds(L.latLngBounds([[dlat,dlng],[clat,clng]]),{padding:[25,25],maxZoom:16});m.__initialFit=false}
-    }
+    if(!m.__driver)m.__driver=L.marker([dlat,dlng],{icon:L.divIcon({className:"basse-map-marker driver-marker",html:"<span>🛵</span><b>Driver</b>",iconSize:[70,30],iconAnchor:[12,28]})}).addTo(m).bindPopup("🛵 Driver — live");
+    else m.__driver.setLatLng([dlat,dlng]);
+  }
+  if(hasCustomer&&hasDriver){
+    const points=[[dlat,dlng],[clat,clng]];
+    if(!m.__line)m.__line=L.polyline(points,{weight:4,dashArray:"9 8"}).addTo(m);else m.__line.setLatLngs(points);
+    if(m.__initialFit){m.fitBounds(L.latLngBounds(points),{padding:[25,25],maxZoom:16});m.__initialFit=false}
   }else if(hasCustomer&&m.__initialFit){m.setView([clat,clng],15);m.__initialFit=false}
-  setTimeout(()=>m.invalidateSize({pan:false}),150);setTimeout(()=>m.invalidateSize({pan:false}),500);window.addEventListener("resize",()=>m.invalidateSize({pan:false}),{once:false});
+  requestAnimationFrame(()=>{try{m.invalidateSize({pan:false})}catch(e){}});
 }
 function stopTrackingPolling(){if(trackingPoll){clearInterval(trackingPoll);trackingPoll=null}if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}trackingPhone=""}
 function captureCheckoutLocation(){

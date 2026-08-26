@@ -245,3 +245,43 @@ input,select,textarea{font-size:16px;}
 .customer-map{height:300px;border-radius:16px;overflow:hidden;background:#eef3f8;border:1px solid #dce2ed}.customer-map .leaflet-container{height:100%;width:100%}.location-btn{width:100%;padding:13px;border:1px solid #cfd8ea;border-radius:12px;background:#fff;color:#0a2b7a;font-weight:800;margin-top:8px}.gps-note{display:block;color:#69758a;font-size:12px;margin-top:6px}.leaflet-control-attribution{font-size:8px!important}
 
 .basse-map-marker{display:flex;align-items:center;gap:3px;background:#fff;border:1px solid #d7deea;border-radius:14px;padding:3px 7px 3px 3px;box-shadow:0 3px 10px rgba(0,0,0,.18);font-size:11px;white-space:nowrap}.basse-map-marker span{font-size:18px;line-height:22px}.basse-map-marker b{font-size:10px;color:#18346d}.customer-marker{border-color:#3b82f6}.driver-marker{border-color:#7c3aed}
+
+/* BASSE app download */
+.app-download-top{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;background:#071a4a;color:#fff;border-radius:12px;padding:10px 12px;font-size:12px;font-weight:900;white-space:nowrap}
+.app-download-top:hover{background:#1748a8}
+.app-promo{max-width:1320px;margin:22px auto;padding:18px clamp(16px,4vw,28px);display:flex;align-items:center;gap:14px;background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 7px 25px #071a4a0a}
+.app-promo-icon{width:48px;height:48px;border-radius:14px;background:#eef3ff;display:grid;place-items:center;font-size:24px;flex:none}
+.app-promo-copy{flex:1}.app-promo-copy small{font-size:9px;font-weight:950;color:var(--blue);letter-spacing:1px}.app-promo-copy h2{margin:3px 0;font-size:18px}.app-promo-copy p{margin:0;color:var(--muted);font-size:11px}
+.app-promo-btn{display:inline-flex;gap:8px;align-items:center;text-decoration:none;background:var(--navy);color:#fff;padding:12px 15px;border-radius:12px;font-size:11px;font-weight:950;white-space:nowrap}
+@media(max-width:720px){.app-download-top{font-size:11px;padding:9px 10px}.app-promo{margin:16px 12px;align-items:flex-start;flex-wrap:wrap}.app-promo-copy{min-width:calc(100% - 64px)}.app-promo-btn{width:100%;justify-content:center}}
+
+/* BASSE V3 — premium stores + stable delivery map */
+.stores-sheet{max-width:980px}
+.stores-heading{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:4px 0 18px;border-bottom:1px solid #e8ebf2}
+.stores-heading small,.store-detail-info small{font-size:10px;letter-spacing:1.2px;font-weight:900;color:#0a2b7a}
+.stores-heading h2{margin:4px 0 5px;font-size:28px}
+.stores-heading p{margin:0;color:#687389;font-size:13px}
+.store-heading-icon{width:54px;height:54px;border-radius:16px;background:#edf3ff;display:grid;place-items:center;font-size:26px}
+.store-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}
+.store-card-pro{border:1px solid #e2e7f0;background:#fff;border-radius:20px;overflow:hidden;text-align:left;padding:0;cursor:pointer;box-shadow:0 7px 24px rgba(7,26,74,.06);transition:transform .16s ease,box-shadow .16s ease;outline:none}
+.store-card-pro:hover,.store-card-pro:focus-visible{transform:translateY(-2px);box-shadow:0 15px 32px rgba(7,26,74,.12)}
+.store-cover{height:112px;position:relative;display:flex;align-items:flex-end;padding:14px;background:linear-gradient(135deg,#09255f,#2162c4)}
+.store-cover.c1{background:linear-gradient(135deg,#171d3c,#3759a9)}.store-cover.c2{background:linear-gradient(135deg,#123d3a,#209b86)}.store-cover.c3{background:linear-gradient(135deg,#3b1b55,#9655c4)}.store-cover.c4{background:linear-gradient(135deg,#53231a,#c26b32)}.store-cover.c5{background:linear-gradient(135deg,#192f38,#5a7f92)}
+.store-cover-badge{position:absolute;right:12px;top:12px;background:#ffffffdd;color:#17305e;border-radius:999px;padding:6px 8px;font-size:8px;font-weight:950;letter-spacing:.5px}
+.store-logo{width:54px;height:54px;border-radius:16px;background:#fff;color:#0a2b7a;display:grid;place-items:center;font-weight:950;font-size:19px;box-shadow:0 7px 18px #06174733;border:3px solid #ffffff}
+.store-logo.big{width:72px;height:72px;font-size:24px}
+.store-card-body{padding:14px 15px 15px}
+.store-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.store-title-row h3{margin:0 0 3px;font-size:17px;color:#101c35}.store-title-row span{font-size:11px;color:#6c768a}
+.store-chevron{font-size:25px!important;color:#0a2b7a!important;line-height:18px}
+.store-card-body p{margin:10px 0;color:#657086;font-size:11px;line-height:1.45;min-height:32px}
+.store-meta{display:flex;flex-wrap:wrap;gap:10px;color:#69758b;font-size:10px;margin-bottom:12px}
+.view-store-btn{width:100%;border:0;border-radius:11px;background:#0a2b7a;color:#fff;padding:11px 13px;font-weight:900;font-size:10px;letter-spacing:.5px;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+.store-detail-head{display:grid;grid-template-columns:120px 1fr;gap:18px;padding:4px 0 18px;border-bottom:1px solid #e8ebf2}
+.detail-cover{height:120px;border-radius:18px;align-items:center;justify-content:center;padding:0}
+.store-detail-info{align-self:center}.store-detail-info h2{margin:4px 0;font-size:25px}.store-detail-info p{margin:5px 0 10px;color:#667188;font-size:12px}
+.store-products-head{display:flex;justify-content:space-between;align-items:center;padding:18px 0 8px}.store-products-head h3{margin:0;font-size:16px}.store-products-head span{font-size:10px;color:#778196}
+.store-products{padding-top:8px}
+.store-products .buy{font-size:9px;padding:9px}
+@media(max-width:700px){.store-grid{grid-template-columns:1fr}.store-detail-head{grid-template-columns:88px 1fr}.detail-cover{height:88px}.store-logo.big{width:60px;height:60px;font-size:20px}.stores-heading h2{font-size:24px}}
+@media(max-width:430px){.store-grid{gap:12px}.store-card-body{padding:13px}.store-cover{height:100px}}

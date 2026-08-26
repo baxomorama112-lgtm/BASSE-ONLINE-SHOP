@@ -5,6 +5,10 @@ const STATIC_WAYCHIT_URL=process.env.WAYCHIT_STATIC_URL||"https://app.waychit.co
 const SHOP_WHATSAPP=String(process.env.BASSE_MARKET_WHATSAPP||"2206963349").replace(/\D/g,"");fs.mkdirSync(DATA_DIR,{recursive:true});fs.mkdirSync(path.join(DATA_DIR,"uploads"),{recursive:true});
 app.use(express.json({limit:"100mb",verify:(req,res,buf)=>{if(req.originalUrl==="/api/waychit/webhook")req.rawBody=buf.toString("utf8")}}));
 app.use("/uploads",express.static(path.join(DATA_DIR,"uploads")));
+app.use("/downloads",express.static(path.join(ROOT,"../downloads"),{fallthrough:true}));
+app.get("/download",(req,res)=>{
+  res.sendFile(path.join(ROOT,"../marketplace/download.html"));
+});
 app.use("/admin",express.static(path.join(ROOT,"../admin")));app.use("/vendor",express.static(path.join(ROOT,"../vendor")));app.use("/driver",express.static(path.join(ROOT,"../driver")));
 app.use("/",express.static(path.join(ROOT,"../marketplace")));
 const DB_PATH=path.join(DATA_DIR,"basse-shop.db"),BACKUP_PATH=path.join(DATA_DIR,"catalog-backup.json");
