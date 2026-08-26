@@ -1,0 +1,8 @@
+BASSE ONLINE SHOP APP DOWNLOAD
+===============================
+Direct download page: https://basse-online-shop.onrender.com/download
+APK URL: https://basse-online-shop.onrender.com/downloads/BASSE_ONLINE_SHOP.apk
+
+The marketplace Download App button and direct customer link both use /download.
+The QR code should also point to /download.
+When Google Play is released, update only the download page destination.
