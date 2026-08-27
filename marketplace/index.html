@@ -16,46 +16,20 @@
   </a>
   <div class="banner-overlay"><button onclick="document.querySelector('#products').scrollIntoView({behavior:'smooth'})">SHOP NOW <b>→</b></button></div>
 </section>
-<section class="feature-carousel" aria-label="BASSE Online Shop highlights">
-  <div class="feature-track" id="featureTrack">
-    <article class="feature-slide feature-app">
-      <div class="feature-copy"><span class="feature-kicker">BASSE ONLINE SHOP APP</span><h2>Shop faster from your phone</h2><p>Get the BASSE app for a smoother marketplace, faster checkout and easy order access.</p><a href="/download" class="feature-btn">GET THE APP <b>→</b></a></div>
-      <div class="feature-art"><img src="/basse-app-logo.png" alt="BASSE app"></div>
-    </article>
-    <article class="feature-slide feature-track-slide">
-      <div class="feature-copy"><span class="feature-kicker">ORDER TRACKING</span><h2>Know where your order is</h2><p>Follow your order from received and preparing to driver pickup, delivery and completion.</p><button type="button" class="feature-btn" onclick="trackOrderPrompt()">TRACK MY ORDER <b>→</b></button></div>
-      <div class="tracking-mini"><div class="mini-map"><span class="mini-store"></span><i></i><span class="mini-home"></span></div><div class="mini-status"><b>On the way</b><span>Driver is heading to you</span><strong>LIVE</strong></div></div>
-    </article>
-    <article class="feature-slide feature-payments">
-      <div class="feature-copy"><span class="feature-kicker">SECURE CHECKOUT</span><h2>Simple local payments</h2><p>Choose an available payment method at checkout. BASSE uses Waychit for payment processing.</p><div class="payment-pills"><span>WAVE</span><span>AFRIMONEY</span><span>APS</span><span>WAYCHIT</span></div></div>
-      <div class="payment-card"><small>PAYMENT METHODS</small><div><b>W</b><b>A</b><b>APS</b></div><span>Secure checkout</span></div>
-    </article>
-  </div>
-  <div class="feature-dots" aria-label="Carousel controls"><button class="active" data-slide="0" aria-label="App feature"></button><button data-slide="1" aria-label="Order tracking feature"></button><button data-slide="2" aria-label="Payment feature"></button></div>
-</section>
-<section id="categories" class="categories"><div class="section-title"><h2>Shop by category</h2><span>Explore what you need</span></div><div class="cats">
-<button class="active" onclick="setCat('All',this)" aria-label="All products"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg><b>All</b></button>
-<button onclick="setCat('Fashion',this)" aria-label="Fashion"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4l4 2 4-2 4 4-2 2v10H6V10L4 8z"/></svg><b>Fashion</b></button>
-<button onclick="setCat('Electronics',this)" aria-label="Electronics"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h10a2 2 0 012 2v8a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2zm-3 13h16v2H4z"/></svg><b>Electronics</b></button>
-<button onclick="setCat('Phones',this)" aria-label="Phones"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"/><circle cx="12" cy="18" r="1"/></svg><b>Phones</b></button>
-<button onclick="setCat('Beauty',this)" aria-label="Beauty"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6v3h2v13H7V7h2zM10 2h4v2h-4z"/></svg><b>Beauty</b></button>
-<button onclick="setCat('Home & Living',this)" aria-label="Home and Living"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"/></svg><b>Home &amp; Living</b></button>
-<button onclick="setCat('Accessories',this)" aria-label="Accessories"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10l2 3v10H5V10zM9 7a3 3 0 016 0" fill="none" stroke="currentColor" stroke-width="2"/></svg><b>Accessories</b></button>
+<section id="categories" class="categories"><div class="section-title"><div><h2>Shop by category</h2></div><a href="#categories" class="section-link">View all <b>→</b></a></div><div class="cats">
+<button class="active" onclick="setCat('All',this)" aria-label="All products"><img src="/category-images/all.jpg" alt="All"><b>All</b></button>
+<button onclick="setCat('Fashion',this)" aria-label="Fashion"><img src="/category-images/fashion.jpg" alt="Fashion"><b>Fashion</b></button>
+<button onclick="setCat('Electronics',this)" aria-label="Electronics"><img src="/category-images/electronics.jpg" alt="Electronics"><b>Electronics</b></button>
+<button onclick="setCat('Phones',this)" aria-label="Phones"><img src="/category-images/phones.jpg" alt="Phones"><b>Phones</b></button>
+<button onclick="setCat('Beauty',this)" aria-label="Beauty"><img src="/category-images/beauty.jpg" alt="Beauty"><b>Beauty</b></button>
+<button onclick="setCat('Home & Living',this)" aria-label="Home and Living"><img src="/category-images/home-living.jpg" alt="Home and Living"><b>Home &amp; Living</b></button>
+<button onclick="setCat('Accessories',this)" aria-label="Accessories"><img src="/category-images/accessories.jpg" alt="Accessories"><b>Accessories</b></button>
 </div></section>
 <section id="products"><div class="section-title"><div><h2>Featured products</h2><span>Fresh products from BASSE ONLINE SHOP</span></div><small id="count"></small></div><div id="grid"></div></section>
-<section class="app-promo" aria-label="BASSE ONLINE SHOP Android app">
-  <div class="app-promo-icon"><img src="/basse-app-logo.png" alt="BASSE app logo"></div>
-  <div class="app-promo-copy">
-    <small>BASSE ONLINE SHOP APP</small>
-    <h2>Shop faster on Android</h2>
-    <p>Download the BASSE ONLINE SHOP app and keep shopping from your phone.</p>
-  </div>
-  <a class="app-promo-btn" href="/download">DOWNLOAD APP <b>→</b></a>
-</section>
 <section class="trust" aria-label="BASSE services">
-  <div class="trust-card"><span class="trust-icon payment-icon" aria-hidden="true"></span><div><b>Secure payment</b><span>Safe checkout with Waychit</span></div></div>
-  <div class="trust-card"><span class="trust-icon support-icon" aria-hidden="true"></span><div><b>Customer support</b><span>Call +220 6963349</span></div></div>
-  <div class="trust-card"><span class="trust-icon delivery-icon" aria-hidden="true"></span><div><b>Local delivery</b><span>Delivery based on your location</span></div></div>
+  <div class="trust-card"><span class="trust-icon payment-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M24 4 40 10v12c0 10-6.4 18.3-16 22C14.4 40.3 8 32 8 22V10l16-6Z" fill="none" stroke="currentColor" stroke-width="2.8"/><path d="m16 24 5 5 11-12" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><b>Secure payment</b><span>Pay safely with trusted methods</span></div></div>
+  <button class="trust-card support-card" type="button" onclick="showSupport()"><span class="trust-icon support-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M10 25v-4a14 14 0 0 1 28 0v4" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><rect x="6" y="23" width="9" height="13" rx="4" fill="none" stroke="currentColor" stroke-width="2.8"/><rect x="33" y="23" width="9" height="13" rx="4" fill="none" stroke="currentColor" stroke-width="2.8"/><path d="M33 36c-1 5-5 7-10 7h-3" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg></span><span class="trust-copy"><b>Customer support</b><span>Tap to show support number</span></span><span class="trust-arrow" aria-hidden="true">→</span></button>
+  <div class="trust-card"><span class="trust-icon delivery-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M5 12h24v21H5zM29 20h8l6 7v6H29z" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linejoin="round"/><circle cx="13" cy="37" r="4" fill="none" stroke="currentColor" stroke-width="2.8"/><circle cx="36" cy="37" r="4" fill="none" stroke="currentColor" stroke-width="2.8"/><path d="M33 27h8" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg></span><div><b>Fast delivery</b><span>Quick and reliable delivery to your door</span></div></div>
 </section>
 </main>
 <nav class="bottom" aria-label="Main navigation">

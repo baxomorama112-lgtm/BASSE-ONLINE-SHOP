@@ -379,6 +379,11 @@ function openCart(){toast("Cart checkout is coming next — Buy Now is fully act
 async function openOrders(){let raw=localStorage.getItem("basseLastOrder");if(!raw)return toast("No recent order found on this phone.");try{let old=JSON.parse(raw),r=await fetch("/api/order/"+encodeURIComponent(old.id)),o=await r.json();if(!r.ok)throw new Error(o.error||"Order not found");showReturn(o,"",o.payment_status==="PAID",o.whatsappSupport,o.payment_status==="PENDING"?"Your order is waiting for payment confirmation.":"")}catch(e){toast(e.message)}}
 
 
+function showSupport(){
+  const modal=$("modal");
+  modal.innerHTML=`<div class="sheet support-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="support-modal-icon"><svg viewBox="0 0 48 48"><path d="M10 25v-4a14 14 0 0 1 28 0v4" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><rect x="6" y="23" width="9" height="13" rx="4" fill="none" stroke="currentColor" stroke-width="2.8"/><rect x="33" y="23" width="9" height="13" rx="4" fill="none" stroke="currentColor" stroke-width="2.8"/><path d="M33 36c-1 5-5 7-10 7h-3" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg></span><div><small>BASSE ONLINE SHOP</small><h2>Customer Support</h2></div></div><p class="muted">Need help with an order, payment or delivery? Call our support team.</p><div class="support-number">+220 6963349</div><a class="pay support-call" href="tel:+2206963349">CALL CUSTOMER SUPPORT <span>→</span></a><button class="secondary-btn" type="button" onclick="closeModal()">CLOSE</button></div>`;
+  modal.classList.add('show');
+}
 function openAccount(){
   const customer=JSON.parse(localStorage.getItem("basseCustomer")||"null");
   $("modal").innerHTML=`<div class="sheet account-sheet"><button class="close" onclick="closeModal()">×</button><div class="account-hero"><div class="account-avatar"></div><h2>${customer?`Welcome, ${esc(customer.name)}`:"BASSE MARKET ACCOUNT"}</h2><p>${customer?"Manage your shopping account.":"Shop as a guest or create an account."}</p></div>
