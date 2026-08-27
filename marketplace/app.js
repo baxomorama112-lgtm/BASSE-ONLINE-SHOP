@@ -543,3 +543,19 @@ window.addEventListener("visibilitychange",()=>{
   if(id&&st==="success"){waitForPayment(id,0);return;}
   if(!id&&!st)resumePendingPayment();
 });
+
+/* BASSE feature banner carousel: App → Order Tracking → Payments */
+(function initFeatureCarousel(){
+  const track=document.getElementById('featureTrack'), dots=[...document.querySelectorAll('.feature-dots button')];
+  if(!track||!dots.length)return;
+  let index=0,timer=null;
+  const go=(n)=>{index=(n+3)%3;track.style.transform=`translateX(-${index*100}%)`;dots.forEach((d,i)=>d.classList.toggle('active',i===index));};
+  dots.forEach((d,i)=>d.addEventListener('click',()=>{go(i);restart();}));
+  const start=()=>{clearInterval(timer);timer=setInterval(()=>{if(document.visibilityState==='visible')go(index+1)},5000)};
+  const restart=()=>start();
+  start();
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')start();else clearInterval(timer)});
+  let sx=0;
+  track.addEventListener('touchstart',e=>{sx=e.changedTouches[0].clientX},{passive:true});
+  track.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-sx;if(Math.abs(dx)>45){go(index+(dx<0?1:-1));restart();}},{passive:true});
+})();

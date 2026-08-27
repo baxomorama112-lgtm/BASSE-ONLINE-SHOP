@@ -49,3 +49,15 @@ main{padding:26px clamp(16px,4vw,48px)}
  main{margin-left:76px;width:calc(100% - 76px);padding:18px 12px}
  .stats{grid-template-columns:repeat(2,1fr)}
 }
+
+
+/* ===== BASSE ADMIN V5 — clean control center ===== */
+main{max-width:1500px;margin:0 auto}
+.dash-heading{padding-bottom:8px}.dash-heading h1{font-size:30px;letter-spacing:-.7px;margin:3px 0}.dash-heading small{font-size:9px;letter-spacing:1.2px;color:#6b768a;font-weight:950}
+.stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:12px 0 18px}.stats>div{min-height:92px;padding:16px 17px;border:1px solid #e2e7ef;background:#fff}.stats>div span{font-size:10px;color:#6b768a;font-weight:800}.stats>div b{display:block;font-size:25px;margin-top:8px;color:#071a4a}
+.grid2{display:grid;grid-template-columns:1.25fr .75fr;gap:15px;align-items:start}.grid2>.card:first-child{grid-column:1/-1}.grid2>.card{min-width:0}.card{padding:19px 20px}.card .bar h2{font-size:17px}.card .bar p{font-size:11px;color:#6b768a}
+.live-viewers-panel{background:linear-gradient(135deg,#fff,#f5f9ff);border:1px solid #dce5f5}.live-viewer-numbers>div{background:#fff}
+.wide{min-height:46px;margin:6px 0}
+@media(max-width:1050px){.stats{grid-template-columns:repeat(3,1fr)}.grid2{grid-template-columns:1fr}.grid2>.card:first-child{grid-column:auto}}
+@media(max-width:800px){main{margin-left:76px;width:calc(100% - 76px);padding:14px 10px}.stats{grid-template-columns:repeat(2,1fr);gap:9px}.stats>div{min-height:82px;padding:13px}.stats>div b{font-size:21px}.dash-heading h1{font-size:24px}.dashboard-logo{width:76px;height:40px}.card{padding:15px}.grid2{gap:10px}}
+@media(max-width:520px){.stats{grid-template-columns:1fr 1fr}.stats>div{min-height:76px}.stats>div span{font-size:9px}.stats>div b{font-size:19px}.live-viewer-numbers{grid-template-columns:1fr 1fr}.live-viewer-numbers>div:first-child{grid-column:1/-1}}

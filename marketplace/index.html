@@ -3,8 +3,11 @@
 <body>
 <header class="top">
 <a class="brand" href="#" aria-label="BASSE Marketplace"><img class="brand-logo" src="/basse-marketplace-logo.jpg" alt="BASSE Marketplace"></a>
-<div class="search-wrap"><div class="search"><input id="search" autocomplete="off" placeholder="Search products, phones, fashion, beauty..." aria-label="Search products"><button id="searchBtn" type="button" aria-label="Search"></button><button id="clearSearch" class="clear-search" type="button" aria-label="Clear search">×</button></div><div id="searchSuggestions" class="search-suggestions"></div></div>
-<button class="stores-top" type="button" onclick="openStores()" aria-label="View stores"><span class="ui-icon store-icon" aria-hidden="true"></span>Stores</button><a class="app-download-top" href="/download" aria-label="Download BASSE ONLINE SHOP Android app"><span class="ui-icon app-icon" aria-hidden="true"></span>App</a><button class="track-top" type="button" onclick="trackOrderPrompt()" aria-label="Track order"><span class="ui-icon track-icon" aria-hidden="true"></span>Track</button><a class="support" href="tel:+2206963349" aria-label="Call support"><span class="ui-icon phone-icon" aria-hidden="true"></span>Support</a><button class="cart" onclick="openCart()" aria-label="Cart"><span class="ui-icon cart-icon" aria-hidden="true"></span><i id="cartCount">0</i></button>
+<div class="search-wrap top-search"><div class="search"><input id="search" autocomplete="off" placeholder="Search products, phones, fashion, beauty..." aria-label="Search products"><button id="searchBtn" type="button" aria-label="Search"><span aria-hidden="true">⌕</span></button><button id="clearSearch" class="clear-search" type="button" aria-label="Clear search">×</button></div><div id="searchSuggestions" class="search-suggestions"></div></div>
+<div class="top-actions">
+<button class="notify" type="button" onclick="toast('You are all caught up.')" aria-label="Notifications"><span class="bell-icon" aria-hidden="true"></span><i>0</i></button>
+<button class="cart" onclick="openCart()" aria-label="Cart"><span class="ui-icon cart-icon" aria-hidden="true"></span><i id="cartCount">0</i></button>
+</div>
 </header>
 <main>
 <section class="hero market-banner" aria-label="BASSE Marketplace promotion">
@@ -12,6 +15,23 @@
     <img src="/basse-market-banner.jpg" alt="BASSE Marketplace — Stay home, make order, shop local and get delivery">
   </a>
   <div class="banner-overlay"><button onclick="document.querySelector('#products').scrollIntoView({behavior:'smooth'})">SHOP NOW <b>→</b></button></div>
+</section>
+<section class="feature-carousel" aria-label="BASSE Online Shop highlights">
+  <div class="feature-track" id="featureTrack">
+    <article class="feature-slide feature-app">
+      <div class="feature-copy"><span class="feature-kicker">BASSE ONLINE SHOP APP</span><h2>Shop faster from your phone</h2><p>Get the BASSE app for a smoother marketplace, faster checkout and easy order access.</p><a href="/download" class="feature-btn">GET THE APP <b>→</b></a></div>
+      <div class="feature-art"><img src="/basse-app-logo.png" alt="BASSE app"></div>
+    </article>
+    <article class="feature-slide feature-track-slide">
+      <div class="feature-copy"><span class="feature-kicker">ORDER TRACKING</span><h2>Know where your order is</h2><p>Follow your order from received and preparing to driver pickup, delivery and completion.</p><button type="button" class="feature-btn" onclick="trackOrderPrompt()">TRACK MY ORDER <b>→</b></button></div>
+      <div class="tracking-mini"><div class="mini-map"><span class="mini-store"></span><i></i><span class="mini-home"></span></div><div class="mini-status"><b>On the way</b><span>Driver is heading to you</span><strong>LIVE</strong></div></div>
+    </article>
+    <article class="feature-slide feature-payments">
+      <div class="feature-copy"><span class="feature-kicker">SECURE CHECKOUT</span><h2>Simple local payments</h2><p>Choose an available payment method at checkout. BASSE uses Waychit for payment processing.</p><div class="payment-pills"><span>WAVE</span><span>AFRIMONEY</span><span>APS</span><span>WAYCHIT</span></div></div>
+      <div class="payment-card"><small>PAYMENT METHODS</small><div><b>W</b><b>A</b><b>APS</b></div><span>Secure checkout</span></div>
+    </article>
+  </div>
+  <div class="feature-dots" aria-label="Carousel controls"><button class="active" data-slide="0" aria-label="App feature"></button><button data-slide="1" aria-label="Order tracking feature"></button><button data-slide="2" aria-label="Payment feature"></button></div>
 </section>
 <section id="categories" class="categories"><div class="section-title"><h2>Shop by category</h2><span>Explore what you need</span></div><div class="cats">
 <button class="active" onclick="setCat('All',this)" aria-label="All products"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg><b>All</b></button>
@@ -22,16 +42,9 @@
 <button onclick="setCat('Home & Living',this)" aria-label="Home and Living"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"/></svg><b>Home &amp; Living</b></button>
 <button onclick="setCat('Accessories',this)" aria-label="Accessories"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10l2 3v10H5V10zM9 7a3 3 0 016 0" fill="none" stroke="currentColor" stroke-width="2"/></svg><b>Accessories</b></button>
 </div></section>
-<section id="popularStores" class="store-preview-section" aria-label="Popular stores">
-  <div class="section-title">
-    <div><h2>Popular stores</h2><span>Shop directly from trusted BASSE vendors</span></div>
-    <button class="text-action" type="button" onclick="openStores()">View all <b>→</b></button>
-  </div>
-  <div id="storePreviewGrid" class="store-preview-grid"><div class="preview-loading">Loading stores…</div></div>
-</section>
 <section id="products"><div class="section-title"><div><h2>Featured products</h2><span>Fresh products from BASSE ONLINE SHOP</span></div><small id="count"></small></div><div id="grid"></div></section>
 <section class="app-promo" aria-label="BASSE ONLINE SHOP Android app">
-  <div class="app-promo-icon"></div>
+  <div class="app-promo-icon"><img src="/basse-app-logo.png" alt="BASSE app logo"></div>
   <div class="app-promo-copy">
     <small>BASSE ONLINE SHOP APP</small>
     <h2>Shop faster on Android</h2>
@@ -39,7 +52,11 @@
   </div>
   <a class="app-promo-btn" href="/download">DOWNLOAD APP <b>→</b></a>
 </section>
-<section class="trust"><div><b>Secure payment</b><span>Pay with Waychit</span></div><div><b>Telephone support</b><span>+220 6963349</span></div><div><b>Local delivery</b><span>Delivery based on location</span></div></section>
+<section class="trust" aria-label="BASSE services">
+  <div class="trust-card"><span class="trust-icon payment-icon" aria-hidden="true"></span><div><b>Secure payment</b><span>Safe checkout with Waychit</span></div></div>
+  <div class="trust-card"><span class="trust-icon support-icon" aria-hidden="true"></span><div><b>Customer support</b><span>Call +220 6963349</span></div></div>
+  <div class="trust-card"><span class="trust-icon delivery-icon" aria-hidden="true"></span><div><b>Local delivery</b><span>Delivery based on your location</span></div></div>
+</section>
 </main>
 <nav class="bottom" aria-label="Main navigation">
 <a class="active" href="#" aria-label="Home"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v9h-6v-6H9v6H3z"/></svg><small>Home</small></a>
@@ -56,6 +73,18 @@
       window.__leafletReady=false;load("app.js",function(){},function(){});
     });
   });
+})();
+</script><script>
+(function(){
+  const track=document.getElementById('featureTrack');
+  const dots=[...document.querySelectorAll('.feature-dots button')];
+  if(!track||!dots.length)return;
+  let index=0,timer;
+  function go(i){index=(i+3)%3;track.style.transform='translateX(-'+(index*100)+'%)';dots.forEach((d,n)=>d.classList.toggle('active',n===index));}
+  dots.forEach((d,n)=>d.addEventListener('click',()=>{go(n);restart();}));
+  function restart(){clearInterval(timer);timer=setInterval(()=>go(index+1),5500);}
+  restart();
+  document.addEventListener('visibilitychange',()=>document.hidden?clearInterval(timer):restart());
 })();
 </script>
 </body></html>
