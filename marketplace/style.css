@@ -962,3 +962,63 @@ html{scroll-behavior:smooth}body{background:#f7f9fd;color:#101a2c;overflow-x:hid
   .trust-card > div > span,
   .trust-copy > span{font-size:6.3px!important}
 }
+
+
+/* ===== V9 USER REQUEST: compact categories + 3-up products + real modal icons ===== */
+.mini-bag svg,.account-avatar svg,.result-icon svg{width:70%;height:70%;display:block}
+.mini-bag{color:#1748a8;display:grid;place-items:center}
+.account-avatar{color:#1748a8;display:grid;place-items:center}
+.result-icon{color:#0b8b5b;display:grid;place-items:center}
+
+/* Category tiles: the image itself is the tile; no oversized invisible button box. */
+.cats button{height:auto!important;min-height:0!important;padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important;border-radius:0!important;display:flex!important;align-items:center!important;justify-content:flex-start!important}
+.cats button img{display:block!important;width:68px!important;height:68px!important;aspect-ratio:1!important;object-fit:cover!important;border-radius:15px!important;margin:0 auto!important;box-shadow:0 4px 12px rgba(7,26,74,.08)!important}
+.cats button.active img{border:2px solid #1748a8!important;box-shadow:0 6px 15px rgba(23,72,168,.16)!important}
+.cats button b{margin-top:5px!important;font-size:10px!important;line-height:1.08!important;min-height:0!important;max-width:100%!important}
+
+/* Products: three compact cards per row on phones, with larger image area and less vertical padding. */
+#grid{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:12px!important}
+.product{border-radius:15px!important;overflow:hidden!important}
+.product .pic{aspect-ratio:1.02!important;background:#fff!important}
+.product img{width:100%!important;height:100%!important;object-fit:cover!important;padding:4px!important}
+.product .tag{top:6px!important;left:6px!important;padding:4px 6px!important;font-size:8px!important;border-radius:7px!important}
+.product .info{padding:8px 9px 9px!important}
+.product .info h3{font-size:12px!important;line-height:1.15!important;min-height:28px!important;display:-webkit-box!important;-webkit-line-clamp:2!important;-webkit-box-orient:vertical!important;overflow:hidden!important;margin:0!important}
+.product .price{font-size:16px!important;line-height:1.05!important;margin:5px 0 0!important}
+
+@media(max-width:760px){
+  .market-banner{height:clamp(155px,43vw,205px)!important}
+  .categories,#products{width:calc(100% - 28px)!important;margin-left:14px!important;margin-right:14px!important;padding:0!important}
+  .categories{margin-top:20px!important}
+  .section-title{margin-bottom:9px!important}
+  .section-title h2{font-size:20px!important}
+  .cats{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:11px 7px!important;overflow:visible!important}
+  .cats button img{width:58px!important;height:58px!important;border-radius:13px!important}
+  .cats button b{font-size:9px!important;white-space:normal!important;display:block!important;min-height:0!important}
+  #grid{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:9px!important}
+  .product{border-radius:13px!important}
+  .product .pic{aspect-ratio:1!important}
+  .product img{padding:2px!important}
+  .product .info{padding:7px 7px 8px!important}
+  .product .info h3{font-size:10.5px!important;min-height:25px!important}
+  .product .price{font-size:14px!important;margin-top:4px!important}
+  .product .tag{font-size:7px!important;top:5px!important;left:5px!important;padding:3px 5px!important}
+  .app-download-card{margin-top:18px!important}
+  .trust{margin-top:18px!important;margin-bottom:18px!important}
+  .trust-card{min-height:82px!important;height:82px!important;padding:8px 5px!important}
+  .trust-icon{width:30px!important;height:30px!important;min-width:30px!important;border-radius:8px!important}
+  .trust-icon svg{width:21px!important;height:21px!important}
+  .trust-card b{font-size:8px!important}
+  .trust-card > div > span,.trust-copy > span{font-size:6.5px!important}
+}
+@media(min-width:761px){
+  .cats{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:12px!important}
+}
+@media(max-width:390px){
+  .cats button img{width:54px!important;height:54px!important}
+  .cats button b{font-size:8.5px!important}
+  #grid{gap:7px!important}
+  .product .info{padding:6px!important}
+  .product .info h3{font-size:10px!important}
+  .product .price{font-size:13px!important}
+}
