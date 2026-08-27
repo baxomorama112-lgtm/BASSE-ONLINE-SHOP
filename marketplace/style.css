@@ -592,3 +592,200 @@ html{scroll-behavior:smooth}body{background:#f7f9fd;color:#101a2c;overflow-x:hid
 @media(max-width:1050px){#grid{grid-template-columns:repeat(3,minmax(0,1fr))}.cats button{flex-basis:104px;width:104px}.cats button img{width:94px;height:94px}}
 @media(max-width:760px){body{padding-bottom:82px}.top{padding:10px 14px;gap:9px;min-height:0}.brand-logo{width:140px;height:46px}.top-actions{margin-left:auto;gap:5px}.notify,.cart{width:43px;height:43px}.top-search{order:3;flex-basis:100%}.top-search .search{height:50px;border-radius:18px}.hero.market-banner{margin:10px 14px 0;border-radius:22px}.hero.market-banner img{max-height:none}.banner-overlay{right:18px;bottom:18px}.banner-overlay button{padding:11px 16px;font-size:11px}.categories,#products{padding:0 16px;margin-top:27px}.section-title h2{font-size:22px}.cats{gap:12px;margin-right:-16px;padding-right:16px}.cats button{flex-basis:105px;width:105px}.cats button img{width:94px;height:94px;border-radius:20px}.cats button b{font-size:11px}.trust{margin:28px 16px 20px;padding:0;grid-template-columns:1fr;border-radius:20px}.trust-card{min-height:86px!important;padding:16px 18px!important}.trust-card+.trust-card{border-left:0!important;border-top:1px solid #dce3ed!important}.trust-icon{width:43px;height:43px;min-width:43px}.trust-icon svg{width:30px;height:30px}#grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.product{border-radius:17px}.product .pic{aspect-ratio:1}.info{padding:10px 10px 12px}.info h3{font-size:12px;min-height:34px}.price{font-size:16px}}
 .support-sheet{max-width:520px}.support-modal-icon{width:48px;height:48px;border-radius:15px;background:#eef4ff;color:#1748a8;display:grid;place-items:center}.support-modal-icon svg{width:32px;height:32px}.support-number{font-size:30px;font-weight:950;letter-spacing:.5px;color:#071a4a;background:#f5f8fd;border:1px solid #dce5f1;border-radius:16px;padding:18px;text-align:center;margin:18px 0}.support-call{text-decoration:none;display:flex;justify-content:center;align-items:center;gap:8px}.support-sheet .secondary-btn{width:100%;margin-top:8px}
+
+/* ===== BASSE FINAL RESPONSIVE POLISH ===== */
+/* Categories: show every category without horizontal scrolling. */
+.cats{
+  display:grid;
+  grid-template-columns:repeat(7,minmax(0,1fr));
+  gap:18px;
+  overflow:visible;
+  padding:3px 0 8px;
+}
+.cats button{
+  width:100%;
+  min-width:0;
+  flex:initial;
+}
+.cats button img{
+  width:min(100%,104px);
+  height:auto;
+  aspect-ratio:1/1;
+  margin:0 auto;
+}
+.cats button b{
+  min-height:28px;
+  display:flex;
+  align-items:flex-start;
+  justify-content:center;
+  text-align:center;
+}
+.cats button.active img{
+  border-width:2px;
+}
+
+/* App download is a real CTA, not an advertising carousel. */
+.app-download-card{
+  max-width:1320px;
+  margin:28px auto 22px;
+  padding:22px 28px;
+  border:1px solid #dfe6f2;
+  border-radius:22px;
+  background:linear-gradient(120deg,#f3f7ff,#fff);
+  box-shadow:0 8px 28px rgba(7,26,74,.06);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:24px;
+}
+.app-download-copy{min-width:0}
+.app-download-kicker{
+  display:block;
+  color:#1d55c9;
+  font-size:11px;
+  font-weight:950;
+  letter-spacing:2px;
+  margin-bottom:7px;
+}
+.app-download-card h2{
+  margin:0 0 7px;
+  color:#071a4a;
+  font-size:clamp(22px,3vw,32px);
+  letter-spacing:-.6px;
+}
+.app-download-card p{
+  margin:0 0 15px;
+  color:#6b768a;
+  font-size:13px;
+  line-height:1.45;
+  max-width:650px;
+}
+.app-download-button{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:9px;
+  min-height:44px;
+  padding:11px 17px;
+  border-radius:13px;
+  background:#071a4a;
+  color:#fff;
+  text-decoration:none;
+  font-size:11px;
+  font-weight:950;
+  box-shadow:0 8px 20px rgba(7,26,74,.16);
+}
+.app-download-logo-wrap{
+  width:100px;
+  height:100px;
+  min-width:100px;
+  border-radius:22px;
+  background:#fff;
+  border:1px solid #dfe6f2;
+  box-shadow:0 8px 22px rgba(7,26,74,.08);
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+}
+.app-download-logo-wrap img{
+  width:82px;
+  height:82px;
+  object-fit:contain;
+}
+
+/* Service strip: same clean three-column composition on desktop, tablet and phone. */
+.trust{
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  align-items:stretch;
+}
+.trust-card{
+  min-width:0;
+}
+.trust-card+.trust-card{
+  border-left:1px solid #dce3ed!important;
+  border-top:0!important;
+}
+@media(max-width:760px){
+  .cats{
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:16px 10px;
+    padding:2px 0 4px;
+    overflow:visible;
+  }
+  .cats button{
+    width:100%;
+    height:auto;
+    min-height:0;
+    gap:7px;
+  }
+  .cats button img{
+    width:100%;
+    max-width:78px;
+    border-radius:17px;
+  }
+  .cats button b{
+    font-size:10.5px;
+    min-height:25px;
+  }
+  .app-download-card{
+    width:calc(100% - 32px);
+    margin:25px 16px 18px;
+    padding:17px;
+    border-radius:19px;
+    gap:13px;
+  }
+  .app-download-kicker{font-size:8px;letter-spacing:1.5px}
+  .app-download-card h2{font-size:19px}
+  .app-download-card p{font-size:10px;margin-bottom:12px}
+  .app-download-button{font-size:10px;min-height:42px;padding:10px 13px}
+  .app-download-logo-wrap{width:68px;height:68px;min-width:68px;border-radius:17px}
+  .app-download-logo-wrap img{width:57px;height:57px}
+  .trust{
+    width:calc(100% - 32px);
+    margin:22px 16px 20px;
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    border-radius:18px;
+  }
+  .trust-card{
+    min-height:112px!important;
+    padding:14px 8px!important;
+    flex-direction:column!important;
+    align-items:center!important;
+    justify-content:flex-start;
+    text-align:center!important;
+    gap:8px!important;
+  }
+  .trust-card+.trust-card{
+    border-left:1px solid #dce3ed!important;
+    border-top:0!important;
+  }
+  .trust-icon{width:40px;height:40px;min-width:40px}
+  .trust-icon svg{width:28px;height:28px}
+  .trust-copy{align-items:center;gap:4px}
+  .trust-card b{font-size:9.5px;white-space:normal}
+  .trust-card span:not(.trust-icon){font-size:7.5px;line-height:1.25}
+  .trust-arrow{font-size:14px;margin:0}
+}
+@media(max-width:390px){
+  .cats{gap:13px 7px}
+  .cats button img{max-width:70px;border-radius:15px}
+  .cats button b{font-size:9.5px}
+  .app-download-card{width:calc(100% - 24px);margin-left:12px;margin-right:12px;padding:14px}
+  .app-download-logo-wrap{width:60px;height:60px;min-width:60px}
+  .app-download-logo-wrap img{width:50px;height:50px}
+  .trust{width:calc(100% - 24px);margin-left:12px;margin-right:12px}
+  .trust-card{padding:12px 5px!important}
+  .trust-card b{font-size:9px}
+  .trust-card span:not(.trust-icon){font-size:7px}
+}
+
+/* ===== ADMIN DASHBOARD FINAL ALIGNMENT ===== */
+@media(min-width:1101px){
+  #dashboard .stats{grid-template-columns:repeat(5,minmax(0,1fr));}
+  #dashboard .grid2{
+    grid-template-columns:minmax(0,1.35fr) minmax(320px,.65fr);
+  }
+}
+@media(max-width:1100px) and (min-width:801px){
+  #dashboard .stats{grid-template-columns:repeat(3,minmax(0,1fr));}
+}
