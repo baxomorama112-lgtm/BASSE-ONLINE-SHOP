@@ -789,3 +789,176 @@ html{scroll-behavior:smooth}body{background:#f7f9fd;color:#101a2c;overflow-x:hid
 @media(max-width:1100px) and (min-width:801px){
   #dashboard .stats{grid-template-columns:repeat(3,minmax(0,1fr));}
 }
+
+/* ===== FINAL COMPACT MARKETPLACE POLISH ===== */
+/* Compact hero: keep the supplied BASSE banner but reduce its footprint. */
+.market-banner{
+  max-width:1280px;
+  margin:16px auto 0;
+  padding:0;
+  min-height:0;
+  height:clamp(220px,30vw,390px);
+  overflow:hidden;
+  border-radius:24px;
+  display:block;
+}
+.market-banner .banner-link{display:block;width:100%;height:100%}
+.market-banner img{width:100%;height:100%;object-fit:cover;object-position:center;display:block}
+.banner-overlay{right:24px;bottom:20px}
+
+/* Categories: smaller, cleaner tiles with no horizontal scrolling. */
+.categories{margin-top:24px!important;margin-bottom:0!important}
+.cats{
+  display:grid!important;
+  grid-template-columns:repeat(7,minmax(0,1fr))!important;
+  gap:12px!important;
+  overflow:visible!important;
+  padding:0!important;
+}
+.cats button{
+  width:100%!important;
+  min-width:0!important;
+  height:auto!important;
+  gap:6px!important;
+  padding:0!important;
+  border:0!important;
+  background:transparent!important;
+}
+.cats button img{
+  width:min(82px,100%)!important;
+  height:auto!important;
+  aspect-ratio:1/1!important;
+  border-radius:16px!important;
+  object-fit:cover!important;
+  border:1px solid #e0e6ef!important;
+  box-shadow:0 5px 14px rgba(7,26,74,.07)!important;
+}
+.cats button.active img{border:2px solid #1748a8!important;box-shadow:0 7px 17px rgba(7,26,74,.14)!important}
+.cats button b{font-size:10px!important;line-height:1.1!important;min-height:22px!important}
+
+/* Service strip: three genuinely small panels, not nested cards. */
+.trust{
+  width:min(1280px,calc(100% - 32px))!important;
+  margin:24px auto 22px!important;
+  padding:0!important;
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  gap:0!important;
+  border-radius:17px!important;
+  overflow:hidden!important;
+}
+.trust-card,
+.trust-card:hover,
+.trust-card:active{
+  min-height:78px!important;
+  height:78px!important;
+  padding:10px 14px!important;
+  margin:0!important;
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  background:#fff!important;
+  transform:none!important;
+  display:flex!important;
+  flex-direction:row!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  text-align:left!important;
+  gap:10px!important;
+}
+.trust-card + .trust-card{border-left:1px solid #dce3ed!important}
+.trust-card > div,
+.trust-card .trust-copy{
+  background:transparent!important;
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  padding:0!important;
+  margin:0!important;
+  display:flex!important;
+  flex-direction:column!important;
+  min-width:0!important;
+}
+.trust-icon{
+  width:34px!important;
+  height:34px!important;
+  min-width:34px!important;
+  border-radius:10px!important;
+  background:#eef4ff!important;
+  color:#1748a8!important;
+  display:grid!important;
+  place-items:center!important;
+  position:relative!important;
+}
+.trust-icon::before{display:none!important;content:none!important}
+.trust-icon svg{width:25px!important;height:25px!important;display:block!important}
+.trust-card b{font-size:10.5px!important;line-height:1.15!important;margin:0!important;white-space:nowrap}
+.trust-card > div > span,
+.trust-copy > span{font-size:8px!important;line-height:1.2!important;color:#78849a!important;margin-top:3px!important}
+.trust-arrow{font-size:13px!important;margin-left:auto!important;color:#1748a8!important}
+
+/* Keep app download compact but visible. */
+.app-download-card{margin-top:24px!important;margin-bottom:18px!important;padding:18px 22px!important}
+
+@media(max-width:760px){
+  .market-banner{
+    width:calc(100% - 24px)!important;
+    height:clamp(170px,47vw,250px)!important;
+    margin:10px 12px 0!important;
+    border-radius:19px!important;
+  }
+  .banner-overlay{display:none!important}
+  .categories{width:calc(100% - 24px)!important;padding:0!important;margin:22px 12px 0!important}
+  .section-title{margin-bottom:11px!important}
+  .section-title h2{font-size:20px!important}
+  .cats{
+    grid-template-columns:repeat(4,minmax(0,1fr))!important;
+    gap:10px 8px!important;
+  }
+  .cats button img{width:min(66px,100%)!important;border-radius:14px!important}
+  .cats button b{font-size:9px!important;min-height:20px!important}
+  .trust{
+    width:calc(100% - 24px)!important;
+    margin:20px 12px 18px!important;
+    border-radius:15px!important;
+  }
+  .trust-card,
+  .trust-card:hover,
+  .trust-card:active{
+    min-height:86px!important;
+    height:86px!important;
+    padding:10px 7px!important;
+    flex-direction:column!important;
+    justify-content:center!important;
+    align-items:center!important;
+    text-align:center!important;
+    gap:5px!important;
+  }
+  .trust-card + .trust-card{border-left:1px solid #dce3ed!important}
+  .trust-icon{width:30px!important;height:30px!important;min-width:30px!important;border-radius:9px!important}
+  .trust-icon svg{width:21px!important;height:21px!important}
+  .trust-card b{font-size:8.5px!important;white-space:normal!important}
+  .trust-card > div > span,
+  .trust-copy > span{font-size:6.8px!important;line-height:1.15!important;margin-top:2px!important}
+  .trust-arrow{font-size:11px!important;margin:0!important}
+  .app-download-card{width:calc(100% - 24px)!important;margin:20px 12px 16px!important;padding:14px!important}
+  .app-download-card h2{font-size:18px!important}
+  .app-download-card p{font-size:9px!important}
+  .app-download-logo-wrap{width:60px!important;height:60px!important;min-width:60px!important}
+  .app-download-logo-wrap img{width:50px!important;height:50px!important}
+}
+
+@media(min-width:761px) and (max-width:1100px){
+  .cats button img{width:72px!important}
+  .market-banner{height:260px!important}
+  .trust-card{padding:9px 10px!important}
+}
+
+@media(max-width:390px){
+  .cats{gap:8px 6px!important}
+  .cats button img{width:60px!important}
+  .cats button b{font-size:8.5px!important}
+  .trust-card{padding:8px 4px!important}
+  .trust-card b{font-size:8px!important}
+  .trust-card > div > span,
+  .trust-copy > span{font-size:6.3px!important}
+}
