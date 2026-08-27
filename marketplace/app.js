@@ -17,7 +17,7 @@ function renderProductGrid(ps, silent=false){
   const sameOrder=existingIds.length===ids.length && existingIds.every((id,i)=>id===ids[i]);
 
   if(!sameOrder){
-    grid.innerHTML=ps.length?ps.map(p=>`<article class="product" data-id="${p.id}" tabindex="0" role="button" onclick="buy(${p.id})" onkeydown="if(event.key==='Enter'||event.key===' ')buy(${p.id})"><div class="pic"><img src="${p.image||""}" alt="${esc(p.name)}" loading="lazy"><span class="tag">${esc(p.category)}</span></div><div class="info"><h3>${esc(p.name)}</h3><div class="price">${money(p.price)}</div></div></article>`).join(""):`<div class="empty-search"><div>🔎</div><h3>No products found</h3><p>Try another product name or category.</p></div>`;
+    grid.innerHTML=ps.length?ps.map(p=>`<article class="product" data-id="${p.id}" tabindex="0" role="button" onclick="buy(${p.id})" onkeydown="if(event.key==='Enter'||event.key===' ')buy(${p.id})"><div class="pic"><img src="${p.image||""}" alt="${esc(p.name)}" loading="lazy"><span class="tag">${esc(p.category)}</span></div><div class="info"><h3>${esc(p.name)}</h3><div class="price">${money(p.price)}</div></div></article>`).join(""):`<div class="empty-search"><div></div><h3>No products found</h3><p>Try another product name or category.</p></div>`;
     return;
   }
 
@@ -47,11 +47,11 @@ async function loadProducts(silent=false){
   }catch(e){
     const ps=filterCachedCatalog();
     if(ps.length){$("count").textContent=ps.length+" products";renderProductGrid(ps,true);toast("Showing saved catalog — reconnecting…");}
-    else if(!$("grid").querySelector(".product")) $("grid").innerHTML='<div class="empty-search"><div>⚠️</div><h3>Shop temporarily unavailable</h3><p>Your saved catalog will return when the connection is restored.</p></div>';
+    else if(!$("grid").querySelector(".product")) $("grid").innerHTML='<div class="empty-search"><div></div><h3>Shop temporarily unavailable</h3><p>Your saved catalog will return when the connection is restored.</p></div>';
   }
 }
 async function loadSearchIndex(){try{let r=await fetch("/api/products?category=All",{cache:"no-store"});if(!r.ok)throw Error();searchIndex=await r.json();saveCatalogCache(searchIndex)}catch{searchIndex=cachedCatalog()}}
-function showSuggestions(){let term=$("search").value.trim().toLowerCase(),box=$("searchSuggestions");if(!term){box.classList.remove("show");box.innerHTML="";return}let matches=searchIndex.filter(p=>(p.name+" "+p.category+" "+(p.description||"")).toLowerCase().includes(term)).slice(0,7);box.innerHTML=matches.length?matches.map(p=>`<button type="button" class="suggest-item" onclick="pickSuggestion(${p.id})"><span class="suggest-icon">🔎</span><span><b>${esc(p.name)}</b><small>${esc(p.category)} · ${money(p.price)}</small></span></button>`).join(""):"<div class=suggest-empty>No matching products</div>";box.classList.add("show")}
+function showSuggestions(){let term=$("search").value.trim().toLowerCase(),box=$("searchSuggestions");if(!term){box.classList.remove("show");box.innerHTML="";return}let matches=searchIndex.filter(p=>(p.name+" "+p.category+" "+(p.description||"")).toLowerCase().includes(term)).slice(0,7);box.innerHTML=matches.length?matches.map(p=>`<button type="button" class="suggest-item" onclick="pickSuggestion(${p.id})"><span class="suggest-icon"></span><span><b>${esc(p.name)}</b><small>${esc(p.category)} · ${money(p.price)}</small></span></button>`).join(""):"<div class=suggest-empty>No matching products</div>";box.classList.add("show")}
 function pickSuggestion(id){let p=searchIndex.find(x=>x.id===id);if(!p)return;$("search").value=p.name;$("searchSuggestions").classList.remove("show");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"auto",block:"start"})}
 function runSearch(){clearTimeout(searchTimer);searchTimer=setTimeout(loadProducts,160);showSuggestions()}
 function clearSearch(){$("search").value="";$('searchSuggestions').classList.remove("show");loadProducts();$('search').focus()}
@@ -77,7 +77,7 @@ function renderProductDetail(product){
     <button class="close modern-close" onclick="closeModal()" aria-label="Close">×</button>
     <div class="product-detail">
       <div class="gallery"><div class="main-photo-wrap"><img id="mainProductImage" src="${imgs[0]}" alt="${esc(product.name)}"></div>${thumbs}</div>
-      <div class="detail-info modern-detail-info"><span class="tagline">${esc(product.category)}</span><h2>${esc(product.name)}</h2><div class="detail-price">${money(product.price)}</div><p class="muted">${esc(product.description||"Quality product from BASSE MARKET.")}</p>${renderOptionFields(product)?`<div class="product-options"><b>Choose options</b>${renderOptionFields(product)}</div>`:""}<div class="stock-note ${product.stock<1?'out':''}">${product.stock>0?`✓ ${product.stock} available`:"Out of stock"}</div><div class="detail-actions"><button class="pay buy-now-modern" ${product.stock<1?"disabled":""} onclick="openCheckout()"><span>🛒</span><b>BUY NOW</b><span class="arrow">→</span></button></div><div class="product-hint">Secure checkout · Pay with Waychit</div></div>
+      <div class="detail-info modern-detail-info"><span class="tagline">${esc(product.category)}</span><h2>${esc(product.name)}</h2><div class="detail-price">${money(product.price)}</div><p class="muted">${esc(product.description||"Quality product from BASSE MARKET.")}</p>${renderOptionFields(product)?`<div class="product-options"><b>Choose options</b>${renderOptionFields(product)}</div>`:""}<div class="stock-note ${product.stock<1?'out':''}">${product.stock>0?` ${product.stock} available`:"Out of stock"}</div><div class="detail-actions"><button class="pay buy-now-modern" ${product.stock<1?"disabled":""} onclick="openCheckout()"><span></span><b>BUY NOW</b><span class="arrow">→</span></button></div><div class="product-hint">Secure checkout · Pay with Waychit</div></div>
     </div></div>`;
   window.__productImages=imgs;
   $("modal").classList.add("show");
@@ -103,7 +103,7 @@ async function buy(id){
       if(name)name.textContent=fresh.name;
       if(price)price.textContent=money(fresh.price);
       if(desc)desc.textContent=fresh.description||"Quality product from BASSE MARKET.";
-      if(stock){stock.className="stock-note"+(fresh.stock<1?" out":"");stock.textContent=fresh.stock>0?`✓ ${fresh.stock} available`:"Out of stock";}
+      if(stock){stock.className="stock-note"+(fresh.stock<1?" out":"");stock.textContent=fresh.stock>0?` ${fresh.stock} available`:"Out of stock";}
     }else if(!cached){
       renderProductDetail(fresh);
     }
@@ -118,7 +118,7 @@ function openCheckout(){
   const savedName=esc(savedCustomer?.name||"");
   const savedPhone=esc(String(savedCustomer?.phone||"").replace(/\D/g,"").replace(/^220/,""));
   checkoutGps={lat:null,lng:null,accuracy:null};
-  $("modal").innerHTML=`<div class="sheet checkout-sheet"><button class="close" onclick="buy(${selected.id})">←</button><div class="checkout-head"><span class="mini-bag">🛍️</span><div><small>SECURE CHECKOUT</small><h2>Your order</h2></div></div><p class="muted">${esc(selected.name)}</p><div class="selected-options-summary" id="selectedOptionsSummary"></div><div class="form"><label>Quantity</label><div class="qty-row"><button type="button" onclick="changeQty(-1)">−</button><input id="qty" type="number" min="1" max="${selected.stock}" value="1"><button type="button" onclick="changeQty(1)">+</button></div><label>Full Name</label><input id="name" autocomplete="name" placeholder="Your name" value="${savedName}"><label>WhatsApp Number</label><input id="phone" inputmode="numeric" autocomplete="tel" placeholder="7XXXXXX" value="${savedPhone}"><small>+220 will be added automatically. No account/login is required.</small><label>Delivery Area</label><select id="loc"><option>Basse</option><option>Bansang</option><option>Fatoto</option><option>Other</option></select><button type="button" class="location-btn" onclick="captureCheckoutLocation()">📍 USE MY CURRENT GPS LOCATION</button><small id="checkoutGpsState" class="gps-note">GPS is optional. Your written delivery area can still be used.</small><div class="summary"><div class="row"><span>Product</span><b>${money(selected.price)}</b></div><div class="row total-row"><span>Total</span><b id="total">${money(selected.price)}</b></div></div><button class="pay pulse" onclick="placeOrder()">💳 PAY WITH WAYCHIT <span>→</span></button><div class="secure-note">🔒 Secure checkout · You will be redirected to Waychit</div></div></div>`;
+  $("modal").innerHTML=`<div class="sheet checkout-sheet"><button class="close" onclick="buy(${selected.id})">←</button><div class="checkout-head"><span class="mini-bag"></span><div><small>SECURE CHECKOUT</small><h2>Your order</h2></div></div><p class="muted">${esc(selected.name)}</p><div class="selected-options-summary" id="selectedOptionsSummary"></div><div class="form"><label>Quantity</label><div class="qty-row"><button type="button" onclick="changeQty(-1)">−</button><input id="qty" type="number" min="1" max="${selected.stock}" value="1"><button type="button" onclick="changeQty(1)">+</button></div><label>Full Name</label><input id="name" autocomplete="name" placeholder="Your name" value="${savedName}"><label>WhatsApp Number</label><input id="phone" inputmode="numeric" autocomplete="tel" placeholder="7XXXXXX" value="${savedPhone}"><small>+220 will be added automatically. No account/login is required.</small><label>Delivery Area</label><select id="loc"><option>Basse</option><option>Bansang</option><option>Fatoto</option><option>Other</option></select><button type="button" class="location-btn" onclick="captureCheckoutLocation()"> USE MY CURRENT GPS LOCATION</button><small id="checkoutGpsState" class="gps-note">GPS is optional. Your written delivery area can still be used.</small><div class="summary"><div class="row"><span>Product</span><b>${money(selected.price)}</b></div><div class="row total-row"><span>Total</span><b id="total">${money(selected.price)}</b></div></div><button class="pay pulse" onclick="placeOrder()"> PAY WITH WAYCHIT <span>→</span></button><div class="secure-note"> Secure checkout · You will be redirected to Waychit</div></div></div>`;
   $("modal").classList.add("show");$("qty").oninput=updateTotal;$("phone").addEventListener("keydown",e=>{if(e.key==="Enter")placeOrder()});
 }
 function changeQty(d){let q=Math.max(1,Math.min(selected.stock,(+$('qty').value||1)+d));$('qty').value=q;updateTotal()}
@@ -133,7 +133,7 @@ function storeCoverClass(id){return "store-cover c"+(Number(id)%6)}
 async function openStores(){
   const modal=$("modal");
   modal.innerHTML=`<div class="sheet stores-sheet"><button class="close" onclick="closeModal()">×</button>
-    <div class="stores-heading"><div><small>BASSE MARKETPLACE</small><h2>All Stores</h2><p>Discover trusted local stores and shop directly from them.</p></div><span class="store-heading-icon">🏪</span></div>
+    <div class="stores-heading"><div><small>BASSE MARKETPLACE</small><h2>All Stores</h2><p>Discover trusted local stores and shop directly from them.</p></div><span class="store-heading-icon"></span></div>
     <div id="storeGrid" class="store-grid"><div class="store-loading">Loading stores…</div></div></div>`;
   modal.classList.add("show");
   try{
@@ -148,11 +148,11 @@ async function openStores(){
         <div class="store-card-body">
           <div class="store-title-row"><div><h3>${esc(s.business_name||"BASSE Store")}</h3><span>${esc(s.category||"Local Store")}</span></div><span class="store-chevron">›</span></div>
           <p>${esc(s.description||"Shop quality products from this local BASSE vendor.")}</p>
-          <div class="store-meta"><span>🛍️ ${s.product_count||0} products</span><span>📍 ${esc(s.location||"Basse")}</span></div>
+          <div class="store-meta"><span> ${s.product_count||0} products</span><span> ${esc(s.location||"Basse")}</span></div>
           <button type="button" class="view-store-btn" onclick="event.stopPropagation();openStore(${s.id})">VIEW STORE <span>→</span></button>
         </div>
-      </article>`).join(""):`<div class="empty-search"><div>🏪</div><h3>No stores yet</h3><p>Approved vendors will appear here automatically.</p></div>`;
-  }catch(e){$("storeGrid").innerHTML=`<div class="empty-search"><div>⚠️</div><h3>Stores unavailable</h3><p>${esc(e.message||"Please try again.")}</p><button class="view-store-btn" onclick="openStores()">TRY AGAIN</button></div>`}
+      </article>`).join(""):`<div class="empty-search"><div></div><h3>No stores yet</h3><p>Approved vendors will appear here automatically.</p></div>`;
+  }catch(e){$("storeGrid").innerHTML=`<div class="empty-search"><div></div><h3>Stores unavailable</h3><p>${esc(e.message||"Please try again.")}</p><button class="view-store-btn" onclick="openStores()">TRY AGAIN</button></div>`}
 }
 async function openStore(id){
   const modal=$("modal");
@@ -161,14 +161,14 @@ async function openStore(id){
   try{
     const r=await fetch("/api/stores/"+id,{cache:"no-store"});const s=await r.json();if(!r.ok)throw Error(s.error||"Store unavailable");
     const initials=storeInitials(s.business_name);
-    $("storeDetail").innerHTML=`<div class="store-detail-head"><div class="${storeCoverClass(s.id)} detail-cover"><div class="store-logo big">${esc(initials)}</div></div><div class="store-detail-info"><small>VERIFIED BASSE STORE</small><h2>${esc(s.business_name)}</h2><p>${esc(s.description||s.category||"Local vendor")}</p><div class="store-meta"><span>📍 ${esc(s.location||"Basse")}</span><span>🛍️ ${s.products.length} products</span></div></div></div>
+    $("storeDetail").innerHTML=`<div class="store-detail-head"><div class="${storeCoverClass(s.id)} detail-cover"><div class="store-logo big">${esc(initials)}</div></div><div class="store-detail-info"><small>VERIFIED BASSE STORE</small><h2>${esc(s.business_name)}</h2><p>${esc(s.description||s.category||"Local vendor")}</p><div class="store-meta"><span> ${esc(s.location||"Basse")}</span><span> ${s.products.length} products</span></div></div></div>
       <div class="store-products-head"><h3>Products</h3><span>${s.products.length} available</span></div>
-      <div class="store-products">${s.products.length?s.products.map(p=>`<article class="product" data-id="${p.id}" tabindex="0" role="button" onclick="buy(${p.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();buy(${p.id})}"><div class="pic"><img src="${p.image||""}" alt="${esc(p.name)}" loading="lazy"><span class="tag">${esc(p.category)}</span></div><div class="info"><h3>${esc(p.name)}</h3><div class="price">${money(p.price)}</div><button class="buy" type="button" onclick="event.stopPropagation();buy(${p.id})">VIEW PRODUCT →</button></div></article>`).join(""):`<div class="empty-search"><div>🛍️</div><h3>No products yet</h3><p>This store has no approved products available right now.</p></div>`}</div>`;
-  }catch(e){$("storeDetail").innerHTML=`<div class="empty-search"><div>⚠️</div><h3>Store unavailable</h3><p>${esc(e.message||"Please try again.")}</p><button class="view-store-btn" onclick="openStore(${id})">TRY AGAIN</button></div>`}
+      <div class="store-products">${s.products.length?s.products.map(p=>`<article class="product" data-id="${p.id}" tabindex="0" role="button" onclick="buy(${p.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();buy(${p.id})}"><div class="pic"><img src="${p.image||""}" alt="${esc(p.name)}" loading="lazy"><span class="tag">${esc(p.category)}</span></div><div class="info"><h3>${esc(p.name)}</h3><div class="price">${money(p.price)}</div><button class="buy" type="button" onclick="event.stopPropagation();buy(${p.id})">VIEW PRODUCT →</button></div></article>`).join(""):`<div class="empty-search"><div></div><h3>No products yet</h3><p>This store has no approved products available right now.</p></div>`}</div>`;
+  }catch(e){$("storeDetail").innerHTML=`<div class="empty-search"><div></div><h3>Store unavailable</h3><p>${esc(e.message||"Please try again.")}</p><button class="view-store-btn" onclick="openStore(${id})">TRY AGAIN</button></div>`}
 }
 function trackOrderPrompt(){
   const modal=$("modal");
-  modal.innerHTML=`<div class="sheet form-sheet tracking-entry-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="mini-bag">🚚</span><div><small>BASSE DELIVERY</small><h2>Track Your Order</h2></div></div><p class="muted">No account is required. Enter the order number and the WhatsApp number used when you placed the order.</p><div class="form"><label>Order Number</label><input id="trackOrderId" autocomplete="off" placeholder="BOS-AB12CD34"><label>WhatsApp Number</label><input id="trackPhone" inputmode="numeric" autocomplete="tel" placeholder="7XXXXXX"><button class="pay" type="button" onclick="submitGuestTracking()">🚚 TRACK ORDER <span>→</span></button><button class="secondary-btn" type="button" onclick="closeModal()">CANCEL</button></div></div>`;
+  modal.innerHTML=`<div class="sheet form-sheet tracking-entry-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="mini-bag"></span><div><small>BASSE DELIVERY</small><h2>Track Your Order</h2></div></div><p class="muted">No account is required. Enter the order number and the WhatsApp number used when you placed the order.</p><div class="form"><label>Order Number</label><input id="trackOrderId" autocomplete="off" placeholder="BOS-AB12CD34"><label>WhatsApp Number</label><input id="trackPhone" inputmode="numeric" autocomplete="tel" placeholder="7XXXXXX"><button class="pay" type="button" onclick="submitGuestTracking()"> TRACK ORDER <span>→</span></button><button class="secondary-btn" type="button" onclick="closeModal()">CANCEL</button></div></div>`;
   modal.classList.add('show');
 }
 async function submitGuestTracking(){
@@ -188,7 +188,7 @@ async function openOrderTracking(id,phone=""){
   trackingPhone=phone;
   trackingOrderId=String(id||"");
   const modal=$("modal");
-  modal.innerHTML=`<div class="sheet tracking-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="mini-bag">🚚</span><div><small>BASSE DELIVERY</small><h2>Track Order</h2></div></div><div id="trackingBody"><div class="store-loading">Loading tracking…</div></div></div>`;
+  modal.innerHTML=`<div class="sheet tracking-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="mini-bag"></span><div><small>BASSE DELIVERY</small><h2>Track Order</h2></div></div><div id="trackingBody"><div class="store-loading">Loading tracking…</div></div></div>`;
   modal.classList.add("show");
   await refreshTracking(id,true);
   startTrackingLiveStream(id);
@@ -218,18 +218,18 @@ async function refreshTracking(id,initial){
     const hasCustomer=Number.isFinite(Number(d.order.customer_lat))&&Number.isFinite(Number(d.order.customer_lng));
     const hasDriver=Number.isFinite(Number(d.delivery?.lat))&&Number.isFinite(Number(d.delivery?.lng));
     if(initial){
-      const map=`<div class="live-map-wrap"><div id="customerMap" class="customer-map"><div class="map-placeholder">🗺️<br><b>Live delivery map</b><small>Loading map…</small></div></div></div>`;
+      const map=`<div class="live-map-wrap"><div id="customerMap" class="customer-map"><div class="map-placeholder"><br><b>Live delivery map</b><small>Loading map…</small></div></div></div>`;
       $("trackingBody").innerHTML=`<div class="tracking-card"><div class="track-top"><b>#${esc(d.order.id)}</b><span id="trackingStatus" class="badge"></span></div><h3 id="trackingProduct"></h3><p id="trackingLocation"></p>${map}<div class="timeline" id="trackingTimeline"></div><p class="muted" id="trackingNote"></p></div>`;
     }
     const statusEl=$("trackingStatus"),productEl=$("trackingProduct"),locationEl=$("trackingLocation"),timelineEl=$("trackingTimeline"),noteEl=$("trackingNote");
     if(!statusEl||!productEl||!locationEl||!timelineEl||!noteEl)return;
-    statusEl.textContent=status.replaceAll("_"," ");productEl.textContent=`${d.order.product_name} × ${d.order.quantity}`;locationEl.textContent=(d.order.location||"Delivery location pending")+(hasCustomer?" · 📍 GPS location saved":"");
-    timelineEl.innerHTML=steps.map((x,i)=>`<div class="timeline-step ${i<=idx?"done":""}"><span>${i<=idx?"✓":"•"}</span><b>${x.replaceAll("_"," ")}</b></div>`).join("");
+    statusEl.textContent=status.replaceAll("_"," ");productEl.textContent=`${d.order.product_name} × ${d.order.quantity}`;locationEl.textContent=(d.order.location||"Delivery location pending")+(hasCustomer?" ·  GPS location saved":"");
+    timelineEl.innerHTML=steps.map((x,i)=>`<div class="timeline-step ${i<=idx?"done":""}"><span>${i<=idx?"":"•"}</span><b>${x.replaceAll("_"," ")}</b></div>`).join("");
     const distance=hasCustomer&&hasDriver?trackingDistanceKm(Number(d.delivery.lat),Number(d.delivery.lng),Number(d.order.customer_lat),Number(d.order.customer_lng)):null;
     noteEl.innerHTML=hasDriver?`Driver: <b>${esc(d.delivery.driver_name||"Assigned driver")}</b> · ${distance!==null?`<b>${distance<1?Math.round(distance*1000)+" m":distance.toFixed(1)+" km"}</b> away · `:""}${d.delivery.last_seen?`last update ${new Date(d.delivery.last_seen).toLocaleTimeString()}`:"live"}`:(d.delivery?.driver_name?`Driver: <b>${esc(d.delivery.driver_name)}</b> · Waiting for GPS`:"A driver will be assigned after your order is confirmed.");
     if(window.L)loadTrackingMap(d.order.customer_lat,d.order.customer_lng,d.delivery?.lat,d.delivery?.lng);
     if(status==="DELIVERED")stopTrackingPolling();
-  }catch(e){if(initial)$("trackingBody").innerHTML=`<div class="empty-search"><div>🔎</div><h3>Order not found</h3><p>${esc(e.message||"Check your order number.")}</p></div>`}
+  }catch(e){if(initial)$("trackingBody").innerHTML=`<div class="empty-search"><div></div><h3>Order not found</h3><p>${esc(e.message||"Check your order number.")}</p></div>`}
   finally{trackingRefreshing=false}
 }
 function mapTiles(map){
@@ -251,11 +251,11 @@ function loadTrackingMap(customerLat,customerLng,driverLat,driverLng){
   const hasCustomer=Number.isFinite(Number(customerLat))&&Number.isFinite(Number(customerLng));
   const hasDriver=Number.isFinite(Number(driverLat))&&Number.isFinite(Number(driverLng));
   if(!window.L){
-    el.innerHTML='<div class="map-placeholder">📍<br><b>Map service is loading</b><small>Please wait a moment and tap Track Order again.</small></div>';
+    el.innerHTML='<div class="map-placeholder"><br><b>Map service is loading</b><small>Please wait a moment and tap Track Order again.</small></div>';
     return;
   }
   if(!hasCustomer&&!hasDriver){
-    el.innerHTML='<div class="map-placeholder">📍<br><b>Waiting for location</b><small>The order has no GPS location yet.</small></div>';
+    el.innerHTML='<div class="map-placeholder"><br><b>Waiting for location</b><small>The order has no GPS location yet.</small></div>';
     if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}return;
   }
   const clat=Number(customerLat),clng=Number(customerLng),dlat=Number(driverLat),dlng=Number(driverLng);
@@ -268,11 +268,11 @@ function loadTrackingMap(customerLat,customerLng,driverLat,driverLng){
   }
   const m=trackingMap;
   if(hasCustomer){
-    if(!m.__customer)m.__customer=L.marker([clat,clng],{icon:L.divIcon({className:"basse-map-marker customer-marker",html:"<span>📍</span><b>Customer</b>",iconSize:[82,30],iconAnchor:[12,28],zIndexOffset:500})}).addTo(m).bindPopup("📍 Your delivery location");
+    if(!m.__customer)m.__customer=L.marker([clat,clng],{icon:L.divIcon({className:"basse-map-marker customer-marker",html:"<span></span><b>Customer</b>",iconSize:[82,30],iconAnchor:[12,28],zIndexOffset:500})}).addTo(m).bindPopup(" Your delivery location");
     else m.__customer.setLatLng([clat,clng]);
   }
   if(hasDriver){
-    if(!m.__driver)m.__driver=L.marker([dlat,dlng],{icon:L.divIcon({className:"basse-map-marker driver-marker",html:"<span>🛵</span><b>Driver</b>",iconSize:[70,30],iconAnchor:[12,28],zIndexOffset:1200})}).addTo(m).bindPopup("🛵 Driver — live");
+    if(!m.__driver)m.__driver=L.marker([dlat,dlng],{icon:L.divIcon({className:"basse-map-marker driver-marker",html:"<span></span><b>Driver</b>",iconSize:[70,30],iconAnchor:[12,28],zIndexOffset:1200})}).addTo(m).bindPopup(" Driver — live");
     else m.__driver.setLatLng([dlat,dlng]);
   }
   if(hasCustomer&&hasDriver){
@@ -287,14 +287,14 @@ function captureCheckoutLocation(){
   const state=$("checkoutGpsState");
   if(!navigator.geolocation){if(state)state.textContent="This phone/browser does not support GPS.";return}
   if(state)state.textContent="Getting your location…";
-  navigator.geolocation.getCurrentPosition(p=>{checkoutGps={lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy};if(state)state.textContent=`✓ GPS location saved (±${Math.round(p.coords.accuracy||0)}m).`;},()=>{if(state)state.textContent="GPS permission was not granted. You can continue with the delivery area."},{enableHighAccuracy:true,maximumAge:10000,timeout:15000});
+  navigator.geolocation.getCurrentPosition(p=>{checkoutGps={lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy};if(state)state.textContent=` GPS location saved (±${Math.round(p.coords.accuracy||0)}m).`;},()=>{if(state)state.textContent="GPS permission was not granted. You can continue with the delivery area."},{enableHighAccuracy:true,maximumAge:10000,timeout:15000});
 }
 
 async function placeOrder(){
   let q=Math.max(1,Math.min(selected.stock,+$("qty").value||1)),phone=$("phone").value.replace(/\D/g,"").replace(/^220/,"");
   if(!$('name').value.trim())return toast("Please enter your full name.");
   if(phone.length<6)return toast("Please enter a valid WhatsApp number.");
-  let btn=document.querySelector('.pay');if(btn){btn.disabled=true;btn.innerHTML="⏳ CONNECTING TO WAYCHIT…"}
+  let btn=document.querySelector('.pay');if(btn){btn.disabled=true;btn.innerHTML=" CONNECTING TO WAYCHIT…"}
   try{
     let r=await fetch("/api/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({productId:selected.id,quantity:q,name:$('name').value.trim(),whatsapp:phone,location:$('loc').value,customerLat:checkoutGps.lat,customerLng:checkoutGps.lng,customerAccuracy:checkoutGps.accuracy,options:selectedChoices})});
     let d=await r.json().catch(()=>({}));
@@ -308,9 +308,9 @@ async function placeOrder(){
       return;
     }
     throw new Error(d.paymentError||"Waychit payment could not be started.");
-  }catch(e){if(btn){btn.disabled=false;btn.innerHTML="💳 PAY WITH WAYCHIT <span>→</span>"}showReturn({id:"",total:selected.price*q,whatsappSupport:""},"",false,"",e.message||"Payment could not be started.")}
+  }catch(e){if(btn){btn.disabled=false;btn.innerHTML=" PAY WITH WAYCHIT <span>→</span>"}showReturn({id:"",total:selected.price*q,whatsappSupport:""},"",false,"",e.message||"Payment could not be started.")}
 }
-function receiptMessage(o){return `Hello BASSE ONLINE SHOP 👋
+function receiptMessage(o){return `Hello BASSE ONLINE SHOP 
 
 I have paid for my order.
 
@@ -325,7 +325,7 @@ Please confirm my order. Thank you.`}
 function showReturn(o,msg,paid,adminWhatsApp,note=""){
   let target=String(adminWhatsApp||o.whatsappSupport||"").replace(/\D/g,"");
   let href=target?`https://wa.me/${target}?text=${encodeURIComponent(msg||receiptMessage(o))}`:"#";
-  $("modal").innerHTML=`<div class="sheet return-sheet"><button class="close" onclick="closeModal()">×</button><div class="result-icon">${paid?"✓":"🧾"}</div><h2>${paid?"Payment successful!":"Order received"}</h2><p>${paid?"Your payment has been confirmed.":note||"Your order has been received."}</p>${o.id?`<div class="summary"><div class="row"><span>Order</span><b>${esc(o.id)}</b></div><div class="row"><span>Total</span><b>${money(o.total)}</b></div><div class="row"><span>Payment</span><b>${paid?"PAID":"PENDING"}</b></div></div>`:""}${target&&o.id?`<a class="whats" href="${href}" target="_blank" rel="noopener">💬 SEND ORDER TO BASSE SHOP</a>`:""}${o.id?`<button class="secondary-btn" onclick="openOrderTracking('${o.id}')">🚚 TRACK ORDER</button>`:""}<button class="secondary-btn" onclick="closeModal()">CONTINUE SHOPPING</button></div>`;$('modal').classList.add('show')
+  $("modal").innerHTML=`<div class="sheet return-sheet"><button class="close" onclick="closeModal()">×</button><div class="result-icon">${paid?"":""}</div><h2>${paid?"Payment successful!":"Order received"}</h2><p>${paid?"Your payment has been confirmed.":note||"Your order has been received."}</p>${o.id?`<div class="summary"><div class="row"><span>Order</span><b>${esc(o.id)}</b></div><div class="row"><span>Total</span><b>${money(o.total)}</b></div><div class="row"><span>Payment</span><b>${paid?"PAID":"PENDING"}</b></div></div>`:""}${target&&o.id?`<a class="whats" href="${href}" target="_blank" rel="noopener"> SEND ORDER TO BASSE SHOP</a>`:""}${o.id?`<button class="secondary-btn" onclick="openOrderTracking('${o.id}')"> TRACK ORDER</button>`:""}<button class="secondary-btn" onclick="closeModal()">CONTINUE SHOPPING</button></div>`;$('modal').classList.add('show')
 }
 async function waitForPayment(id,attempt=0){
   try{
@@ -381,30 +381,30 @@ async function openOrders(){let raw=localStorage.getItem("basseLastOrder");if(!r
 
 function openAccount(){
   const customer=JSON.parse(localStorage.getItem("basseCustomer")||"null");
-  $("modal").innerHTML=`<div class="sheet account-sheet"><button class="close" onclick="closeModal()">×</button><div class="account-hero"><div class="account-avatar">👤</div><h2>${customer?`Welcome, ${esc(customer.name)}`:"BASSE MARKET ACCOUNT"}</h2><p>${customer?"Manage your shopping account.":"Shop as a guest or create an account."}</p></div>
-  ${customer?`<button class="account-option" onclick="openOrders()">📦 <span><b>My Orders</b><small>View your recent purchases</small></span> →</button><button class="account-option" onclick="toast('Account details are saved on this device.')">⚙️ <span><b>My Details</b><small>${esc(customer.phone)}</small></span> →</button><button class="secondary-btn" onclick="localStorage.removeItem('basseCustomer');openAccount()">LOG OUT</button>`:
-  `<button class="account-option" type="button" onclick="openCustomerSignup()">🛍️ <span><b>Create Customer Account</b><small>Optional — save your details and orders</small></span> →</button>
-  <button class="account-option" type="button" onclick="openCustomerLogin()">🔑 <span><b>Customer Login</b><small>Already have an account?</small></span> →</button>
-  <button class="account-option vendor-option" type="button" onclick="openVendorApply()">🏪 <span><b>Become a Vendor</b><small>Apply to sell on BASSE MARKET</small></span> →</button>
-  <button class="account-option vendor-login-option" type="button" onclick="openVendorLogin()">🔐 <span><b>Vendor Login</b><small>Approved vendors: enter your phone and PIN</small></span> →</button>
-  <div class="guest-note">🛍️ <b>Continue as Guest</b><br><span>No customer login is required to browse or place an order.</span></div>`}</div>`;
+  $("modal").innerHTML=`<div class="sheet account-sheet"><button class="close" onclick="closeModal()">×</button><div class="account-hero"><div class="account-avatar"></div><h2>${customer?`Welcome, ${esc(customer.name)}`:"BASSE MARKET ACCOUNT"}</h2><p>${customer?"Manage your shopping account.":"Shop as a guest or create an account."}</p></div>
+  ${customer?`<button class="account-option" onclick="openOrders()"> <span><b>My Orders</b><small>View your recent purchases</small></span> →</button><button class="account-option" onclick="toast('Account details are saved on this device.')"> <span><b>My Details</b><small>${esc(customer.phone)}</small></span> →</button><button class="secondary-btn" onclick="localStorage.removeItem('basseCustomer');openAccount()">LOG OUT</button>`:
+  `<button class="account-option" type="button" onclick="openCustomerSignup()"> <span><b>Create Customer Account</b><small>Optional — save your details and orders</small></span> →</button>
+  <button class="account-option" type="button" onclick="openCustomerLogin()"> <span><b>Customer Login</b><small>Already have an account?</small></span> →</button>
+  <button class="account-option vendor-option" type="button" onclick="openVendorApply()"> <span><b>Become a Vendor</b><small>Apply to sell on BASSE MARKET</small></span> →</button>
+  <button class="account-option vendor-login-option" type="button" onclick="openVendorLogin()"> <span><b>Vendor Login</b><small>Approved vendors: enter your phone and PIN</small></span> →</button>
+  <div class="guest-note"> <b>Continue as Guest</b><br><span>No customer login is required to browse or place an order.</span></div>`}</div>`;
   $("modal").classList.add("show")
 }
 function openCustomerSignup(){
  $("modal").innerHTML=`<div class="sheet form-sheet"><button class="close" onclick="openAccount()">←</button><h2>Create Customer Account</h2><p class="muted">Optional — you can always shop as a guest.</p><div class="form"><label>Full Name</label><input id="caName" placeholder="Your name"><label>WhatsApp Number</label><input id="caPhone" inputmode="numeric" placeholder="7XXXXXX"><label>Password</label><input id="caPass" type="password" placeholder="Create a password"><button class="pay" onclick="createCustomer()">CREATE ACCOUNT</button><button class="secondary-btn" onclick="openAccount()">CONTINUE AS GUEST</button></div></div>`;$('modal').classList.add('show')
 }
-async function createCustomer(){let n=$("caName").value.trim(),p=$("caPhone").value.replace(/\D/g,"").replace(/^220/,""),pw=$("caPass").value;if(!n||p.length<6)return toast("Enter your name and valid WhatsApp number.");if(pw.length<4)return toast("Password must be at least 4 characters.");try{let r=await fetch("/api/customers/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n,whatsapp:p,password:pw})}),d=await r.json();if(!r.ok)throw Error(d.error||"Could not create customer account.");localStorage.setItem("basseCustomer",JSON.stringify({name:d.full_name,phone:"+220 "+p,id:d.id,status:d.status}));openAccount();toast("Customer account created ✓")}catch(e){toast(e.message)}}
+async function createCustomer(){let n=$("caName").value.trim(),p=$("caPhone").value.replace(/\D/g,"").replace(/^220/,""),pw=$("caPass").value;if(!n||p.length<6)return toast("Enter your name and valid WhatsApp number.");if(pw.length<4)return toast("Password must be at least 4 characters.");try{let r=await fetch("/api/customers/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n,whatsapp:p,password:pw})}),d=await r.json();if(!r.ok)throw Error(d.error||"Could not create customer account.");localStorage.setItem("basseCustomer",JSON.stringify({name:d.full_name,phone:"+220 "+p,id:d.id,status:d.status}));openAccount();toast("Customer account created ")}catch(e){toast(e.message)}}
 function openCustomerLogin(){
  $("modal").innerHTML=`<div class="sheet form-sheet"><button class="close" onclick="openAccount()">←</button><h2>Customer Login</h2><p class="muted">Login is optional. You can also continue shopping as a guest.</p><div class="form"><label>WhatsApp Number</label><input id="clPhone" inputmode="numeric" placeholder="7XXXXXX"><label>Password</label><input id="clPass" type="password" placeholder="Your password"><button class="pay" onclick="loginCustomer()">LOGIN</button><button class="secondary-btn" onclick="openAccount()">CONTINUE AS GUEST</button></div></div>`;$('modal').classList.add('show')
 }
-async function loginCustomer(){let p=$("clPhone").value.replace(/\D/g,"").replace(/^220/,""),pw=$("clPass").value;if(p.length<6||!pw)return toast("Enter your WhatsApp number and password.");try{let r=await fetch("/api/customers/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({whatsapp:p,password:pw})}),d=await r.json();if(!r.ok)throw Error(d.error||"Customer login failed.");localStorage.setItem("basseCustomer",JSON.stringify({name:d.full_name,phone:"+220 "+p,id:d.id,status:d.status}));openAccount();toast("Welcome back ✓")}catch(e){toast(e.message)}}
+async function loginCustomer(){let p=$("clPhone").value.replace(/\D/g,"").replace(/^220/,""),pw=$("clPass").value;if(p.length<6||!pw)return toast("Enter your WhatsApp number and password.");try{let r=await fetch("/api/customers/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({whatsapp:p,password:pw})}),d=await r.json();if(!r.ok)throw Error(d.error||"Customer login failed.");localStorage.setItem("basseCustomer",JSON.stringify({name:d.full_name,phone:"+220 "+p,id:d.id,status:d.status}));openAccount();toast("Welcome back ")}catch(e){toast(e.message)}}
 function openVendorApply(){
  $("modal").innerHTML=`<div class="sheet form-sheet"><button class="close" onclick="openAccount()">←</button><h2>Become a Vendor</h2><p class="muted">Apply to sell on BASSE MARKET. Admin will review your application.</p><div class="form"><label>Full Name</label><input id="vName" placeholder="Full name"><label>Business / Shop Name</label><input id="vBusiness" placeholder="Your shop name"><label>WhatsApp Number</label><input id="vPhone" inputmode="numeric" placeholder="7XXXXXX"><label>Location</label><input id="vLocation" placeholder="Basse"><label>Category</label><input id="vCategory" placeholder="Fashion, Phones, Beauty..."><label>Short Description</label><textarea id="vDesc" placeholder="Tell us about your business"></textarea><label>Create Vendor PIN</label><input id="vPass" type="password" inputmode="numeric" minlength="4" maxlength="5" pattern="[0-9]{4,5}" placeholder="4 or 5 digit PIN" required><button class="pay" onclick="submitVendor()">SUBMIT APPLICATION</button></div></div>`;$("modal").classList.add("show")
 }
 function openVendorLogin(){
  $("modal").innerHTML=`<div class="sheet form-sheet vendor-login-sheet">
  <button class="close" type="button" onclick="openAccount()">←</button>
- <div class="account-avatar">🏪</div>
+ <div class="account-avatar"></div>
  <h2>Vendor Login</h2>
  <p class="muted">Only approved vendors can access their dashboard.</p>
  <div class="form" id="marketVendorLoginForm">
@@ -412,7 +412,7 @@ function openVendorLogin(){
  <input id="vendorLoginPhone" inputmode="numeric" autocomplete="tel" placeholder="7XXXXXX">
  <label>Vendor PIN</label>
  <input id="vendorLoginPin" type="password" inputmode="numeric" autocomplete="one-time-code" maxlength="5" placeholder="4 or 5 digits">
- <button class="pay" type="button" id="vendorLoginBtn">🔐 LOGIN TO VENDOR DASHBOARD <span>→</span></button>
+ <button class="pay" type="button" id="vendorLoginBtn"> LOGIN TO VENDOR DASHBOARD <span>→</span></button>
  <small>Forgot your PIN? Contact BASSE MARKET Admin for a reset.</small>
  </div></div>`;
  $("modal").classList.add("show");
@@ -421,14 +421,14 @@ function openVendorLogin(){
    const pin=$("vendorLoginPin").value.trim();
    if(!phone) return toast("Enter your phone number.");
    if(!/^\d{4,5}$/.test(pin)) return toast("PIN must be 4 or 5 digits.");
-   const btn=$("vendorLoginBtn"); btn.disabled=true; btn.innerHTML="⏳ SIGNING IN…";
+   const btn=$("vendorLoginBtn"); btn.disabled=true; btn.innerHTML=" SIGNING IN…";
    try{
      const r=await fetch("/api/vendor/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({whatsapp:phone,pin})});
      const d=await r.json().catch(()=>({}));
      if(!r.ok) throw new Error(d.error||"Vendor login failed.");
      if(d.token) localStorage.setItem("basseVendorToken",d.token);
      location.href="/vendor/";
-   }catch(e){btn.disabled=false;btn.innerHTML="🔐 LOGIN TO VENDOR DASHBOARD <span>→</span>";toast(e.message);}
+   }catch(e){btn.disabled=false;btn.innerHTML=" LOGIN TO VENDOR DASHBOARD <span>→</span>";toast(e.message);}
  });
 }
 async function submitVendor(){
@@ -448,17 +448,17 @@ async function submitVendor(){
 }
 function showVendorPending(id,phone,pin,businessName){
   $("modal").innerHTML=`<div class="sheet return-sheet vendor-pending-sheet">
-    <div class="result-icon pending-icon">⏳</div>
+    <div class="result-icon pending-icon"></div>
     <h2>Waiting for Approval</h2>
     <p>Your <b>${esc(businessName)}</b> vendor application has been submitted.</p>
     <div class="pending-box"><strong>Application Status</strong><span id="vendorPendingStatus">PENDING</span></div>
     <p class="muted">No email verification is required. Your application is waiting for Admin approval.</p>
-    <button class="pay" type="button" id="sendVendorWhatsApp">💬 SEND APPLICATION TO ADMIN</button>
+    <button class="pay" type="button" id="sendVendorWhatsApp"> SEND APPLICATION TO ADMIN</button>
     <button class="secondary-btn" type="button" id="checkVendorApproval">CHECK STATUS</button>
     <button class="secondary-btn" type="button" onclick="closeModal()">CLOSE</button>
   </div>`;
   $("modal").classList.add("show");
-  const waText=`🏪 *BASSE MARKET — NEW VENDOR APPLICATION*%0A%0ABusiness: ${encodeURIComponent(businessName)}%0AVendor: ${encodeURIComponent((window.__vendorPendingName||""))}%0AWhatsApp: +220${encodeURIComponent(phone)}%0AStatus: PENDING%0A%0APlease review and approve this vendor in the Admin Dashboard.`;
+  const waText=` *BASSE MARKET — NEW VENDOR APPLICATION*%0A%0ABusiness: ${encodeURIComponent(businessName)}%0AVendor: ${encodeURIComponent((window.__vendorPendingName||""))}%0AWhatsApp: +220${encodeURIComponent(phone)}%0AStatus: PENDING%0A%0APlease review and approve this vendor in the Admin Dashboard.`;
   $("sendVendorWhatsApp").onclick=()=>{ location.href=`https://wa.me/2206963349?text=${waText}`; };
   window.__vendorPending={id,phone,pin,businessName};
   clearInterval(window.__vendorPendingTimer);
@@ -476,10 +476,10 @@ function showVendorPending(id,phone,pin,businessName){
         if(lr.ok&&ld.token){
           localStorage.setItem("basseVendorToken",ld.token);
           sessionStorage.removeItem("basseVendorApplication");
-          $("modal").innerHTML=`<div class="sheet return-sheet"><div class="result-icon">✓</div><h2>Vendor Approved!</h2><p>Your shop is approved. Opening your Vendor Dashboard…</p></div>`;
+          $("modal").innerHTML=`<div class="sheet return-sheet"><div class="result-icon"></div><h2>Vendor Approved!</h2><p>Your shop is approved. Opening your Vendor Dashboard…</p></div>`;
           setTimeout(()=>location.href="/vendor/",400);
         }else{
-          $("modal").innerHTML=`<div class="sheet return-sheet"><div class="result-icon">✓</div><h2>Vendor Approved!</h2><p>Your account is approved. Use Vendor Login with your phone and PIN.</p><button class="pay" type="button" onclick="openVendorLogin()">🔐 VENDOR LOGIN</button></div>`;
+          $("modal").innerHTML=`<div class="sheet return-sheet"><div class="result-icon"></div><h2>Vendor Approved!</h2><p>Your account is approved. Use Vendor Login with your phone and PIN.</p><button class="pay" type="button" onclick="openVendorLogin()"> VENDOR LOGIN</button></div>`;
         }
       }else if(d.status==="REJECTED"||d.status==="SUSPENDED"){
         clearInterval(window.__vendorPendingTimer);
@@ -500,12 +500,29 @@ function resumeVendorApplication(){
 function toast(t){let x=$("toast");x.textContent=t;x.classList.add("show");clearTimeout(window.__toast);window.__toast=setTimeout(()=>x.classList.remove("show"),2800)}
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 $("search").addEventListener("input",runSearch);$("search").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();$("searchSuggestions").classList.remove("show");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"auto",block:"start"})}if(e.key==="Escape")clearSearch()});$("searchBtn").addEventListener("click",()=>{$("searchSuggestions").classList.remove("show");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"auto",block:"start"});});$("clearSearch").addEventListener("click",clearSearch);document.addEventListener("click",e=>{if(!e.target.closest(".search-wrap"))$("searchSuggestions").classList.remove("show")});
-loadSearchIndex().then(loadProducts);handleReturn();setTimeout(()=>{if(new URLSearchParams(location.search).get("vendor")==="apply"){openVendorApply();history.replaceState({},"",location.pathname)}resumeVendorApplication();if(!new URLSearchParams(location.search).get("payment"))resumePendingPayment()},200);
+
+async function loadStorePreview(){
+  const grid=$("storePreviewGrid"); if(!grid)return;
+  try{
+    const r=await fetch("/api/stores",{cache:"no-store"}); const stores=await r.json();
+    if(!r.ok)throw Error("Could not load stores");
+    const list=Array.isArray(stores)?stores.slice(0,4):[];
+    grid.innerHTML=list.length?list.map(s=>`<button type="button" class="store-preview-card" onclick="openStore(${s.id})">
+      <span class="preview-logo">${esc(storeInitials(s.business_name))}</span>
+      <span class="preview-info"><b>${esc(s.business_name||"BASSE Store")}</b><small>${esc(s.category||"Local Store")} · ${s.product_count||0} products</small></span>
+      <span class="preview-arrow" aria-hidden="true">→</span>
+    </button>`).join(""):`<div class="preview-loading">Approved stores will appear here as vendors go live.</div>`;
+  }catch{
+    grid.innerHTML=`<div class="preview-loading">Stores will appear here when the marketplace reconnects.</div>`;
+  }
+}
+
+loadSearchIndex().then(loadProducts);loadStorePreview();handleReturn();setTimeout(()=>{if(new URLSearchParams(location.search).get("vendor")==="apply"){openVendorApply();history.replaceState({},"",location.pathname)}resumeVendorApplication();if(!new URLSearchParams(location.search).get("payment"))resumePendingPayment()},200);
 // Instant catalog/order updates. EventSource reconnects automatically if the connection drops.
 function connectLive(){
   try{
     const es=new EventSource("/api/live");
-    es.addEventListener("catalog",()=>{loadSearchIndex();if(document.visibilityState==="visible"&&!$("modal").classList.contains("show"))loadProducts(true);});
+    es.addEventListener("catalog",()=>{loadStorePreview();loadSearchIndex();if(document.visibilityState==="visible"&&!$("modal").classList.contains("show"))loadProducts(true);});
     es.addEventListener("orders",()=>{
       // Never replace the customer's live Track Order screen with the order sheet.
       // Delivery/GPS events are handled by the dedicated tracking stream above.

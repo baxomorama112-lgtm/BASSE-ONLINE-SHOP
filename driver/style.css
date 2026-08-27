@@ -15,3 +15,13 @@ input{-webkit-user-select:text;user-select:text}
 .fallback-map{position:relative;background:#e9edf2}.fallback-map-inner{position:absolute;inset:0;overflow:hidden}.fallback-tile{position:absolute;width:256px;height:256px;max-width:none;border:0}.fallback-marker{position:absolute;z-index:20;background:#fff;border:1px solid #d7deea;border-radius:14px;padding:5px 8px;box-shadow:0 3px 10px #0003;white-space:nowrap;font-size:11px;color:#18346d}.customer-fallback{border-color:#3b82f6}.driver-fallback{border-color:#7c3aed;z-index:30}.fallback-map:after{content:'© OpenStreetMap contributors';position:absolute;right:4px;bottom:2px;background:#fff9;padding:2px 4px;font-size:8px;color:#555;z-index:40}
 
 .fallback-line{position:absolute;height:4px;background:#7c3aed;opacity:.65;transform-origin:0 50%;z-index:10;border-radius:4px;pointer-events:none}
+
+/* BASSE DRIVER V4 — professional operations UI */
+body{background:#f4f7fb;color:#13203a}
+header{box-shadow:0 6px 22px rgba(7,26,74,.06)}
+.order-card,.location-banner,.card{border:1px solid #e3e8f0;box-shadow:0 8px 24px rgba(7,26,74,.05)}
+.order-card{border-radius:18px}
+.location-banner{border-left:4px solid #1d55c9}
+.order-card button{min-height:46px}
+.order-card button.secondary{background:#fff}
+.driver-map{height:280px;border-radius:18px;box-shadow:0 8px 22px rgba(7,26,74,.06)}

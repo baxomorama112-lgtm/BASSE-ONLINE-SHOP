@@ -31,8 +31,22 @@ async function login(){
     token=d.token;
     localStorage.setItem("basseVendorToken",token);
     start();
+    renderVendorOverview();
   }catch(e){alert(e.message)}
   finally{if(btn){btn.disabled=false;btn.textContent=old||"LOGIN";}}
+}
+function showVendorTab(id,btn){
+  document.querySelectorAll(".vendor-panel").forEach(x=>x.classList.add("hidden"));
+  const panel=$(id); if(panel) panel.classList.remove("hidden");
+  document.querySelectorAll(".vendor-tabs button").forEach(x=>x.classList.remove("active"));
+  if(btn) btn.classList.add("active");
+  if(id==="overview") renderVendorOverview();
+}
+function renderVendorOverview(){
+  const p=[...document.querySelectorAll("#productsList .product-row")].slice(0,4);
+  const o=[...document.querySelectorAll("#orders .order-row")].slice(0,4);
+  $("overviewProducts").innerHTML=p.length?p.map(x=>x.outerHTML).join(""):"<p class='empty-state'>No products yet.</p>";
+  $("overviewOrders").innerHTML=o.length?o.map(x=>x.outerHTML).join(""):"<p class='empty-state'>No orders yet.</p>";
 }
 function start(){
   if($("login"))$("login").classList.add("hidden");
@@ -50,7 +64,7 @@ async function refresh(){
     let [me,st,ps,os,ts]=await Promise.all([
       api("/api/vendor/me"),api("/api/vendor/stats"),api("/api/vendor/products"),api("/api/vendor/orders"),api("/api/vendor/transactions")
     ]);
-    $("shop").textContent=me.business_name;
+    $("shop").textContent=me.business_name; if($("storeProfileName"))$("storeProfileName").textContent=me.business_name||"My Shop"; if($("storeProfileMeta"))$("storeProfileMeta").textContent=[me.category,me.location].filter(Boolean).join(" · ")||"BASSE marketplace store"; if($("storeMark"))$("storeMark").textContent=String(me.business_name||"B").trim().slice(0,1).toUpperCase();
     $("products").textContent=st.products;
     $("pending").textContent=st.pendingProducts;
     $("sales").textContent=money(st.sales);
@@ -58,6 +72,7 @@ async function refresh(){
     $("productsList").innerHTML=ps.map(p=>`<div class="product-row"><img src="${p.image||""}"><div><b>${esc(p.name)}</b><small>${money(p.price)} · Stock ${p.stock}</small></div><span class="badge">${p.approval_status}</span></div>`).join("")||"<p>No products yet.</p>";
     $("orders").innerHTML=os.map(o=>`<div class="order-row"><div><b>${esc(o.id)}</b><br><small>${esc(o.product_name)} × ${o.quantity} · ${esc(o.customer_name)}</small></div><b>${money(o.total)}</b><span class="badge">${o.payment_status}</span></div>`).join("")||"<p>No orders yet.</p>";
     $("transactions").innerHTML=ts.map(t=>`<div class="order-row"><div><b>${esc(t.id)}</b><br><small>${esc(t.product_name)} × ${t.quantity} · ${esc(t.created_at||"")}</small></div><div><b>${money(t.total)}</b><br><small>Commission ${money(t.commission)} · Earnings ${money(t.vendor_earnings)}</small></div><span class="badge">${t.payment_status}</span></div>`).join("")||"<p>No transactions yet.</p>";
+    renderVendorOverview();
   }catch(e){
     if(/login|approved|unauthorized/i.test(e.message))showLogin();
   }
@@ -96,7 +111,7 @@ function clearDraft(){localStorage.removeItem(draftKey())}
 function showToast(message,type="success"){
   const t=$("toast");if(!t)return;
   t.className=`toast ${type}`;
-  t.innerHTML=type==="success"?`<span class="toast-check">✓</span><span>${esc(message)}</span>`:`<span>${esc(message)}</span>`;
+  t.innerHTML=type==="success"?`<span class="toast-check"></span><span>${esc(message)}</span>`:`<span>${esc(message)}</span>`;
   clearTimeout(window.__toastTimer);
   requestAnimationFrame(()=>t.classList.add("show"));
   window.__toastTimer=setTimeout(()=>t.classList.remove("show"),4200);
@@ -109,7 +124,7 @@ function openAdd(){
   submitBusy=false;
   currentSubmissionKey="";
   $("modal").classList.remove("hidden");
-  $("form").innerHTML=`<button class="modal-close" type="button" aria-label="Close" onclick="closeModal()">×</button><div class="modal-title"><h2>Add Product</h2><p>Submit your product once. It will stay saved while waiting for Admin approval.</p></div><form class="form" id="pf"><input name="name" placeholder="Product name" autocomplete="off" required><select name="category"><option>Fashion</option><option>Electronics</option><option>Phones</option><option>Beauty</option><option>Home & Living</option><option>Accessories</option></select><input name="price" type="number" min="0" step="1" inputmode="numeric" placeholder="Price" required><input name="stock" type="number" min="0" step="1" inputmode="numeric" placeholder="Stock" required><div class="product-options-box"><b>Product Options</b><small>Add only what applies. Customers can choose these before checkout.</small><label>Colors <input name="option_colors" placeholder="Black, White, Blue"></label><label>Sizes <input name="option_sizes" placeholder="S, M, L, XL"></label><label>Phone Type / Brand <input name="option_phone_type" placeholder="iPhone, Samsung, Tecno"></label><label>Phone Model <input name="option_phone_model" placeholder="iPhone 15 Pro, A55"></label><label>Storage / Variant <input name="option_storage" placeholder="128GB, 256GB, 512GB"></label><label>Other Options <input name="option_other" placeholder="Any other choices"></label></div><label class="file-label"><span>Product photos</span><input name="images" type="file" accept="image/*" multiple></label><textarea name="description" placeholder="Description"></textarea><button class="submit-product" type="submit"><span>✓</span> SUBMIT FOR APPROVAL <b>→</b></button><div class="submit-note">One click • Saved securely • Admin approval required</div></form>`;
+  $("form").innerHTML=`<button class="modal-close" type="button" aria-label="Close" onclick="closeModal()">×</button><div class="modal-title"><h2>Add Product</h2><p>Submit your product once. It will stay saved while waiting for Admin approval.</p></div><form class="form" id="pf"><input name="name" placeholder="Product name" autocomplete="off" required><select name="category"><option>Fashion</option><option>Electronics</option><option>Phones</option><option>Beauty</option><option>Home & Living</option><option>Accessories</option></select><input name="price" type="number" min="0" step="1" inputmode="numeric" placeholder="Price" required><input name="stock" type="number" min="0" step="1" inputmode="numeric" placeholder="Stock" required><div class="product-options-box"><b>Product Options</b><small>Add only what applies. Customers can choose these before checkout.</small><label>Colors <input name="option_colors" placeholder="Black, White, Blue"></label><label>Sizes <input name="option_sizes" placeholder="S, M, L, XL"></label><label>Phone Type / Brand <input name="option_phone_type" placeholder="iPhone, Samsung, Tecno"></label><label>Phone Model <input name="option_phone_model" placeholder="iPhone 15 Pro, A55"></label><label>Storage / Variant <input name="option_storage" placeholder="128GB, 256GB, 512GB"></label><label>Other Options <input name="option_other" placeholder="Any other choices"></label></div><label class="file-label"><span>Product photos</span><input name="images" type="file" accept="image/*" multiple></label><textarea name="description" placeholder="Description"></textarea><button class="submit-product" type="submit"><span></span> SUBMIT FOR APPROVAL <b>→</b></button><div class="submit-note">One click • Saved securely • Admin approval required</div></form>`;
   const form=$("pf");
   restoreDraft(form);
   form.addEventListener("input",()=>saveDraft(form));
@@ -135,7 +150,7 @@ async function submitProduct(e){
     clearDraft();
     $("modal").classList.add("hidden");
     refresh();
-    showToast("Product submitted successfully ✓ Waiting for Admin approval.");
+    showToast("Product submitted successfully  Waiting for Admin approval.");
   }catch(x){
     // Keep the form open and the draft intact so a dropped network never loses the entry.
     submitBusy=false;

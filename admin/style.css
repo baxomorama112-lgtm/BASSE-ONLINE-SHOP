@@ -28,3 +28,24 @@ button{transition:transform .15s,box-shadow .15s,opacity .15s}button:hover{trans
 .product-options-box{border:1px solid #dce2ed;border-radius:14px;padding:12px;background:#f8fafc;margin:8px 0;display:grid;gap:8px}.product-options-box>b{font-size:13px}.product-options-box>small{color:#687389;font-size:11px}.product-options-box label{display:grid;gap:4px;font-size:11px;color:#536079}.product-options-box input{width:100%;padding:10px;border:1px solid #dce2ed;border-radius:10px;background:#fff;font-size:14px}
 
 .admin-fallback-map{position:relative;background:#e9edf2}.admin-fallback-inner{position:absolute;inset:0;overflow:hidden}.admin-fallback-tile{position:absolute;width:256px;height:256px;max-width:none}.admin-fallback-marker{position:absolute;z-index:20;background:#fff;border:1px solid #d7deea;border-radius:14px;padding:5px 8px;box-shadow:0 3px 10px #0003;white-space:nowrap;font-size:11px;color:#18346d}.admin-fallback-customer{border-color:#3b82f6}.admin-fallback-driver{border-color:#7c3aed;z-index:30}.admin-fallback-line{position:absolute;height:3px;background:#7c3aed;transform-origin:left center;z-index:10;opacity:.75}.admin-fallback-map:after{content:"© OpenStreetMap contributors";position:absolute;right:4px;bottom:2px;background:#fff9;padding:2px 4px;font-size:8px;color:#555;z-index:40}
+
+/* BASSE ADMIN V4 */
+:root{--n:#071a4a;--b:#1d55c9;--g:#f5b400;--bg:#f5f7fb;--line:#e3e8f0;--muted:#6b768a}
+body{background:#f5f7fb}
+aside{box-shadow:8px 0 28px rgba(7,26,74,.08);padding:22px 16px}
+.nav{font-size:12px;letter-spacing:.1px;padding:12px 13px}
+.nav.active{background:#fff;color:#071a4a;box-shadow:0 6px 18px rgba(0,0,0,.08)}
+main{padding:26px clamp(16px,4vw,48px)}
+.dashboard-logo,.admin-logo{object-fit:contain;background:#fff;border-radius:12px}
+.stats>div,.card{border-radius:18px;box-shadow:0 7px 24px rgba(7,26,74,.045)}
+.stats>div:hover{box-shadow:0 12px 28px rgba(7,26,74,.08)}
+.card h2{font-size:18px}
+.live-viewer-card{border-left:4px solid #2e9d68!important}
+.wide{border-radius:12px}
+@media(max-width:800px){
+ aside{width:76px;padding:15px 10px}
+ aside .sidebrand b,.nav{font-size:0}
+ aside .nav:before{content:attr(data-label);font-size:11px}
+ main{margin-left:76px;width:calc(100% - 76px);padding:18px 12px}
+ .stats{grid-template-columns:repeat(2,1fr)}
+}
