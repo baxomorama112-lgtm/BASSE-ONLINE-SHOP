@@ -466,15 +466,19 @@ app.post("/api/orders",async(req,res)=>{
 app.get("/api/order/:id",(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);o?res.json({...o,whatsappSupport:SHOP_WHATSAPP}):res.status(404).json({error:"Order not found"})});
 
 app.get("/api/order/:id/tracking",(req,res)=>{
-  const o=db.prepare("SELECT id,product_name,quantity,customer_name,whatsapp,location,total,payment_status,order_status,created_at,customer_lat,customer_lng,customer_accuracy FROM orders WHERE id=?").get(req.params.id);
-  if(!o)return res.status(404).json({error:"Order not found"});
-  const suppliedPhone=String(req.query.phone||"").replace(/\D/g,"").replace(/^220/,"");
-  if(suppliedPhone && suppliedPhone!==String(o.whatsapp||"").replace(/\D/g,"").replace(/^220/,""))return res.status(403).json({error:"The WhatsApp number does not match this order."});
+  const rawId=String(req.params.id||"").trim().toUpperCase().replace(/\s+/g,"");
+  const o=db.prepare("SELECT id,product_name,quantity,customer_name,whatsapp,location,total,payment_status,order_status,created_at,customer_lat,customer_lng,customer_accuracy FROM orders WHERE UPPER(REPLACE(id,' ',''))=?").get(rawId);
+  if(!o)return res.status(404).json({error:"Order not found. Check the order number and try again."});
+  const normalizePhone=(value)=>{let n=String(value||"").replace(/\D/g,"");if(n.startsWith("220"))n=n.slice(3);return n.slice(-9)};
+  const suppliedPhone=normalizePhone(req.query.phone);
+  const orderPhone=normalizePhone(o.whatsapp);
+  if(suppliedPhone && suppliedPhone!==orderPhone)return res.status(403).json({error:"The WhatsApp number does not match this order."});
+  if(req.query.phone && !suppliedPhone)return res.status(403).json({error:"Enter the WhatsApp number used for this order."});
   const d=db.prepare(`
     SELECT d.*,dr.full_name AS driver_name,dr.whatsapp AS driver_whatsapp
     FROM deliveries d LEFT JOIN delivery_drivers dr ON dr.id=d.driver_id
-    WHERE d.order_id=?
-  `).get(req.params.id);
+    WHERE UPPER(REPLACE(d.order_id,' ',''))=?
+  `).get(rawId);
   res.set("Cache-Control","no-store");
   res.json({order:o,delivery:d||null,trackingActive:String(d?.status||o.order_status)!=="DELIVERED"});
 });

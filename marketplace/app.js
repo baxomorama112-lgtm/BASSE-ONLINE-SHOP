@@ -187,22 +187,39 @@ function trackOrderPrompt(){
   const modal=$("modal");
   modal.innerHTML=`<div class="sheet form-sheet tracking-entry-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="mini-bag" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M12 18h24l-2 23H14z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M18 18v-4a6 6 0 0 1 12 0v4" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></span><div><small>BASSE DELIVERY</small><h2>Track Your Order</h2></div></div><p class="muted">No account is required. Enter the order number and the WhatsApp number used when you placed the order.</p><div class="form"><label>Order Number</label><input id="trackOrderId" autocomplete="off" placeholder="BOS-AB12CD34"><label>WhatsApp Number</label><input id="trackPhone" inputmode="numeric" autocomplete="tel" placeholder="7XXXXXX"><button class="pay" type="button" onclick="submitGuestTracking()"> TRACK ORDER <span>→</span></button><button class="secondary-btn" type="button" onclick="closeModal()">CANCEL</button></div></div>`;
   modal.classList.add('show');
+  const orderInput=$("trackOrderId"), phoneInput=$("trackPhone");
+  [orderInput,phoneInput].forEach(input=>input&&input.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();submitGuestTracking()}}));
 }
 async function submitGuestTracking(){
-  const id=$("trackOrderId").value.trim().toUpperCase();
-  const phone=$("trackPhone").value.replace(/\D/g,"").replace(/^220/,"");
+  const id=String($("trackOrderId")?.value||"").trim().toUpperCase().replace(/\s+/g,"");
+  const phone=normalizeBassePhone($("trackPhone")?.value||"");
+  const btn=document.querySelector('.tracking-entry-sheet .pay');
   if(!id)return toast("Enter your order number.");
   if(phone.length<6)return toast("Enter the WhatsApp number used for the order.");
+  if(btn){btn.disabled=true;btn.dataset.originalText=btn.innerHTML;btn.innerHTML=" CHECKING ORDER…"}
   try{
-    const r=await fetch(`/api/order/${encodeURIComponent(id)}/tracking?phone=${encodeURIComponent(phone)}`,{cache:"no-store"});
-    const d=await r.json();
-    if(!r.ok)throw Error(d.error||"Order not found.");
-    openOrderTracking(id,phone);
-  }catch(e){toast(e.message)}
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),10000);
+    const r=await fetch(`/api/order/${encodeURIComponent(id)}/tracking?phone=${encodeURIComponent(phone)}`,{cache:"no-store",signal:controller.signal});
+    clearTimeout(timeout);
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw Error(d.error||"Order not found. Check the order number and WhatsApp number.");
+    closeModal();
+    await openOrderTracking(d.order?.id||id,phone);
+  }catch(e){
+    toast(e.name==="AbortError"?"The server took too long to respond. Please try again.":(e.message||"Could not find this order."));
+  }finally{
+    if(btn){btn.disabled=false;btn.innerHTML=btn.dataset.originalText||' TRACK ORDER <span>→</span>'}
+  }
+}
+function normalizeBassePhone(value){
+  let n=String(value||"").replace(/\D/g,"");
+  if(n.startsWith("220"))n=n.slice(3);
+  return n.slice(-9);
 }
 async function openOrderTracking(id,phone=""){
   stopTrackingPolling();
-  trackingPhone=phone;
+  trackingPhone=normalizeBassePhone(phone);
   trackingOrderId=String(id||"");
   const modal=$("modal");
   modal.innerHTML=`<div class="sheet tracking-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="mini-bag" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M12 18h24l-2 23H14z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M18 18v-4a6 6 0 0 1 12 0v4" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></span><div><small>BASSE DELIVERY</small><h2>Track Order</h2></div></div><div id="trackingBody"><div class="store-loading">Loading tracking…</div></div></div>`;
@@ -584,3 +601,9 @@ window.addEventListener("visibilitychange",()=>{
   track.addEventListener('touchstart',e=>{sx=e.changedTouches[0].clientX},{passive:true});
   track.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-sx;if(Math.abs(dx)>45){go(index+(dx<0?1:-1));restart();}},{passive:true});
 })();
+
+// Explicit globals for Android WebView/iOS WebKit and inline UI actions.
+window.trackOrderPrompt=trackOrderPrompt;
+window.submitGuestTracking=submitGuestTracking;
+window.openOrderTracking=openOrderTracking;
+window.refreshTracking=refreshTracking;
