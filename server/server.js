@@ -465,6 +465,12 @@ app.post("/api/orders",async(req,res)=>{
 });
 app.get("/api/order/:id",(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);o?res.json({...o,whatsappSupport:SHOP_WHATSAPP}):res.status(404).json({error:"Order not found"})});
 
+// Gambia geographic sanity bounds. These are intentionally generous enough to cover
+// Banjul/Kombo, Basse, Bansang, Fatoto and the rest of The Gambia while rejecting
+// obvious provider/network GPS errors such as a 2,000+ km jump into another country.
+const GAMBIA_GPS={minLat:12.90,maxLat:13.90,minLng:-17.20,maxLng:-13.40};
+function validGambiaGps(lat,lng){return Number.isFinite(lat)&&Number.isFinite(lng)&&lat>=GAMBIA_GPS.minLat&&lat<=GAMBIA_GPS.maxLat&&lng>=GAMBIA_GPS.minLng&&lng<=GAMBIA_GPS.maxLng;}
+
 app.get("/api/order/:id/tracking",(req,res)=>{
   const rawId=String(req.params.id||"").trim().toUpperCase().replace(/\s+/g,"");
   const o=db.prepare("SELECT id,product_name,quantity,customer_name,whatsapp,location,total,payment_status,order_status,created_at,customer_lat,customer_lng,customer_accuracy FROM orders WHERE UPPER(REPLACE(id,' ',''))=?").get(rawId);
@@ -605,11 +611,27 @@ app.patch("/api/driver/deliveries/:id/status",driverGuard,(req,res)=>{
   db.prepare("UPDATE orders SET order_status=? WHERE id=?").run(status==="DELIVERED"?"DELIVERED":status==="PICKED_UP"||status==="ON_THE_WAY"||status==="ARRIVED"?"PROCESSING":"READY",d.order_id);
   backupShopData("driver-delivery-status");broadcastLive("orders",{orderId:d.order_id});res.json({ok:true});
 });
+app.post("/api/order/:id/customer-location",(req,res)=>{
+  const rawId=String(req.params.id||"").trim().toUpperCase().replace(/\s+/g,"");
+  const o=db.prepare("SELECT id,whatsapp,order_status FROM orders WHERE UPPER(REPLACE(id,' ',''))=?").get(rawId);
+  if(!o)return res.status(404).json({error:"Order not found."});
+  if(String(o.order_status||"").toUpperCase()==="DELIVERED")return res.status(409).json({error:"This order has already been delivered."});
+  const normalizePhone=(value)=>{let n=String(value||"").replace(/\D/g,"");if(n.startsWith("220"))n=n.slice(3);return n.slice(-9)};
+  if(normalizePhone(req.body.phone)!==normalizePhone(o.whatsapp))return res.status(403).json({error:"The WhatsApp number does not match this order."});
+  const lat=Number(req.body.lat),lng=Number(req.body.lng),accuracy=Number(req.body.accuracy||0);
+  if(!validGambiaGps(lat,lng))return res.status(422).json({error:"GPS location appears to be outside The Gambia. Enable Precise Location and try again."});
+  db.prepare("UPDATE orders SET customer_lat=?,customer_lng=?,customer_accuracy=? WHERE id=?").run(lat,lng,accuracy,o.id);
+  backupShopData("customer-gps-updated");
+  broadcastLive("orders",{orderId:o.id,customerLocation:true});
+  res.json({ok:true,customerLat:lat,customerLng:lng,accuracy});
+});
+
 app.post("/api/driver/deliveries/:id/location",driverGuard,(req,res)=>{
   const d=db.prepare("SELECT * FROM deliveries WHERE id=? AND driver_id=?").get(req.params.id,req.driverId);
   if(!d)return res.status(404).json({error:"Delivery not assigned to you."});
   const lat=Number(req.body.lat),lng=Number(req.body.lng),accuracy=Number(req.body.accuracy||0);
   if(!Number.isFinite(lat)||!Number.isFinite(lng)||lat<-90||lat>90||lng<-180||lng>180)return res.status(400).json({error:"Invalid GPS coordinates."});
+  if(!validGambiaGps(lat,lng))return res.status(422).json({error:"GPS location appears to be outside The Gambia. Enable Precise Location and try again."});
   db.prepare("UPDATE deliveries SET lat=?,lng=?,accuracy=?,last_seen=? WHERE id=?").run(lat,lng,accuracy,new Date().toISOString(),d.id);
   const now=Date.now(), last=lastLocationBroadcast.get(String(d.order_id))||0;
   if(now-last>=2000){lastLocationBroadcast.set(String(d.order_id),now);broadcastLive("orders",{orderId:d.order_id,location:true});}

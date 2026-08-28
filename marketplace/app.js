@@ -217,6 +217,22 @@ function normalizeBassePhone(value){
   if(n.startsWith("220"))n=n.slice(3);
   return n.slice(-9);
 }
+function captureTrackingLocation(){
+  if(!trackingOrderId)return;
+  if(!navigator.geolocation){toast("This phone/browser does not support GPS.");return}
+  const btn=document.querySelector('.live-location-btn');
+  if(btn){btn.disabled=true;btn.dataset.originalText=btn.innerHTML;btn.innerHTML=" GETTING YOUR LOCATION…"}
+  navigator.geolocation.getCurrentPosition(async p=>{
+    try{
+      const r=await fetch(`/api/order/${encodeURIComponent(trackingOrderId)}/customer-location`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:trackingPhone,lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy})});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok)throw Error(d.error||"Could not save your location.");
+      toast("Your live location was updated.");
+      await refreshTracking(trackingOrderId,false);
+    }catch(e){toast(e.message||"Could not update your location.");}
+    finally{if(btn){btn.disabled=false;btn.innerHTML=btn.dataset.originalText||' VIEW LIVE DRIVER LOCATION'}}
+  },()=>{if(btn){btn.disabled=false;btn.innerHTML=btn.dataset.originalText||' VIEW LIVE DRIVER LOCATION'}toast("Location permission was not granted. Enable Precise Location and try again.")},{enableHighAccuracy:true,maximumAge:5000,timeout:15000});
+}
 async function openOrderTracking(id,phone=""){
   stopTrackingPolling();
   trackingPhone=normalizeBassePhone(phone);
@@ -256,7 +272,7 @@ async function refreshTracking(id,initial){
     const hasDriver=Number.isFinite(Number(d.delivery?.lat))&&Number.isFinite(Number(d.delivery?.lng));
     if(initial){
       const map=`<div class="live-map-wrap"><div id="customerMap" class="customer-map"><div class="map-placeholder"><br><b>Live delivery map</b><small>Loading map…</small></div></div></div>`;
-      $("trackingBody").innerHTML=`<div class="tracking-card"><div class="track-top"><b>#${esc(d.order.id)}</b><span id="trackingStatus" class="badge"></span></div><h3 id="trackingProduct"></h3><p id="trackingLocation"></p>${map}<button type="button" class="live-location-btn" onclick="refreshTracking(trackingOrderId,false)"><span aria-hidden="true">◉</span> VIEW LIVE DRIVER LOCATION</button><div class="timeline" id="trackingTimeline"></div><p class="muted" id="trackingNote"></p></div>`;
+      $("trackingBody").innerHTML=`<div class="tracking-card"><div class="track-top"><b>#${esc(d.order.id)}</b><span id="trackingStatus" class="badge"></span></div><h3 id="trackingProduct"></h3><p id="trackingLocation"></p>${map}<div class="tracking-location-actions"><button type="button" class="live-location-btn" onclick="captureTrackingLocation()"><span aria-hidden="true">⌖</span> UPDATE MY LOCATION</button><button type="button" class="live-location-refresh" onclick="refreshTracking(trackingOrderId,false)"><span aria-hidden="true">◉</span> VIEW LIVE DRIVER LOCATION</button></div><div class="timeline" id="trackingTimeline"></div><p class="muted" id="trackingNote"></p></div>`;
     }
     const statusEl=$("trackingStatus"),productEl=$("trackingProduct"),locationEl=$("trackingLocation"),timelineEl=$("trackingTimeline"),noteEl=$("trackingNote");
     if(!statusEl||!productEl||!locationEl||!timelineEl||!noteEl)return;
@@ -607,3 +623,4 @@ window.trackOrderPrompt=trackOrderPrompt;
 window.submitGuestTracking=submitGuestTracking;
 window.openOrderTracking=openOrderTracking;
 window.refreshTracking=refreshTracking;
+window.captureTrackingLocation=captureTrackingLocation;

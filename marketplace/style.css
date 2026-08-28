@@ -1024,3 +1024,10 @@ html{scroll-behavior:smooth}body{background:#f7f9fd;color:#101a2c;overflow-x:hid
 }
 
 .live-location-btn{width:100%;margin:12px 0 14px;padding:13px 16px;border:0;border-radius:13px;background:#071a4a;color:#fff;font:800 12px/1.2 inherit;letter-spacing:.2px;cursor:pointer;box-shadow:0 8px 18px rgba(7,26,74,.12)}.live-location-btn:active{transform:scale(.99)}.live-location-btn span{margin-right:7px;color:#7fb1ff}
+
+/* Tracking controls: compact, responsive, and clearly separate customer GPS from live refresh. */
+.tracking-location-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+.tracking-location-actions button{min-height:48px;border-radius:14px;font-weight:800;font-size:13px;letter-spacing:.2px}
+.tracking-location-actions .live-location-btn{margin:0}
+.live-location-refresh{border:1px solid #dce3ef;background:#fff;color:#0b1f57}
+@media(max-width:560px){.tracking-location-actions{grid-template-columns:1fr}.tracking-location-actions button{min-height:46px}}
