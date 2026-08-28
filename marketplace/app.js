@@ -8,6 +8,17 @@ function startViewerPresence(){sendViewerHeartbeat();clearInterval(window.__view
 window.addEventListener("pagehide",()=>{try{navigator.sendBeacon("/api/presence/leave",new Blob([JSON.stringify({id:BASSE_VIEWER_ID})],{type:"application/json"}))}catch{}});
 const $=id=>document.getElementById(id),money=n=>"D"+Number(n||0).toLocaleString();
 let checkoutGps={lat:null,lng:null,accuracy:null},selectedChoices=[],trackingMap=null,trackingPoll=null,trackingStream=null,trackingPhone="",trackingOrderId="",trackingRefreshing=false,trackingLastEvent=0;
+let leafletPromise=null;
+function ensureLeaflet(){
+  if(window.L)return Promise.resolve(window.L);
+  if(leafletPromise)return leafletPromise;
+  leafletPromise=new Promise(resolve=>{
+    if(!document.querySelector('link[data-basse-leaflet]')){const css=document.createElement("link");css.rel="stylesheet";css.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";css.dataset.basseLeaflet="1";document.head.appendChild(css)}
+    const load=(src,next)=>{const sc=document.createElement("script");sc.src=src;sc.onload=()=>resolve(window.L);sc.onerror=next;document.head.appendChild(sc)};
+    load("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",()=>load("https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js",()=>resolve(null)));
+  });
+  return leafletPromise;
+}
 
 function renderProductGrid(ps, silent=false){
   const grid=$("grid");
@@ -36,17 +47,23 @@ function cachedCatalog(){try{const x=JSON.parse(localStorage.getItem("basseCatal
 function saveCatalogCache(ps){try{if(Array.isArray(ps)&&ps.length)localStorage.setItem("basseCatalogCache",JSON.stringify(ps))}catch{}}
 function filterCachedCatalog(){const q=$("search").value.trim().toLowerCase();return cachedCatalog().filter(p=>(category==="All"||p.category===category)&&(!q||(p.name+" "+p.category+" "+(p.description||"")).toLowerCase().includes(q)))}
 async function loadProducts(silent=false){
+  const cached=filterCachedCatalog();
+  if(cached.length && !$("search").value.trim() && category==="All"){
+    $("count").textContent=cached.length+" products";
+    renderProductGrid(cached,true);
+  }
   try{
-    const r=await fetch(`/api/products?category=${encodeURIComponent(category)}&q=${encodeURIComponent($("search").value.trim())}`,{cache:"no-store"});
+    const r=await fetch(`/api/products?category=${encodeURIComponent(category)}&q=${encodeURIComponent($("search").value.trim())}`,{cache:"default"});
     if(!r.ok)throw new Error("Catalog unavailable");
     const ps=await r.json();
-    saveCatalogCache(ps);
+    if(category==="All"&&!$("search").value.trim())searchIndex=ps;
+    saveCatalogCache(category==="All"&&!$("search").value.trim()?ps:[...cachedCatalog().filter(p=>!ps.some(x=>Number(x.id)===Number(p.id))),...ps]);
     $("count").textContent=ps.length+" products";
     renderProductGrid(ps,silent);
     $("clearSearch").classList.toggle("show",!!$("search").value.trim());
   }catch(e){
     const ps=filterCachedCatalog();
-    if(ps.length){$("count").textContent=ps.length+" products";renderProductGrid(ps,true);toast("Showing saved catalog — reconnecting…");}
+    if(ps.length){$("count").textContent=ps.length+" products";renderProductGrid(ps,true);}
     else if(!$("grid").querySelector(".product")) $("grid").innerHTML='<div class="empty-search"><div></div><h3>Shop temporarily unavailable</h3><p>Your saved catalog will return when the connection is restored.</p></div>';
   }
 }
@@ -190,9 +207,12 @@ async function openOrderTracking(id,phone=""){
   const modal=$("modal");
   modal.innerHTML=`<div class="sheet tracking-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="mini-bag" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M12 18h24l-2 23H14z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M18 18v-4a6 6 0 0 1 12 0v4" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></span><div><small>BASSE DELIVERY</small><h2>Track Order</h2></div></div><div id="trackingBody"><div class="store-loading">Loading tracking…</div></div></div>`;
   modal.classList.add("show");
+  const mapReady=ensureLeaflet();
   await refreshTracking(id,true);
+  await mapReady;
+  await refreshTracking(id,false);
   startTrackingLiveStream(id);
-  trackingPoll=setInterval(()=>{if(document.visibilityState!=="hidden" && (Date.now()-trackingLastEvent>15000))refreshTracking(id,false)},20000);
+  trackingPoll=setInterval(()=>{if(document.visibilityState!=="hidden")refreshTracking(id,false)},5000);
 }
 function trackingDistanceKm(a,b,c,d){const R=6371,rad=x=>x*Math.PI/180;const p1=rad(a),p2=rad(c),dp=rad(c-a),dl=rad(d-b);const h=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;return R*2*Math.atan2(Math.sqrt(h),Math.sqrt(1-h))}
 function startTrackingLiveStream(orderId){
@@ -219,14 +239,14 @@ async function refreshTracking(id,initial){
     const hasDriver=Number.isFinite(Number(d.delivery?.lat))&&Number.isFinite(Number(d.delivery?.lng));
     if(initial){
       const map=`<div class="live-map-wrap"><div id="customerMap" class="customer-map"><div class="map-placeholder"><br><b>Live delivery map</b><small>Loading map…</small></div></div></div>`;
-      $("trackingBody").innerHTML=`<div class="tracking-card"><div class="track-top"><b>#${esc(d.order.id)}</b><span id="trackingStatus" class="badge"></span></div><h3 id="trackingProduct"></h3><p id="trackingLocation"></p>${map}<div class="timeline" id="trackingTimeline"></div><p class="muted" id="trackingNote"></p></div>`;
+      $("trackingBody").innerHTML=`<div class="tracking-card"><div class="track-top"><b>#${esc(d.order.id)}</b><span id="trackingStatus" class="badge"></span></div><h3 id="trackingProduct"></h3><p id="trackingLocation"></p>${map}<button type="button" class="live-location-btn" onclick="refreshTracking(trackingOrderId,false)"><span aria-hidden="true">◉</span> VIEW LIVE DRIVER LOCATION</button><div class="timeline" id="trackingTimeline"></div><p class="muted" id="trackingNote"></p></div>`;
     }
     const statusEl=$("trackingStatus"),productEl=$("trackingProduct"),locationEl=$("trackingLocation"),timelineEl=$("trackingTimeline"),noteEl=$("trackingNote");
     if(!statusEl||!productEl||!locationEl||!timelineEl||!noteEl)return;
     statusEl.textContent=status.replaceAll("_"," ");productEl.textContent=`${d.order.product_name} × ${d.order.quantity}`;locationEl.textContent=(d.order.location||"Delivery location pending")+(hasCustomer?" ·  GPS location saved":"");
     timelineEl.innerHTML=steps.map((x,i)=>`<div class="timeline-step ${i<=idx?"done":""}"><span>${i<=idx?"":"•"}</span><b>${x.replaceAll("_"," ")}</b></div>`).join("");
     const distance=hasCustomer&&hasDriver?trackingDistanceKm(Number(d.delivery.lat),Number(d.delivery.lng),Number(d.order.customer_lat),Number(d.order.customer_lng)):null;
-    noteEl.innerHTML=hasDriver?`Driver: <b>${esc(d.delivery.driver_name||"Assigned driver")}</b> · ${distance!==null?`<b>${distance<1?Math.round(distance*1000)+" m":distance.toFixed(1)+" km"}</b> away · `:""}${d.delivery.last_seen?`last update ${new Date(d.delivery.last_seen).toLocaleTimeString()}`:"live"}`:(d.delivery?.driver_name?`Driver: <b>${esc(d.delivery.driver_name)}</b> · Waiting for GPS`:"A driver will be assigned after your order is confirmed.");
+    noteEl.innerHTML=hasDriver?`Driver: <b>${esc(d.delivery.driver_name||"Assigned driver")}</b> · ${distance!==null?`<b>${distance<1?Math.round(distance*1000)+" m":distance.toFixed(1)+" km"}</b> away · `:""}${d.delivery.last_seen?`last update ${new Date(d.delivery.last_seen).toLocaleTimeString()}`:"live"}`:(d.delivery?.driver_name?`Driver: <b>${esc(d.delivery.driver_name)}</b> · Waiting for GPS. Keep this screen open and tap the live-location button to refresh.`:"A driver will be assigned after your order is confirmed.");
     if(window.L)loadTrackingMap(d.order.customer_lat,d.order.customer_lng,d.delivery?.lat,d.delivery?.lng);
     if(status==="DELIVERED")stopTrackingPolling();
   }catch(e){if(initial)$("trackingBody").innerHTML=`<div class="empty-search"><div></div><h3>Order not found</h3><p>${esc(e.message||"Check your order number.")}</p></div>`}
@@ -522,12 +542,12 @@ async function loadStorePreview(){
   }
 }
 
-loadSearchIndex().then(loadProducts);loadStorePreview();handleReturn();setTimeout(()=>{if(new URLSearchParams(location.search).get("vendor")==="apply"){openVendorApply();history.replaceState({},"",location.pathname)}resumeVendorApplication();if(!new URLSearchParams(location.search).get("payment"))resumePendingPayment()},200);
+loadProducts();loadStorePreview();handleReturn();setTimeout(()=>{if(new URLSearchParams(location.search).get("vendor")==="apply"){openVendorApply();history.replaceState({},"",location.pathname)}resumeVendorApplication();if(!new URLSearchParams(location.search).get("payment"))resumePendingPayment()},200);
 // Instant catalog/order updates. EventSource reconnects automatically if the connection drops.
 function connectLive(){
   try{
     const es=new EventSource("/api/live");
-    es.addEventListener("catalog",()=>{loadStorePreview();loadSearchIndex();if(document.visibilityState==="visible"&&!$("modal").classList.contains("show"))loadProducts(true);});
+    es.addEventListener("catalog",()=>{loadStorePreview();if(document.visibilityState==="visible"&&!$("modal").classList.contains("show"))loadProducts(true);});
     es.addEventListener("orders",()=>{
       // Never replace the customer's live Track Order screen with the order sheet.
       // Delivery/GPS events are handled by the dedicated tracking stream above.
@@ -540,7 +560,7 @@ function connectLive(){
 connectLive();
 startViewerPresence();
 // Safety fallback for networks that block EventSource.
-setInterval(()=>{if(document.visibilityState==="visible"&&!$("modal").classList.contains("show"))loadProducts(true)},5000);
+setInterval(()=>{if(document.visibilityState==="visible"&&!$("modal").classList.contains("show"))loadProducts(true)},60000);
 
 window.addEventListener("visibilitychange",()=>{
   if(document.visibilityState!=="visible")return;

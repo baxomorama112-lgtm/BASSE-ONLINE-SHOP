@@ -100,3 +100,12 @@ Full backups now include the actual uploaded files from `server/data/uploads` as
 - Browser geolocation sends the driver's latest coordinates to the server without requiring Google Maps API.
 - Customer order tracking reads the same delivery status and latest GPS coordinates.
 - Full backup now includes driver accounts, delivery records, product images/uploads, orders, vendors and customer data.
+
+## V10 fixes
+- Live customer tracking now loads the map library only when tracking is opened and refreshes live delivery location every 5 seconds with a visible LIVE DRIVER LOCATION button.
+- Driver GPS updates remain connected to the delivery record and customer tracking endpoint.
+- Full backup/restore now preserves product option details including phone type/brand, phone model, colors, sizes, storage and other options.
+- Orders atomically reserve/decrement stock when purchased; cancellation/refund returns reserved stock; reopening re-reserves it when available.
+- Admin Orders now displays the vendor/store attached to each ordered product.
+- Order tracking remains available throughout the delivery lifecycle and stops live polling after DELIVERED.
+- Public product API responses are smaller and static assets are cacheable/compressed for faster marketplace loading.

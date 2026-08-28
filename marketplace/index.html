@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><title>BASSE ONLINE SHOP | Basse Market, Gambia</title><meta name="description" content="BASSE ONLINE SHOP — your online Basse Market in The Gambia. Shop phones, fashion, beauty, electronics, home & living and accessories online."><meta name="keywords" content="Basse Online Shop, Basse Market, online shop Basse Gambia, shopping in Basse, Gambia marketplace, Pasemarket"><link rel="canonical" href="https://basse-online-shop.onrender.com/"><meta property="og:type" content="website"><meta property="og:title" content="BASSE ONLINE SHOP | Basse Market, Gambia"><meta property="og:description" content="Shop phones, fashion, beauty, electronics, home & living and accessories online in Basse, The Gambia."><meta property="og:url" content="https://basse-online-shop.onrender.com/"><meta name="twitter:card" content="summary"><meta name="robots" content="index,follow,max-image-preview:large"><meta name="theme-color" content="#071a4a"><script type="application/ld+json">{"@context":"https://schema.org","@type":"OnlineStore","name":"BASSE ONLINE SHOP","url":"https://basse-online-shop.onrender.com/","description":"Online marketplace for Basse and surrounding areas in The Gambia, offering phones, fashion, beauty, electronics, home and accessories.","areaServed":"Basse, The Gambia","sameAs":[]}</script><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" /></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><title>BASSE ONLINE SHOP | Basse Market, Gambia</title><meta name="description" content="BASSE ONLINE SHOP — your online Basse Market in The Gambia. Shop phones, fashion, beauty, electronics, home & living and accessories online."><meta name="keywords" content="Basse Online Shop, Basse Market, online shop Basse Gambia, shopping in Basse, Gambia marketplace, Pasemarket"><link rel="canonical" href="https://basse-online-shop.onrender.com/"><meta property="og:type" content="website"><meta property="og:title" content="BASSE ONLINE SHOP | Basse Market, Gambia"><meta property="og:description" content="Shop phones, fashion, beauty, electronics, home & living and accessories online in Basse, The Gambia."><meta property="og:url" content="https://basse-online-shop.onrender.com/"><meta name="twitter:card" content="summary"><meta name="robots" content="index,follow,max-image-preview:large"><meta name="theme-color" content="#071a4a"><script type="application/ld+json">{"@context":"https://schema.org","@type":"OnlineStore","name":"BASSE ONLINE SHOP","url":"https://basse-online-shop.onrender.com/","description":"Online marketplace for Basse and surrounding areas in The Gambia, offering phones, fashion, beauty, electronics, home and accessories.","areaServed":"Basse, The Gambia","sameAs":[]}</script><link rel="stylesheet" href="style.css"></head>
 <body>
 <header class="top">
 <a class="brand" href="#" aria-label="BASSE Marketplace"><img class="brand-logo" src="/basse-marketplace-logo.jpg" alt="BASSE Marketplace"></a>
@@ -50,26 +50,5 @@
 <button onclick="trackOrderPrompt()" aria-label="Track order"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2" fill="currentColor"/><path d="M12 4v3M20 12h-3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><small>Track</small></button>
 <button onclick="openAccount()" aria-label="Account"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3"/><path d="M5 21c.5-4 2.8-6 7-6s6.5 2 7 6" fill="none" stroke="currentColor" stroke-width="2"/></svg><small>Account</small></button>
 </nav>
-<div id="modal" class="modal"></div><div id="toast" class="toast"></div><script>
-(function(){
-  function load(src,done,fail){var s=document.createElement("script");s.src=src;s.onload=done;s.onerror=fail;document.head.appendChild(s);}
-  load("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",function(){window.__leafletReady=true;load("app.js",function(){},function(){});},function(){
-    load("https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js",function(){window.__leafletReady=true;load("app.js",function(){},function(){});},function(){
-      window.__leafletReady=false;load("app.js",function(){},function(){});
-    });
-  });
-})();
-</script><script>
-(function(){
-  const track=document.getElementById('featureTrack');
-  const dots=[...document.querySelectorAll('.feature-dots button')];
-  if(!track||!dots.length)return;
-  let index=0,timer;
-  function go(i){index=(i+3)%3;track.style.transform='translateX(-'+(index*100)+'%)';dots.forEach((d,n)=>d.classList.toggle('active',n===index));}
-  dots.forEach((d,n)=>d.addEventListener('click',()=>{go(n);restart();}));
-  function restart(){clearInterval(timer);timer=setInterval(()=>go(index+1),5500);}
-  restart();
-  document.addEventListener('visibilitychange',()=>document.hidden?clearInterval(timer):restart());
-})();
-</script>
+<div id="modal" class="modal"></div><div id="toast" class="toast"></div><script src="app.js" defer></script>
 </body></html>

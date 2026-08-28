@@ -1,11 +1,12 @@
-const express=require("express"),Database=require("better-sqlite3"),multer=require("multer"),path=require("path"),crypto=require("crypto"),fs=require("fs");
+const express=require("express"),Database=require("better-sqlite3"),multer=require("multer"),compression=require("compression"),path=require("path"),crypto=require("crypto"),fs=require("fs");
 const app=express(),PORT=process.env.PORT||3000,ROOT=__dirname,DATA_DIR=process.env.DATA_DIR||path.join(ROOT,"data");
+app.use(compression({threshold:1024}));
 const PUBLIC_BASE_URL=(process.env.PUBLIC_BASE_URL||"https://basse-online-shop.onrender.com").replace(/\/$/,"");
 const STATIC_WAYCHIT_URL=process.env.WAYCHIT_STATIC_URL||"https://app.waychit.com/pm/?param1=%7B%22type%22%3A%22staticPaymentRequest%22%2C%22merchantAccountId%22%3A%226a8b03204ad0d928fc3a529c%22%7D";
 const SHOP_WHATSAPP=String(process.env.BASSE_MARKET_WHATSAPP||"2206963349").replace(/\D/g,"");fs.mkdirSync(DATA_DIR,{recursive:true});fs.mkdirSync(path.join(DATA_DIR,"uploads"),{recursive:true});
 app.use(express.json({limit:"100mb",verify:(req,res,buf)=>{if(req.originalUrl==="/api/waychit/webhook")req.rawBody=buf.toString("utf8")}}));
-app.use("/uploads",express.static(path.join(DATA_DIR,"uploads")));
-app.use("/downloads",express.static(path.join(ROOT,"../downloads"),{fallthrough:true}));
+app.use("/uploads",express.static(path.join(DATA_DIR,"uploads"),{maxAge:"7d",immutable:false}));
+app.use("/downloads",express.static(path.join(ROOT,"../downloads"),{fallthrough:true,maxAge:"1d"}));
 app.get("/download",(req,res)=>{
   res.sendFile(path.join(ROOT,"../marketplace/download.html"));
 });
@@ -13,12 +14,12 @@ app.get("/api/health",(req,res)=>{
   const productCount=Number(db.prepare("SELECT COUNT(*) c FROM products").get().c);
   res.json({ok:true,productCount,dataDir:DATA_DIR,persistentDataDir:DATA_DIR});
 });
-app.use("/admin",express.static(path.join(ROOT,"../admin")));app.use("/vendor",express.static(path.join(ROOT,"../vendor")));app.use("/driver",express.static(path.join(ROOT,"../driver")));
-app.use("/",express.static(path.join(ROOT,"../marketplace")));
+app.use("/admin",express.static(path.join(ROOT,"../admin"),{maxAge:"1h"}));app.use("/vendor",express.static(path.join(ROOT,"../vendor"),{maxAge:"1h"}));app.use("/driver",express.static(path.join(ROOT,"../driver"),{maxAge:"1h"}));
+app.use("/",express.static(path.join(ROOT,"../marketplace"),{maxAge:"1h"}));
 const DB_PATH=path.join(DATA_DIR,"basse-shop.db"),BACKUP_PATH=path.join(DATA_DIR,"catalog-backup.json"),PREV_BACKUP_PATH=path.join(DATA_DIR,"catalog-backup.previous.json");
 const db=new Database(DB_PATH);db.pragma("journal_mode=WAL");db.pragma("synchronous=FULL");db.pragma("busy_timeout=5000");
 db.exec(`CREATE TABLE IF NOT EXISTS products(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT,category TEXT,price INTEGER,stock INTEGER,description TEXT,image TEXT,active INTEGER DEFAULT 1,created_at TEXT DEFAULT CURRENT_TIMESTAMP,options_json TEXT DEFAULT '{}');
-CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY,product_id INTEGER,product_name TEXT,quantity INTEGER,customer_name TEXT,whatsapp TEXT,location TEXT,total INTEGER,payment_status TEXT DEFAULT 'PENDING',order_status TEXT DEFAULT 'NEW',waychit_request_id TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,vendor_id INTEGER DEFAULT NULL,commission INTEGER DEFAULT 0,vendor_earnings INTEGER DEFAULT 0);
+CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY,product_id INTEGER,product_name TEXT,quantity INTEGER,customer_name TEXT,whatsapp TEXT,location TEXT,total INTEGER,payment_status TEXT DEFAULT 'PENDING',order_status TEXT DEFAULT 'NEW',waychit_request_id TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,vendor_id INTEGER DEFAULT NULL,commission INTEGER DEFAULT 0,vendor_earnings INTEGER DEFAULT 0,stock_reserved INTEGER DEFAULT 0,stock_released INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS vendors(id INTEGER PRIMARY KEY AUTOINCREMENT,full_name TEXT,business_name TEXT,whatsapp TEXT,email TEXT DEFAULT '',email_verified INTEGER DEFAULT 0,verification_code TEXT,verification_expires TEXT,location TEXT,category TEXT,description TEXT,password_hash TEXT,status TEXT DEFAULT 'PENDING',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS vendor_products(id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER,vendor_id INTEGER,status TEXT DEFAULT 'PENDING',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS customer_accounts(id INTEGER PRIMARY KEY AUTOINCREMENT,full_name TEXT,whatsapp TEXT UNIQUE,password_hash TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -120,7 +121,7 @@ function restoreShopBackupIfEmpty(){
     if(!data?.tables?.products)return false;
     const schemas={
       products:["id","name","category","price","stock","description","image","active","created_at","images","vendor_id","options_json"],
-      orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings","customer_lat","customer_lng","customer_accuracy"],
+      orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings","stock_reserved","stock_released","customer_lat","customer_lng","customer_accuracy"],
       vendors:["id","full_name","business_name","whatsapp","email","email_verified","verification_code","verification_expires","location","category","description","password_hash","status","created_at"],
       vendor_products:["id","product_id","vendor_id","status","created_at"],
       customer_accounts:["id","full_name","whatsapp","password_hash","status","created_at"],
@@ -157,6 +158,8 @@ try{db.exec("ALTER TABLE customer_accounts ADD COLUMN status TEXT DEFAULT 'ACTIV
 try{db.exec("ALTER TABLE orders ADD COLUMN vendor_id INTEGER DEFAULT NULL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN commission INTEGER DEFAULT 0")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN vendor_earnings INTEGER DEFAULT 0")}catch(e){}
+try{db.exec("ALTER TABLE orders ADD COLUMN stock_reserved INTEGER DEFAULT 0")}catch(e){}
+try{db.exec("ALTER TABLE orders ADD COLUMN stock_released INTEGER DEFAULT 0")}catch(e){}
 // Restore from the local backup before serving traffic.
 // This version intentionally has no GitHub/cloud-backup dependency.
 restoreShopBackupIfEmpty();
@@ -253,7 +256,14 @@ app.get("/api/stores/:id",(req,res)=>{
   res.json({...v,products});
 });
 
-app.get("/api/products",(req,res)=>{let p=db.prepare("SELECT * FROM products WHERE active=1 ORDER BY id DESC").all(),c=req.query.category||"All",q=(req.query.q||"").toLowerCase();if(c!=="All")p=p.filter(x=>x.category===c);if(q)p=p.filter(x=>(x.name+" "+x.category+" "+x.description).toLowerCase().includes(q));res.json(p)});
+app.get("/api/products",(req,res)=>{
+  const c=String(req.query.category||"All"),q=String(req.query.q||"").trim().toLowerCase();
+  let p=db.prepare("SELECT id,name,category,price,stock,description,image,active,vendor_id FROM products WHERE active=1 ORDER BY id DESC").all();
+  if(c!=="All")p=p.filter(x=>x.category===c);
+  if(q)p=p.filter(x=>(x.name+" "+x.category+" "+(x.description||"")).toLowerCase().includes(q));
+  res.set("Cache-Control",q?"private,max-age=5":"public,max-age=5,stale-while-revalidate=20");
+  res.json(p);
+});
 app.get("/api/products/:id",(req,res)=>{let p=db.prepare("SELECT * FROM products WHERE id=? AND active=1").get(req.params.id);p?res.json(p):res.status(404).json({error:"Product not found"})});
 app.post("/api/admin/login",(req,res)=>{
   if(req.body.email===process.env.ADMIN_EMAIL&&req.body.password===process.env.ADMIN_PASSWORD){
@@ -268,7 +278,7 @@ app.post("/api/admin/products",guard,upload.array("images",8),(req,res)=>{let b=
 let x=db.prepare("INSERT INTO products(name,category,price,stock,description,image,images,vendor_id,options_json) VALUES(?,?,?,?,?,?,?,?,?)").run(b.name,b.category,+b.price,+b.stock||0,b.description||"",img,imgs,b.vendorId?+b.vendorId:null,productOptionsFromBody(b));let created=db.prepare("SELECT * FROM products WHERE id=?").get(x.lastInsertRowid);backupCatalog();broadcastLive("catalog",{productId:created.id});res.json(created)});
 app.put("/api/admin/products/:id",guard,upload.array("images",8),(req,res)=>{let p=db.prepare("SELECT * FROM products WHERE id=?").get(req.params.id);if(!p)return res.status(404).json({error:"Product not found"});let b=req.body,files=req.files||[],fileImgs=files.map(f=>"/uploads/"+f.filename),img=fileImgs[0]||b.imageUrl||p.image,oldImgs=p.images||"[]",imgs=fileImgs.length?JSON.stringify(fileImgs):(b.images?JSON.stringify(String(b.images).split(",").map(x=>x.trim()).filter(Boolean)):oldImgs);db.prepare("UPDATE products SET name=?,category=?,price=?,stock=?,description=?,image=?,images=?,vendor_id=?,options_json=? WHERE id=?").run(b.name,b.category,+b.price,+b.stock,b.description||"",img,imgs,b.vendorId?+b.vendorId:p.vendor_id||null,productOptionsFromBody(b)||p.options_json||"{}",p.id);let updated=db.prepare("SELECT * FROM products WHERE id=?").get(p.id);backupCatalog();broadcastLive("catalog",{productId:p.id});res.json(updated)});
 app.delete("/api/admin/products/:id",guard,(req,res)=>{db.prepare("UPDATE products SET active=0 WHERE id=?").run(req.params.id);backupCatalog();broadcastLive("catalog",{productId:Number(req.params.id)});res.json({ok:true})});
-app.get("/api/admin/orders",guard,(req,res)=>res.json(db.prepare("SELECT * FROM orders ORDER BY datetime(created_at) DESC").all()));
+app.get("/api/admin/orders",guard,(req,res)=>res.json(db.prepare(`SELECT o.*,v.business_name AS vendor_business_name,v.whatsapp AS vendor_whatsapp FROM orders o LEFT JOIN vendors v ON v.id=o.vendor_id ORDER BY datetime(o.created_at) DESC`).all()));
 app.get("/api/admin/backup",guard,(req,res)=>{
   try{
     const data=buildFullBackupSnapshot("manual-download");
@@ -314,11 +324,11 @@ app.post("/api/admin/restore",guard,(req,res)=>{
     const tx=db.transaction(()=>{
       db.pragma("foreign_keys = OFF");
       for(const table of tables)db.prepare(`DELETE FROM ${table}`).run();
-      const productCols=["id","name","category","price","stock","description","image","active","created_at","images","vendor_id"];
+      const productCols=["id","name","category","price","stock","description","image","active","created_at","images","vendor_id","options_json"];
       const productIns=db.prepare(`INSERT INTO products (${productCols.join(",")}) VALUES (${productCols.map(()=>"?").join(",")})`);
       for(const x of (data.tables.products||[]))productIns.run(...productCols.map(k=>x[k]??null));
       const schemas={
-        orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings","customer_lat","customer_lng","customer_accuracy"],
+        orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings","stock_reserved","stock_released","customer_lat","customer_lng","customer_accuracy"],
         vendors:["id","full_name","business_name","whatsapp","email","email_verified","verification_code","verification_expires","location","category","description","password_hash","status","created_at"],
         vendor_products:["id","product_id","vendor_id","status","created_at"],
         customer_accounts:["id","full_name","whatsapp","password_hash","status","created_at"],
@@ -389,7 +399,7 @@ app.post("/api/orders",async(req,res)=>{
   let p=db.prepare("SELECT * FROM products WHERE id=? AND active=1").get(req.body.productId);
   let q=Math.max(1,+req.body.quantity||1);
   if(!p)return res.status(404).json({error:"Product unavailable"});
-  if(q>p.stock)return res.status(400).json({error:"Not enough stock"});
+  if(q>p.stock)return res.status(400).json({error:`Only ${p.stock} item${p.stock===1?"":"s"} available.`});
   let rawPhone=String(req.body.whatsapp||"").replace(/\D/g,"").replace(/^220/,"");
   if(rawPhone.length<6)return res.status(400).json({error:"Enter a valid WhatsApp number"});
   let id="BOS-"+crypto.randomBytes(4).toString("hex").toUpperCase();
@@ -402,9 +412,15 @@ app.post("/api/orders",async(req,res)=>{
   const customerLat=Number.isFinite(Number(req.body.customerLat))?Number(req.body.customerLat):null;
   const customerLng=Number.isFinite(Number(req.body.customerLng))?Number(req.body.customerLng):null;
   const customerAccuracy=Number.isFinite(Number(req.body.customerAccuracy))?Number(req.body.customerAccuracy):null;
-  db.prepare("INSERT INTO orders(id,product_id,product_name,quantity,customer_name,whatsapp,location,total,vendor_id,commission,vendor_earnings,customer_lat,customer_lng,customer_accuracy) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-    .run(id,p.id,orderProductName,q,String(req.body.name||"").trim(),phone,String(req.body.location||""),total,vendorId,commission,vendorEarnings,customerLat,customerLng,customerAccuracy);
+  const reserveTx=db.transaction(()=>{
+    const changed=db.prepare("UPDATE products SET stock=stock-? WHERE id=? AND active=1 AND stock>=?").run(q,p.id,q);
+    if(!changed.changes)throw new Error("Not enough stock");
+    db.prepare("INSERT INTO orders(id,product_id,product_name,quantity,customer_name,whatsapp,location,total,vendor_id,commission,vendor_earnings,stock_reserved,stock_released,customer_lat,customer_lng,customer_accuracy) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+      .run(id,p.id,orderProductName,q,String(req.body.name||"").trim(),phone,String(req.body.location||""),total,vendorId,commission,vendorEarnings,q,0,customerLat,customerLng,customerAccuracy);
+  });
+  try{reserveTx()}catch(e){return res.status(400).json({error:"Not enough stock. Please refresh and try again."})}
   backupShopData("order-created");
+  broadcastLive("catalog",{productId:p.id,stockChanged:true});
   broadcastLive("orders",{orderId:id});
 
   let paymentUrl="";
@@ -459,12 +475,44 @@ app.get("/api/order/:id/tracking",(req,res)=>{
     FROM deliveries d LEFT JOIN delivery_drivers dr ON dr.id=d.driver_id
     WHERE d.order_id=?
   `).get(req.params.id);
-  res.json({order:o,delivery:d||null});
+  res.set("Cache-Control","no-store");
+  res.json({order:o,delivery:d||null,trackingActive:String(d?.status||o.order_status)!=="DELIVERED"});
 });
 app.post("/api/admin/orders/:id/payment",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});if(o.payment_status==='REFUNDED'||o.payment_status==='CANCELLED')return res.status(400).json({error:'This payment is already closed.'});db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE id=?").run(req.params.id);backupShopData("payment-confirmed");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true})});
-app.post("/api/admin/orders/:id/cancel-payment",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});if(o.payment_status==='PAID')return res.status(400).json({error:'A paid order cannot be cancelled. Use Refund instead.'});db.prepare("UPDATE orders SET payment_status='CANCELLED',order_status='CANCELLED' WHERE id=?").run(req.params.id);backupShopData("payment-cancelled");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true})});
-app.post("/api/admin/orders/:id/refund",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});if(o.payment_status!=='PAID')return res.status(400).json({error:'Only paid orders can be marked refunded.'});db.prepare("UPDATE orders SET payment_status='REFUNDED',order_status='REFUNDED' WHERE id=?").run(req.params.id);backupShopData("refund");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true,notice:'Order marked refunded. Complete the actual money reversal in Waychit if required.'})});
-app.post("/api/admin/orders/:id/reopen",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});db.prepare("UPDATE orders SET payment_status='PENDING',order_status='NEW' WHERE id=?").run(req.params.id);backupShopData("order-reopen");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true})});
+app.post("/api/admin/orders/:id/cancel-payment",guard,(req,res)=>{
+  const o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);
+  if(!o)return res.status(404).json({error:"Order not found"});
+  if(o.payment_status==='PAID')return res.status(400).json({error:"A paid order cannot be cancelled. Use Refund instead."});
+  const tx=db.transaction(()=>{
+    if(Number(o.stock_reserved)>0&&!Number(o.stock_released)){db.prepare("UPDATE products SET stock=stock+? WHERE id=?").run(o.stock_reserved,o.product_id);}
+    db.prepare("UPDATE orders SET payment_status='CANCELLED',order_status='CANCELLED',stock_released=CASE WHEN stock_reserved>0 THEN 1 ELSE stock_released END WHERE id=?").run(req.params.id);
+  });
+  tx();backupShopData("payment-cancelled");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true});
+});
+app.post("/api/admin/orders/:id/refund",guard,(req,res)=>{
+  const o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);
+  if(!o)return res.status(404).json({error:"Order not found"});
+  if(o.payment_status!=='PAID')return res.status(400).json({error:"Only paid orders can be marked refunded."});
+  const tx=db.transaction(()=>{
+    if(Number(o.stock_reserved)>0&&!Number(o.stock_released)){db.prepare("UPDATE products SET stock=stock+? WHERE id=?").run(o.stock_reserved,o.product_id);}
+    db.prepare("UPDATE orders SET payment_status='REFUNDED',order_status='REFUNDED',stock_released=CASE WHEN stock_reserved>0 THEN 1 ELSE stock_released END WHERE id=?").run(req.params.id);
+  });
+  tx();backupShopData("refund");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true,notice:"Order marked refunded. Stock was returned to the product. Complete the actual money reversal in Waychit if required."});
+});
+app.post("/api/admin/orders/:id/reopen",guard,(req,res)=>{
+  const o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);
+  if(!o)return res.status(404).json({error:"Order not found"});
+  try{
+    const tx=db.transaction(()=>{
+      if(Number(o.stock_reserved)>0&&Number(o.stock_released)){
+        const changed=db.prepare("UPDATE products SET stock=stock-? WHERE id=? AND active=1 AND stock>=?").run(o.stock_reserved,o.product_id,o.stock_reserved);
+        if(!changed.changes)throw new Error("Not enough stock to reopen this order.");
+      }
+      db.prepare("UPDATE orders SET payment_status='PENDING',order_status='NEW',stock_released=0 WHERE id=?").run(req.params.id);
+    });
+    tx();backupShopData("order-reopen");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true});
+  }catch(e){res.status(400).json({error:e.message||"Could not reopen order."})}
+});
 function ensureDeliveryForReadyOrder(orderId){
   const o=db.prepare("SELECT id,payment_status,order_status FROM orders WHERE id=?").get(orderId);
   if(!o || o.payment_status!=="PAID" || o.order_status!=="READY") return false;
@@ -478,8 +526,14 @@ app.patch("/api/admin/orders/:id/status",guard,(req,res)=>{
   const o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);
   if(!o)return res.status(404).json({error:'Order not found'});
   if(status==='READY' && o.payment_status!=='PAID')return res.status(400).json({error:'Only PAID orders can be marked READY for delivery.'});
-  db.prepare("UPDATE orders SET order_status=? WHERE id=?").run(status,req.params.id);
-  if(status==='READY')ensureDeliveryForReadyOrder(req.params.id);
+  const statusTx=db.transaction(()=>{
+    if((status==='CANCELLED'||status==='REFUNDED')&&Number(o.stock_reserved)>0&&!Number(o.stock_released)){
+      db.prepare("UPDATE products SET stock=stock+? WHERE id=?").run(o.stock_reserved,o.product_id);
+      db.prepare("UPDATE orders SET order_status=?,stock_released=1 WHERE id=?").run(status,req.params.id);
+    }else{db.prepare("UPDATE orders SET order_status=? WHERE id=?").run(status,req.params.id)}
+    if(status==='READY')ensureDeliveryForReadyOrder(req.params.id);
+  });
+  statusTx();
   backupShopData("order-status");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true,deliveryCreated:status==='READY'});
 });
 app.get("/api/payment-config",(req,res)=>res.json({configured:!!process.env.WAYCHIT_API_KEY,publicBaseUrl:PUBLIC_BASE_URL,staticFallback:true,returnUrl:PUBLIC_BASE_URL+"/payment-return",automaticReturnSupported:!!process.env.WAYCHIT_API_KEY}));

@@ -100,3 +100,5 @@ main{display:block;margin-left:232px;width:calc(100% - 232px);max-width:none;pad
   #dashboard .stats>div b{font-size:18px}
   .card{padding:13px}
 }
+
+.order-vendor{display:flex;align-items:center;gap:10px;margin:10px 0;padding:10px 12px;border:1px solid #e2e8f2;border-radius:12px;background:#f7f9fc}.order-vendor b{display:block}.order-vendor small{display:block;color:#738097;margin-top:3px}.vendor-order-icon{width:30px;height:30px;border-radius:9px;background:#eaf1ff;color:#1748a8;display:grid;place-items:center;font-weight:900}
