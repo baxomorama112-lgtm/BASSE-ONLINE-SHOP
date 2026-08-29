@@ -14,8 +14,8 @@ app.get("/api/health",(req,res)=>{
   const productCount=Number(db.prepare("SELECT COUNT(*) c FROM products").get().c);
   res.json({ok:true,productCount,dataDir:DATA_DIR,persistentDataDir:DATA_DIR});
 });
-app.use("/admin",express.static(path.join(ROOT,"../admin"),{maxAge:"1h"}));app.use("/vendor",express.static(path.join(ROOT,"../vendor"),{maxAge:"1h"}));app.use("/driver",express.static(path.join(ROOT,"../driver"),{maxAge:"1h"}));
-app.use("/",express.static(path.join(ROOT,"../marketplace"),{maxAge:"1h"}));
+app.use("/admin",express.static(path.join(ROOT,"../admin"),{maxAge:0}));app.use("/vendor",express.static(path.join(ROOT,"../vendor"),{maxAge:0}));app.use("/driver",express.static(path.join(ROOT,"../driver"),{maxAge:0}));
+app.use("/",express.static(path.join(ROOT,"../marketplace"),{maxAge:0}));
 const DB_PATH=path.join(DATA_DIR,"basse-shop.db"),BACKUP_PATH=path.join(DATA_DIR,"catalog-backup.json"),PREV_BACKUP_PATH=path.join(DATA_DIR,"catalog-backup.previous.json");
 const db=new Database(DB_PATH);db.pragma("journal_mode=WAL");db.pragma("synchronous=FULL");db.pragma("busy_timeout=5000");
 db.exec(`CREATE TABLE IF NOT EXISTS products(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT,category TEXT,price INTEGER,stock INTEGER,description TEXT,image TEXT,active INTEGER DEFAULT 1,created_at TEXT DEFAULT CURRENT_TIMESTAMP,options_json TEXT DEFAULT '{}');
@@ -470,6 +470,14 @@ app.get("/api/order/:id",(req,res)=>{let o=db.prepare("SELECT * FROM orders WHER
 // obvious provider/network GPS errors such as a 2,000+ km jump into another country.
 const GAMBIA_GPS={minLat:12.90,maxLat:13.90,minLng:-17.20,maxLng:-13.40};
 function validGambiaGps(lat,lng){return Number.isFinite(lat)&&Number.isFinite(lng)&&lat>=GAMBIA_GPS.minLat&&lat<=GAMBIA_GPS.maxLat&&lng>=GAMBIA_GPS.minLng&&lng<=GAMBIA_GPS.maxLng;}
+function gpsDistanceKm(a,b,c,d){const R=6371,rad=x=>x*Math.PI/180,p1=rad(a),p2=rad(c),dp=rad(c-a),dl=rad(d-b),h=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;return R*2*Math.atan2(Math.sqrt(h),Math.sqrt(1-h));}
+// Remove obviously stale coordinates left by older tracking versions. This does not
+// touch written delivery addresses, products, vendors, orders or payments.
+try{
+  db.prepare(`UPDATE orders SET customer_lat=NULL,customer_lng=NULL,customer_accuracy=NULL WHERE (customer_lat IS NOT NULL OR customer_lng IS NOT NULL) AND (customer_lat<? OR customer_lat>? OR customer_lng<? OR customer_lng>?)`).run(GAMBIA_GPS.minLat,GAMBIA_GPS.maxLat,GAMBIA_GPS.minLng,GAMBIA_GPS.maxLng);
+  const bad=db.prepare(`SELECT d.id,d.lat,d.lng,o.customer_lat,o.customer_lng FROM deliveries d JOIN orders o ON o.id=d.order_id WHERE d.lat IS NOT NULL AND d.lng IS NOT NULL AND o.customer_lat IS NOT NULL AND o.customer_lng IS NOT NULL`).all();
+  const clear=db.transaction(()=>{for(const x of bad){if(gpsDistanceKm(Number(x.lat),Number(x.lng),Number(x.customer_lat),Number(x.customer_lng))>500)db.prepare('UPDATE deliveries SET lat=NULL,lng=NULL,accuracy=NULL,last_seen=NULL WHERE id=?').run(x.id);}}); clear();
+}catch(e){console.warn('GPS stale-coordinate cleanup skipped:',e.message)}
 
 app.get("/api/order/:id/tracking",(req,res)=>{
   const rawId=String(req.params.id||"").trim().toUpperCase().replace(/\s+/g,"");
@@ -620,6 +628,7 @@ app.post("/api/order/:id/customer-location",(req,res)=>{
   if(normalizePhone(req.body.phone)!==normalizePhone(o.whatsapp))return res.status(403).json({error:"The WhatsApp number does not match this order."});
   const lat=Number(req.body.lat),lng=Number(req.body.lng),accuracy=Number(req.body.accuracy||0);
   if(!validGambiaGps(lat,lng))return res.status(422).json({error:"GPS location appears to be outside The Gambia. Enable Precise Location and try again."});
+  if(accuracy>1500)return res.status(422).json({error:`GPS accuracy is too low (±${Math.round(accuracy)}m). Turn on Precise Location, move outdoors for a few seconds, and try again.`});
   db.prepare("UPDATE orders SET customer_lat=?,customer_lng=?,customer_accuracy=? WHERE id=?").run(lat,lng,accuracy,o.id);
   backupShopData("customer-gps-updated");
   broadcastLive("orders",{orderId:o.id,customerLocation:true});
@@ -632,6 +641,7 @@ app.post("/api/driver/deliveries/:id/location",driverGuard,(req,res)=>{
   const lat=Number(req.body.lat),lng=Number(req.body.lng),accuracy=Number(req.body.accuracy||0);
   if(!Number.isFinite(lat)||!Number.isFinite(lng)||lat<-90||lat>90||lng<-180||lng>180)return res.status(400).json({error:"Invalid GPS coordinates."});
   if(!validGambiaGps(lat,lng))return res.status(422).json({error:"GPS location appears to be outside The Gambia. Enable Precise Location and try again."});
+  if(accuracy>1500)return res.status(422).json({error:`GPS accuracy is too low (±${Math.round(accuracy)}m). Turn on Precise Location and try again.`});
   db.prepare("UPDATE deliveries SET lat=?,lng=?,accuracy=?,last_seen=? WHERE id=?").run(lat,lng,accuracy,new Date().toISOString(),d.id);
   const now=Date.now(), last=lastLocationBroadcast.get(String(d.order_id))||0;
   if(now-last>=2000){lastLocationBroadcast.set(String(d.order_id),now);broadcastLive("orders",{orderId:d.order_id,location:true});}

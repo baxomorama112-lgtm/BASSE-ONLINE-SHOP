@@ -222,16 +222,19 @@ function captureTrackingLocation(){
   if(!navigator.geolocation){toast("This phone/browser does not support GPS.");return}
   const btn=document.querySelector('.live-location-btn');
   if(btn){btn.disabled=true;btn.dataset.originalText=btn.innerHTML;btn.innerHTML=" GETTING YOUR LOCATION…"}
-  navigator.geolocation.getCurrentPosition(async p=>{
+  const readings=[];let watcher=null,done=false;const finish=async()=>{if(done)return;done=true;if(watcher!==null)navigator.geolocation.clearWatch(watcher);const best=readings.sort((a,b)=>a.accuracy-b.accuracy)[0];if(!best)throw Error("Could not get a GPS reading. Please enable Precise Location and try again.");
     try{
-      const r=await fetch(`/api/order/${encodeURIComponent(trackingOrderId)}/customer-location`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:trackingPhone,lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy})});
+      const r=await fetch(`/api/order/${encodeURIComponent(trackingOrderId)}/customer-location`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:trackingPhone,lat:best.lat,lng:best.lng,accuracy:best.accuracy})});
       const d=await r.json().catch(()=>({}));
       if(!r.ok)throw Error(d.error||"Could not save your location.");
       toast("Your live location was updated.");
       await refreshTracking(trackingOrderId,false);
     }catch(e){toast(e.message||"Could not update your location.");}
-    finally{if(btn){btn.disabled=false;btn.innerHTML=btn.dataset.originalText||' VIEW LIVE DRIVER LOCATION'}}
-  },()=>{if(btn){btn.disabled=false;btn.innerHTML=btn.dataset.originalText||' VIEW LIVE DRIVER LOCATION'}toast("Location permission was not granted. Enable Precise Location and try again.")},{enableHighAccuracy:true,maximumAge:5000,timeout:15000});
+    finally{if(btn){btn.disabled=false;btn.innerHTML=btn.dataset.originalText||' UPDATE MY LOCATION'}}
+  };
+  const onPos=p=>{const a=Number(p.coords.accuracy||999999);if(Number.isFinite(a)&&a<5000)readings.push({lat:p.coords.latitude,lng:p.coords.longitude,accuracy:a});if(readings.length>=3||a<=80)finish()};
+  watcher=navigator.geolocation.watchPosition(onPos,()=>{if(!readings.length){if(btn){btn.disabled=false;btn.innerHTML=btn.dataset.originalText||' VIEW LIVE DRIVER LOCATION'}toast("Location permission/GPS unavailable. Enable Precise Location and try again.")}}, {enableHighAccuracy:true,maximumAge:0,timeout:20000});
+  setTimeout(finish,6000);
 }
 async function openOrderTracking(id,phone=""){
   stopTrackingPolling();
@@ -287,8 +290,8 @@ async function refreshTracking(id,initial){
 }
 function mapTiles(map){
   const providers=[
-    ["https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",'© OpenStreetMap contributors'],
-    ["https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",'© OpenStreetMap contributors © CARTO']
+    ["https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",'© OpenStreetMap contributors © CARTO'],
+    ["https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",'© OpenStreetMap contributors']
   ];
   let layer=L.tileLayer(providers[0][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[0][1]}).addTo(map);
   let switched=false;

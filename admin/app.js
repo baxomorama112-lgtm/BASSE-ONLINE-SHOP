@@ -89,8 +89,8 @@ function initAdminFallbackMap(dlat,dlng,clat,clng){const el=$("adminLiveMap");if
 function updateAdminFallbackMap(dlat,dlng){const f=adminFallbackMaps.current;if(!f)return;const cp=adminMercator(f.clat,f.clng,f.z),ox=f.el.clientWidth/2-cp.x,oy=f.el.clientHeight/2-cp.y;const cx=cp.x+ox,cy=cp.y+oy;f.cust.style.left=(cx-45)+"px";f.cust.style.top=(cy-16)+"px";if(Number.isFinite(dlat)&&Number.isFinite(dlng)){const dp=adminMercator(dlat,dlng,f.z),dx=dp.x+ox,dy=dp.y+oy;f.drv.style.left=(dx-40)+"px";f.drv.style.top=(dy-16)+"px";const dist=Math.hypot(dx-cx,dy-cy);f.line.style.left=cx+"px";f.line.style.top=cy+"px";f.line.style.width=dist+"px";f.line.style.transform="rotate("+Math.atan2(dy-cy,dx-cx)+"rad)"}}
 function liveMapTiles(map){
   const providers=[
-    ["https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png","© OpenStreetMap contributors"],
-    ["https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png","© OpenStreetMap contributors © CARTO"]
+    ["https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png","© OpenStreetMap contributors © CARTO"],
+    ["https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png","© OpenStreetMap contributors"]
   ];
   let layer=L.tileLayer(providers[0][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[0][1]}).addTo(map);
   let switched=false;
