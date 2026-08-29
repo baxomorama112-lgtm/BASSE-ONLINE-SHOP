@@ -88,13 +88,14 @@ function adminFallbackTile(x,y,z){const n=Math.pow(2,z);return `https://tile.ope
 function initAdminFallbackMap(dlat,dlng,clat,clng){const el=$("adminLiveMap");if(!el)return;el.innerHTML="";el.classList.add("admin-fallback-map");const wrap=document.createElement("div");wrap.className="admin-fallback-inner";el.appendChild(wrap);const z=15,c=adminMercator(clat,clng,z),tx=Math.floor(c.x/256),ty=Math.floor(c.y/256);for(let yy=-1;yy<=1;yy++)for(let xx=-1;xx<=1;xx++){const img=document.createElement("img");img.src=adminFallbackTile(tx+xx,ty+yy,z);img.className="admin-fallback-tile";img.style.left=((tx+xx)*256-c.x+el.clientWidth/2)+"px";img.style.top=((ty+yy)*256-c.y+el.clientHeight/2)+"px";wrap.appendChild(img)}const cust=document.createElement("div");cust.className="admin-fallback-marker admin-fallback-customer";cust.textContent=" Customer";wrap.appendChild(cust);const drv=document.createElement("div");drv.className="admin-fallback-marker admin-fallback-driver";drv.textContent=" Driver";wrap.appendChild(drv);const line=document.createElement("div");line.className="admin-fallback-line";wrap.appendChild(line);adminFallbackMaps.current={el,wrap,z,clat,clng,cust,drv,line};updateAdminFallbackMap(dlat,dlng)}
 function updateAdminFallbackMap(dlat,dlng){const f=adminFallbackMaps.current;if(!f)return;const cp=adminMercator(f.clat,f.clng,f.z),ox=f.el.clientWidth/2-cp.x,oy=f.el.clientHeight/2-cp.y;const cx=cp.x+ox,cy=cp.y+oy;f.cust.style.left=(cx-45)+"px";f.cust.style.top=(cy-16)+"px";if(Number.isFinite(dlat)&&Number.isFinite(dlng)){const dp=adminMercator(dlat,dlng,f.z),dx=dp.x+ox,dy=dp.y+oy;f.drv.style.left=(dx-40)+"px";f.drv.style.top=(dy-16)+"px";const dist=Math.hypot(dx-cx,dy-cy);f.line.style.left=cx+"px";f.line.style.top=cy+"px";f.line.style.width=dist+"px";f.line.style.transform="rotate("+Math.atan2(dy-cy,dx-cx)+"rad)"}}
 function liveMapTiles(map){
+  if(window.L?.maplibreGL&&window.maplibregl){try{return L.maplibreGL({style:"https://tiles.openfreemap.org/styles/liberty"}).addTo(map)}catch(e){}}
   const providers=[
     ["https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png","© OpenStreetMap contributors © CARTO"],
-    ["https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png","© OpenStreetMap contributors"]
+    ["https://tile.openstreetmap.org/{z}/{x}/{y}.png","© OpenStreetMap contributors"]
   ];
   let layer=L.tileLayer(providers[0][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[0][1]}).addTo(map);
-  let switched=false;
-  layer.on("tileerror",()=>{if(switched)return;switched=true;try{map.removeLayer(layer)}catch{};layer=L.tileLayer(providers[1][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[1][1]}).addTo(map)});
+  let switched=false;layer.on("tileerror",()=>{if(switched)return;switched=true;try{map.removeLayer(layer)}catch{};layer=L.tileLayer(providers[1][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[1][1]}).addTo(map)});
+  return layer;
 }
 function stopLiveDelivery(){
   if(liveDeliveryStream){try{liveDeliveryStream.close()}catch{}liveDeliveryStream=null}

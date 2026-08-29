@@ -10,12 +10,17 @@ const $=id=>document.getElementById(id),money=n=>"D"+Number(n||0).toLocaleString
 let checkoutGps={lat:null,lng:null,accuracy:null},selectedChoices=[],trackingMap=null,trackingPoll=null,trackingStream=null,trackingPhone="",trackingOrderId="",trackingRefreshing=false,trackingLastEvent=0;
 let leafletPromise=null;
 function ensureLeaflet(){
-  if(window.L)return Promise.resolve(window.L);
+  if(window.L&&window.L.maplibreGL)return Promise.resolve(window.L);
   if(leafletPromise)return leafletPromise;
   leafletPromise=new Promise(resolve=>{
     if(!document.querySelector('link[data-basse-leaflet]')){const css=document.createElement("link");css.rel="stylesheet";css.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";css.dataset.basseLeaflet="1";document.head.appendChild(css)}
-    const load=(src,next)=>{const sc=document.createElement("script");sc.src=src;sc.onload=()=>resolve(window.L);sc.onerror=next;document.head.appendChild(sc)};
-    load("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",()=>load("https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js",()=>resolve(null)));
+    if(!document.querySelector('link[data-basse-maplibre]')){const css=document.createElement("link");css.rel="stylesheet";css.href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css";css.dataset.basseMaplibre="1";document.head.appendChild(css)}
+    const load=(src,ok,fail)=>{const sc=document.createElement("script");sc.src=src;sc.onload=ok;sc.onerror=fail;document.head.appendChild(sc)};
+    const finish=()=>resolve(window.L||null);
+    const loadPlugin=()=>load("https://unpkg.com/@maplibre/maplibre-gl-leaflet/leaflet-maplibre-gl.js",finish,finish);
+    const loadMapLibre=()=>load("https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js",loadPlugin,finish);
+    const loadLeaflet=()=>load("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",loadMapLibre,()=>load("https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js",loadMapLibre,finish));
+    if(window.L){if(window.maplibregl)loadPlugin();else loadMapLibre()}else loadLeaflet();
   });
   return leafletPromise;
 }
@@ -204,7 +209,6 @@ async function submitGuestTracking(){
     clearTimeout(timeout);
     const d=await r.json().catch(()=>({}));
     if(!r.ok)throw Error(d.error||"Order not found. Check the order number and WhatsApp number.");
-    closeModal();
     await openOrderTracking(d.order?.id||id,phone);
   }catch(e){
     toast(e.name==="AbortError"?"The server took too long to respond. Please try again.":(e.message||"Could not find this order."));
@@ -275,32 +279,53 @@ async function refreshTracking(id,initial){
     const hasDriver=Number.isFinite(Number(d.delivery?.lat))&&Number.isFinite(Number(d.delivery?.lng));
     if(initial){
       const map=`<div class="live-map-wrap"><div id="customerMap" class="customer-map"><div class="map-placeholder"><br><b>Live delivery map</b><small>Loading map…</small></div></div></div>`;
-      $("trackingBody").innerHTML=`<div class="tracking-card"><div class="track-top"><b>#${esc(d.order.id)}</b><span id="trackingStatus" class="badge"></span></div><h3 id="trackingProduct"></h3><p id="trackingLocation"></p>${map}<div class="tracking-location-actions"><button type="button" class="live-location-btn" onclick="captureTrackingLocation()"><span aria-hidden="true">⌖</span> UPDATE MY LOCATION</button><button type="button" class="live-location-refresh" onclick="refreshTracking(trackingOrderId,false)"><span aria-hidden="true">◉</span> VIEW LIVE DRIVER LOCATION</button></div><div class="timeline" id="trackingTimeline"></div><p class="muted" id="trackingNote"></p></div>`;
+      $("trackingBody").innerHTML=`<div class="tracking-card"><div class="track-top"><b>#${esc(d.order.id)}</b><span id="trackingStatus" class="badge"></span></div><h3 id="trackingProduct"></h3><p id="trackingLocation"></p>${map}<div class="tracking-location-actions"><button type="button" class="live-location-btn" onclick="captureTrackingLocation()"><span aria-hidden="true">⌖</span> UPDATE MY LOCATION</button><button type="button" class="live-location-refresh" onclick="showLiveDriverLocation()"><span aria-hidden="true">◉</span> VIEW LIVE DRIVER LOCATION</button></div><div class="timeline" id="trackingTimeline"></div><p class="muted" id="trackingNote"></p></div>`;
     }
     const statusEl=$("trackingStatus"),productEl=$("trackingProduct"),locationEl=$("trackingLocation"),timelineEl=$("trackingTimeline"),noteEl=$("trackingNote");
     if(!statusEl||!productEl||!locationEl||!timelineEl||!noteEl)return;
     statusEl.textContent=status.replaceAll("_"," ");productEl.textContent=`${d.order.product_name} × ${d.order.quantity}`;locationEl.textContent=(d.order.location||"Delivery location pending")+(hasCustomer?" ·  GPS location saved":"");
     timelineEl.innerHTML=steps.map((x,i)=>`<div class="timeline-step ${i<=idx?"done":""}"><span>${i<=idx?"":"•"}</span><b>${x.replaceAll("_"," ")}</b></div>`).join("");
     const distance=hasCustomer&&hasDriver?trackingDistanceKm(Number(d.delivery.lat),Number(d.delivery.lng),Number(d.order.customer_lat),Number(d.order.customer_lng)):null;
-    noteEl.innerHTML=hasDriver?`Driver: <b>${esc(d.delivery.driver_name||"Assigned driver")}</b> · ${distance!==null?`<b>${distance<1?Math.round(distance*1000)+" m":distance.toFixed(1)+" km"}</b> away · `:""}${d.delivery.last_seen?`last update ${new Date(d.delivery.last_seen).toLocaleTimeString()}`:"live"}`:(d.delivery?.driver_name?`Driver: <b>${esc(d.delivery.driver_name)}</b> · Waiting for GPS. Keep this screen open and tap the live-location button to refresh.`:"A driver will be assigned after your order is confirmed.");
+    const liveAge=d.delivery?.last_seen?(Date.now()-new Date(d.delivery.last_seen).getTime()):Infinity;
+    const liveText=Number.isFinite(liveAge)&&liveAge<45000?"LIVE GPS":d.delivery?.last_seen?`last update ${new Date(d.delivery.last_seen).toLocaleTimeString()}`:"waiting for GPS";
+    noteEl.innerHTML=hasDriver?`Driver: <b>${esc(d.delivery.driver_name||"Assigned driver")}</b> · ${distance!==null?`<b>${distance<1?Math.round(distance*1000)+" m":distance.toFixed(1)+" km"}</b> away · `:""}${esc(liveText)}`:(d.delivery?.driver_name?`Driver: <b>${esc(d.delivery.driver_name)}</b> · Waiting for GPS. Keep this screen open and tap the live-location button to refresh.`:"A driver will be assigned after your order is confirmed.");
     if(window.L)loadTrackingMap(d.order.customer_lat,d.order.customer_lng,d.delivery?.lat,d.delivery?.lng);
     if(status==="DELIVERED")stopTrackingPolling();
   }catch(e){if(initial)$("trackingBody").innerHTML=`<div class="empty-search"><div></div><h3>Order not found</h3><p>${esc(e.message||"Check your order number.")}</p></div>`}
   finally{trackingRefreshing=false}
 }
 function mapTiles(map){
+  const style="https://tiles.openfreemap.org/styles/liberty";
+  if(window.L?.maplibreGL&&window.maplibregl){
+    try{return L.maplibreGL({style}).addTo(map)}catch(e){}
+  }
   const providers=[
     ["https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",'© OpenStreetMap contributors © CARTO'],
-    ["https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",'© OpenStreetMap contributors']
+    ["https://tile.openstreetmap.org/{z}/{x}/{y}.png",'© OpenStreetMap contributors']
   ];
   let layer=L.tileLayer(providers[0][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[0][1]}).addTo(map);
-  let switched=false;
-  layer.on("tileerror",function(){
-    if(switched)return;
-    switched=true;try{map.removeLayer(layer)}catch(e){}
-    layer=L.tileLayer(providers[1][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[1][1]}).addTo(map);
-  });
+  let switched=false;layer.on("tileerror",()=>{if(switched)return;switched=true;try{map.removeLayer(layer)}catch{};layer=L.tileLayer(providers[1][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[1][1]}).addTo(map)});
   return layer;
+}
+function showLiveDriverLocation(){
+  if(!trackingOrderId)return toast("Enter your order number first.");
+  const btn=document.querySelector('.live-location-refresh');
+  if(btn){btn.disabled=true;btn.dataset.originalText=btn.innerHTML;btn.innerHTML=' CHECKING LIVE GPS…'}
+  refreshTracking(trackingOrderId,false).then(()=>{
+    const m=trackingMap;
+    if(m){
+      const points=[];
+      if(m.__driver)points.push(m.__driver.getLatLng());
+      if(m.__customer)points.push(m.__customer.getLatLng());
+      if(points.length>1)m.fitBounds(L.latLngBounds(points),{padding:[30,30],maxZoom:17});
+      else if(points.length===1)m.setView(points[0],16);
+      m.invalidateSize({pan:false});
+    }
+    const note=document.querySelector('#trackingNote');
+    const hasDriver=!!trackingMap?.__driver;
+    if(!hasDriver)toast('The driver has not shared a fresh GPS location yet. Keep tracking open and try again.');
+    else toast('Driver location refreshed.');
+  }).catch(()=>{}).finally(()=>{if(btn){btn.disabled=false;btn.innerHTML=btn.dataset.originalText||' VIEW LIVE DRIVER LOCATION'}});
 }
 function loadTrackingMap(customerLat,customerLng,driverLat,driverLng){
   const el=$("customerMap");if(!el)return;
@@ -343,7 +368,7 @@ function captureCheckoutLocation(){
   const state=$("checkoutGpsState");
   if(!navigator.geolocation){if(state)state.textContent="This phone/browser does not support GPS.";return}
   if(state)state.textContent="Getting your location…";
-  navigator.geolocation.getCurrentPosition(p=>{checkoutGps={lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy};if(state)state.textContent=` GPS location saved (±${Math.round(p.coords.accuracy||0)}m).`;},()=>{if(state)state.textContent="GPS permission was not granted. You can continue with the delivery area."},{enableHighAccuracy:true,maximumAge:10000,timeout:15000});
+  navigator.geolocation.getCurrentPosition(p=>{const lat=Number(p.coords.latitude),lng=Number(p.coords.longitude),accuracy=Number(p.coords.accuracy||0);const inGambia=lat>=12.90&&lat<=13.90&&lng>=-17.20&&lng<=-13.40;if(!inGambia){checkoutGps={lat:null,lng:null,accuracy:null};if(state)state.textContent="GPS reading looks outside The Gambia. Please enable Precise Location and try again.";return}checkoutGps={lat,lng,accuracy};if(state)state.textContent=` GPS location saved (±${Math.round(p.coords.accuracy||0)}m).`;},()=>{if(state)state.textContent="GPS permission was not granted. You can continue with the delivery area."},{enableHighAccuracy:true,maximumAge:10000,timeout:15000});
 }
 
 async function placeOrder(){

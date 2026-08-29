@@ -56,9 +56,10 @@ try{db.exec("ALTER TABLE orders ADD COLUMN customer_lng REAL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_accuracy REAL")}catch(e){}
 const BACKUP_TABLES=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys","delivery_drivers","deliveries"];
 function buildShopSnapshot(){
-  const data={version:3,createdAt:new Date().toISOString(),tables:{}};
+  const data={version:5,createdAt:new Date().toISOString(),tables:{}};
   for(const table of BACKUP_TABLES)data.tables[table]=db.prepare(`SELECT * FROM ${table}`).all();
-  data.meta={productCount:data.tables.products.length,orderCount:data.tables.orders.length,vendorCount:data.tables.vendors.length,driverCount:(data.tables.delivery_drivers||[]).length,deliveryCount:(data.tables.deliveries||[]).length,orderTotal:data.tables.orders.reduce((n,o)=>n+Number(o.total||0),0)};
+  data.productDetails=(data.tables.products||[]).map(p=>({id:p.id,name:p.name,description:p.description||"",options_json:p.options_json||"{}",images:p.images||"",image:p.image||"",stock:Number(p.stock||0),category:p.category||"",price:Number(p.price||0)}));
+  data.meta={productCount:data.tables.products.length,productDetailsCount:data.productDetails.length,productsWithOptions:data.productDetails.filter(p=>p.options_json&&p.options_json!=="{}").length,orderCount:data.tables.orders.length,vendorCount:data.tables.vendors.length,driverCount:(data.tables.delivery_drivers||[]).length,deliveryCount:(data.tables.deliveries||[]).length,orderTotal:data.tables.orders.reduce((n,o)=>n+Number(o.total||0),0)};
   return data;
 }
 function collectBackupFiles(){
@@ -282,8 +283,8 @@ app.get("/api/admin/orders",guard,(req,res)=>res.json(db.prepare(`SELECT o.*,v.b
 app.get("/api/admin/backup",guard,(req,res)=>{
   try{
     const data=buildFullBackupSnapshot("manual-download");
-    data.version=4;
-    data.backupNote="Includes shop database records AND uploaded files from server/data/uploads.";
+    data.version=5;
+    data.backupNote="Includes complete shop database records, product options/details, stock, vendor links and uploaded files from server/data/uploads.";
     res.set("Content-Disposition",`attachment; filename="basse-online-shop-full-backup-${new Date().toISOString().slice(0,10)}.json"`);
     res.type("application/json").send(JSON.stringify(data,null,2));
   }catch(e){res.status(500).json({error:"Could not create backup with images."})}
@@ -326,7 +327,8 @@ app.post("/api/admin/restore",guard,(req,res)=>{
       for(const table of tables)db.prepare(`DELETE FROM ${table}`).run();
       const productCols=["id","name","category","price","stock","description","image","active","created_at","images","vendor_id","options_json"];
       const productIns=db.prepare(`INSERT INTO products (${productCols.join(",")}) VALUES (${productCols.map(()=>"?").join(",")})`);
-      for(const x of (data.tables.products||[]))productIns.run(...productCols.map(k=>x[k]??null));
+      const productDetails=new Map((data.productDetails||[]).map(x=>[String(x.id),x]));
+      for(const x of (data.tables.products||[])){const detail=productDetails.get(String(x.id))||{};productIns.run(...productCols.map(k=>{if(x[k]!==undefined&&x[k]!==null)return x[k];if(k==="options_json")return detail.options_json||"{}";if(k==="images")return detail.images||"";return null}));}
       const schemas={
         orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings","stock_reserved","stock_released","customer_lat","customer_lng","customer_accuracy"],
         vendors:["id","full_name","business_name","whatsapp","email","email_verified","verification_code","verification_expires","location","category","description","password_hash","status","created_at"],
@@ -488,11 +490,18 @@ app.get("/api/order/:id/tracking",(req,res)=>{
   const orderPhone=normalizePhone(o.whatsapp);
   if(suppliedPhone && suppliedPhone!==orderPhone)return res.status(403).json({error:"The WhatsApp number does not match this order."});
   if(req.query.phone && !suppliedPhone)return res.status(403).json({error:"Enter the WhatsApp number used for this order."});
-  const d=db.prepare(`
+  let d=db.prepare(`
     SELECT d.*,dr.full_name AS driver_name,dr.whatsapp AS driver_whatsapp
     FROM deliveries d LEFT JOIN delivery_drivers dr ON dr.id=d.driver_id
     WHERE UPPER(REPLACE(d.order_id,' ',''))=?
   `).get(rawId);
+  if(d){
+    const lat=Number(d.lat),lng=Number(d.lng);
+    const sane=validGambiaGps(lat,lng);
+    const stale=d.last_seen?((Date.now()-new Date(d.last_seen).getTime())>10*60*1000):true;
+    const tooFar=o.customer_lat!=null&&o.customer_lng!=null&&sane&&gpsDistanceKm(lat,lng,Number(o.customer_lat),Number(o.customer_lng))>500;
+    if(!sane||tooFar||stale){d={...d,lat:null,lng:null,accuracy:null,last_seen:d.last_seen};}
+  }
   res.set("Cache-Control","no-store");
   res.json({order:o,delivery:d||null,trackingActive:String(d?.status||o.order_status)!=="DELIVERED"});
 });
@@ -642,6 +651,9 @@ app.post("/api/driver/deliveries/:id/location",driverGuard,(req,res)=>{
   if(!Number.isFinite(lat)||!Number.isFinite(lng)||lat<-90||lat>90||lng<-180||lng>180)return res.status(400).json({error:"Invalid GPS coordinates."});
   if(!validGambiaGps(lat,lng))return res.status(422).json({error:"GPS location appears to be outside The Gambia. Enable Precise Location and try again."});
   if(accuracy>1500)return res.status(422).json({error:`GPS accuracy is too low (±${Math.round(accuracy)}m). Turn on Precise Location and try again.`});
+  const orderForGps=db.prepare("SELECT order_status,customer_lat,customer_lng FROM orders WHERE id=?").get(d.order_id);
+  if(String(orderForGps?.order_status||"").toUpperCase()==="DELIVERED")return res.status(409).json({error:"This delivery is already marked delivered."});
+  if(orderForGps?.customer_lat!=null&&orderForGps?.customer_lng!=null){const km=gpsDistanceKm(lat,lng,Number(orderForGps.customer_lat),Number(orderForGps.customer_lng));if(km>500)return res.status(422).json({error:`GPS reading is about ${Math.round(km)} km from the customer's saved location. The location looks incorrect; enable Precise Location and try again.`});}
   db.prepare("UPDATE deliveries SET lat=?,lng=?,accuracy=?,last_seen=? WHERE id=?").run(lat,lng,accuracy,new Date().toISOString(),d.id);
   const now=Date.now(), last=lastLocationBroadcast.get(String(d.order_id))||0;
   if(now-last>=2000){lastLocationBroadcast.set(String(d.order_id),now);broadcastLive("orders",{orderId:d.order_id,location:true});}
