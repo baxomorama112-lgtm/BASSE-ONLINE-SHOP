@@ -29,7 +29,7 @@ function renderProductGrid(ps, silent=false){
   const sameOrder=existingIds.length===ids.length && existingIds.every((id,i)=>id===ids[i]);
 
   if(!sameOrder){
-    grid.innerHTML=ps.length?ps.map(p=>`<article class="product" data-id="${p.id}" tabindex="0" role="button" onclick="buy(${p.id})" onkeydown="if(event.key==='Enter'||event.key===' ')buy(${p.id})"><div class="pic"><img src="${p.image||""}" alt="${esc(p.name)}" loading="lazy"><span class="tag">${esc(p.category)}</span></div><div class="info"><h3>${esc(p.name)}</h3><div class="price">${money(p.price)}</div></div></article>`).join(""):`<div class="empty-search"><div></div><h3>No products found</h3><p>Try another product name or category.</p></div>`;
+    grid.innerHTML=ps.length?ps.map(p=>`<article class="product" data-id="${p.id}" tabindex="0" role="button" onclick="buy(${p.id})" onkeydown="if(event.key==='Enter'||event.key===' ')buy(${p.id})"><div class="pic"><img src="${p.image||""}" alt="${esc(p.name)}" loading="eager"><span class="tag">${esc(p.category)}</span></div><div class="info"><h3>${esc(p.name)}</h3><div class="price">${money(p.price)}</div></div></article>`).join(""):`<div class="empty-search"><div></div><h3>No products found</h3><p>Try another product name or category.</p></div>`;
     return;
   }
 
@@ -219,7 +219,7 @@ async function openStore(id){
     const initials=storeInitials(s.business_name);
     $("storeDetail").innerHTML=`<div class="store-detail-head"><div class="${storeCoverClass(s.id)} detail-cover"><div class="store-logo big">${esc(initials)}</div></div><div class="store-detail-info"><small>VERIFIED BASSE STORE</small><h2>${esc(s.business_name)}</h2><p>${esc(s.description||s.category||"Local vendor")}</p><div class="store-meta"><span> ${esc(s.location||"Basse")}</span><span> ${s.products.length} products</span></div></div></div>
       <div class="store-products-head"><h3>Products</h3><span>${s.products.length} available</span></div>
-      <div class="store-products">${s.products.length?s.products.map(p=>`<article class="product" data-id="${p.id}" tabindex="0" role="button" onclick="buy(${p.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();buy(${p.id})}"><div class="pic"><img src="${p.image||""}" alt="${esc(p.name)}" loading="lazy"><span class="tag">${esc(p.category)}</span></div><div class="info"><h3>${esc(p.name)}</h3><div class="price">${money(p.price)}</div><button class="buy" type="button" onclick="event.stopPropagation();buy(${p.id})">VIEW PRODUCT →</button></div></article>`).join(""):`<div class="empty-search"><div></div><h3>No products yet</h3><p>This store has no approved products available right now.</p></div>`}</div>`;
+      <div class="store-products">${s.products.length?s.products.map(p=>`<article class="product" data-id="${p.id}" tabindex="0" role="button" onclick="buy(${p.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();buy(${p.id})}"><div class="pic"><img src="${p.image||""}" alt="${esc(p.name)}" loading="eager"><span class="tag">${esc(p.category)}</span></div><div class="info"><h3>${esc(p.name)}</h3><div class="price">${money(p.price)}</div><button class="buy" type="button" onclick="event.stopPropagation();buy(${p.id})">VIEW PRODUCT →</button></div></article>`).join(""):`<div class="empty-search"><div></div><h3>No products yet</h3><p>This store has no approved products available right now.</p></div>`}</div>`;
   }catch(e){$("storeDetail").innerHTML=`<div class="empty-search"><div></div><h3>Store unavailable</h3><p>${esc(e.message||"Please try again.")}</p><button class="view-store-btn" onclick="openStore(${id})">TRY AGAIN</button></div>`}
 }
 function trackOrderPrompt(){
@@ -332,6 +332,11 @@ async function viewLiveDriverLocation(){
   if(btn){btn.disabled=true;btn.dataset.originalText=btn.innerHTML;btn.innerHTML=" LOADING LIVE LOCATION…"}
   try{
     await refreshTracking(trackingOrderId,false);
+    if(!trackingMap){
+      const body=await fetch('/api/order/'+encodeURIComponent(trackingOrderId)+'/tracking?phone='+encodeURIComponent(trackingPhone),{cache:'no-store'}).then(r=>r.json());
+      loadTrackingMap(body.order?.customer_lat,body.order?.customer_lng,body.delivery?.lat,body.delivery?.lng);
+      await new Promise(r=>setTimeout(r,900));
+    }
     if(trackingMap){
       const p=trackingMap.__latest||{};
       const hc=Number.isFinite(Number(p.customerLat))&&Number.isFinite(Number(p.customerLng));
@@ -391,8 +396,9 @@ function loadTrackingMap(customerLat,customerLng,driverLat,driverLng){
   const hd=Number.isFinite(Number(driverLat))&&Number.isFinite(Number(driverLng));
   if(!window.maplibregl){
     el.innerHTML='<div class="map-placeholder"><b>Loading live map…</b><small>Please wait a moment.</small></div>';
-    ensureMapLibre().then(()=>{if($('customerMap')===el&&trackingOrderId)loadTrackingMap(customerLat,customerLng,driverLat,driverLng)}).catch(()=>{
-      el.innerHTML='<div class="map-placeholder"><b>Live map unavailable</b><small>Tap VIEW LIVE DRIVER LOCATION to retry.</small></div>';
+    ensureMapLibre().then(lib=>{
+      if(lib&&$('customerMap')===el&&trackingOrderId) setTimeout(()=>loadTrackingMap(customerLat,customerLng,driverLat,driverLng),50);
+      else if(!lib) el.innerHTML='<div class="map-placeholder"><b>Live map unavailable</b><small>Please reload the tracking window.</small></div>';
     });
     return;
   }
@@ -406,9 +412,9 @@ function loadTrackingMap(customerLat,customerLng,driverLat,driverLng){
     if(!trackingMap){
       el.innerHTML='';
       const center=hd?[dlng,dlat]:[clng,clat];
-      trackingMap=new maplibregl.Map({container:el,style:BASSE_MAP_STYLE,center,zoom:15,attributionControl:true,dragRotate:false,touchPitchRotate:false,cooperativeGestures:false});
+      el.classList.add('maplibre-host');trackingMap=new maplibregl.Map({container:el,style:BASSE_MAP_STYLE,center,zoom:15,attributionControl:true,dragRotate:false,touchPitchRotate:false,cooperativeGestures:false,trackResize:true,fadeDuration:0});
       trackingMap.__customer=null;trackingMap.__driver=null;trackingMap.__initialFit=true;
-      trackingMap.on('load',()=>{try{trackingMap.resize();renderTrackingMapContent(clat,clng,dlat,dlng)}catch{}});
+      const draw=()=>{try{trackingMap.resize();renderTrackingMapContent(trackingMap.__latest?.customerLat??clat,trackingMap.__latest?.customerLng??clng,trackingMap.__latest?.driverLat??dlat,trackingMap.__latest?.driverLng??dlng)}catch{}};trackingMap.on('load',draw);trackingMap.on('styledata',draw);setTimeout(draw,250);setTimeout(draw,1000);
       trackingMap.on('error',()=>{
         if($('customerMap')===el && !el.querySelector('.maplibregl-canvas')){
           el.innerHTML='<div class="map-placeholder"><b>Live map could not load</b><small>Tap VIEW LIVE DRIVER LOCATION to retry.</small></div>';

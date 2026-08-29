@@ -42,3 +42,5 @@ main{max-width:1180px;padding:22px}
  .panel-grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}
  .vendor-tabs{margin-top:14px}.card{padding:16px}
 }
+
+.order-row{display:flex;align-items:center;gap:10px}.order-product-image{width:52px;height:52px;object-fit:cover;border-radius:10px;border:1px solid #e1e6ef;background:#f5f7fb;flex:none}.order-row>div{min-width:0;flex:1}
