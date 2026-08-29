@@ -8,18 +8,20 @@ function startViewerPresence(){sendViewerHeartbeat();clearInterval(window.__view
 window.addEventListener("pagehide",()=>{try{navigator.sendBeacon("/api/presence/leave",new Blob([JSON.stringify({id:BASSE_VIEWER_ID})],{type:"application/json"}))}catch{}});
 const $=id=>document.getElementById(id),money=n=>"D"+Number(n||0).toLocaleString();
 let checkoutGps={lat:null,lng:null,accuracy:null},selectedChoices=[],trackingMap=null,trackingPoll=null,trackingStream=null,trackingLocationWatch=null,trackingLastLocationSent=0,trackingPhone="",trackingOrderId="",trackingRefreshing=false,trackingLastEvent=0;
-let mapLibrePromise=null;
-const BASSE_MAP_STYLE="https://tiles.openfreemap.org/styles/liberty";
-function ensureMapLibre(){
-  if(window.maplibregl)return Promise.resolve(window.maplibregl);
-  if(mapLibrePromise)return mapLibrePromise;
-  mapLibrePromise=new Promise(resolve=>{
-    if(!document.querySelector('link[data-basse-maplibre]')){const css=document.createElement("link");css.rel="stylesheet";css.href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css";css.dataset.basseMaplibre="1";document.head.appendChild(css)}
-    const load=(src,next)=>{const sc=document.createElement("script");sc.src=src;sc.onload=()=>resolve(window.maplibregl);sc.onerror=next;document.head.appendChild(sc)};
-    load("https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js",()=>load("https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.js",()=>resolve(null)));
+let leafletPromise=null;
+function ensureLeaflet(){
+  if(window.L)return Promise.resolve(window.L);
+  if(leafletPromise)return leafletPromise;
+  leafletPromise=new Promise(resolve=>{
+    if(!document.querySelector('link[data-basse-leaflet]')){
+      const css=document.createElement("link");css.rel="stylesheet";css.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";css.dataset.basseLeaflet="1";document.head.appendChild(css)
+    }
+    const load=(src,next)=>{const sc=document.createElement("script");sc.src=src;sc.onload=()=>resolve(window.L);sc.onerror=next;document.head.appendChild(sc)};
+    load("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",()=>load("https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js",()=>resolve(null)));
   });
-  return mapLibrePromise;
+  return leafletPromise;
 }
+
 
 function renderProductGrid(ps, silent=false){
   const grid=$("grid");
@@ -282,13 +284,12 @@ async function openOrderTracking(id,phone=""){
   const modal=$("modal");
   modal.innerHTML=`<div class="sheet tracking-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="mini-bag" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M12 18h24l-2 23H14z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M18 18v-4a6 6 0 0 1 12 0v4" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></span><div><small>BASSE DELIVERY</small><h2>Track Order</h2></div></div><div id="trackingBody"><div class="store-loading">Loading tracking…</div></div></div>`;
   modal.classList.add("show");
-  const mapReady=ensureMapLibre();
+  const mapReady=ensureLeaflet();
   await refreshTracking(id,true);
   await mapReady;
   await refreshTracking(id,false);
-  // The modal is fully laid out now; force a map resize on the next paint so
-  // MapLibre never initializes against a partially-sized mobile sheet.
-  setTimeout(()=>{try{if(trackingMap){trackingMap.resize();if(trackingMap.__latest)renderTrackingMapContent(trackingMap.__latest.customerLat,trackingMap.__latest.customerLng,trackingMap.__latest.driverLat,trackingMap.__latest.driverLng)}}catch{}},80);
+  // The modal is fully laid out now; force Leaflet to recalculate its size.
+  setTimeout(()=>{try{if(trackingMap){trackingMap.invalidateSize({pan:false});if(trackingMap.__latest)renderTrackingMapContent(trackingMap.__latest.customerLat,trackingMap.__latest.customerLng,trackingMap.__latest.driverLat,trackingMap.__latest.driverLng)}}catch{}},120);
   // Start live driver refresh immediately. The customer location is also watched
   // automatically while this tracking window is open, so the customer does not
   // have to keep pressing UPDATE MY LOCATION.
@@ -332,22 +333,17 @@ async function viewLiveDriverLocation(){
   if(btn){btn.disabled=true;btn.dataset.originalText=btn.innerHTML;btn.innerHTML=" LOADING LIVE LOCATION…"}
   try{
     await refreshTracking(trackingOrderId,false);
-    if(!trackingMap){
-      const body=await fetch('/api/order/'+encodeURIComponent(trackingOrderId)+'/tracking?phone='+encodeURIComponent(trackingPhone),{cache:'no-store'}).then(r=>r.json());
-      loadTrackingMap(body.order?.customer_lat,body.order?.customer_lng,body.delivery?.lat,body.delivery?.lng);
-      await new Promise(r=>setTimeout(r,900));
-    }
-    if(trackingMap){
+    await ensureLeaflet();
+    if(window.L && trackingMap){
+      setTimeout(()=>{try{trackingMap.invalidateSize({pan:false})}catch{}},0);
       const p=trackingMap.__latest||{};
       const hc=Number.isFinite(Number(p.customerLat))&&Number.isFinite(Number(p.customerLng));
       const hd=Number.isFinite(Number(p.driverLat))&&Number.isFinite(Number(p.driverLng));
-      if(hc||hd){
-        if(hc&&hd){const b=new maplibregl.LngLatBounds([Number(p.driverLng),Number(p.driverLat)],[Number(p.driverLng),Number(p.driverLat)]);b.extend([Number(p.customerLng),Number(p.customerLat)]);trackingMap.fitBounds(b,{padding:35,maxZoom:16,animate:true});}
-        else if(hc)trackingMap.flyTo({center:[Number(p.customerLng),Number(p.customerLat)],zoom:15,animate:true});
-        else trackingMap.flyTo({center:[Number(p.driverLng),Number(p.driverLat)],zoom:15,animate:true});
-        toast(hd?"Live driver location updated.":"Waiting for driver GPS.");
-      }else toast("No GPS location is available yet.");
-    }
+      if(hc&&hd){trackingMap.fitBounds(L.latLngBounds([[Number(p.driverLat),Number(p.driverLng)],[Number(p.customerLat),Number(p.customerLng)]]),{padding:[25,25],maxZoom:16,animate:true})}
+      else if(hc)trackingMap.setView([Number(p.customerLat),Number(p.customerLng)],15,{animate:true});
+      else if(hd)trackingMap.setView([Number(p.driverLat),Number(p.driverLng)],15,{animate:true});
+      toast(hd?"Live driver location updated.":"Waiting for driver GPS.");
+    }else toast("Live map is still loading. Please tap again in a moment.");
   }catch(e){toast(e.message||"Could not load live driver location.")}
   finally{if(btn){btn.disabled=false;btn.innerHTML=btn.dataset.originalText||" VIEW LIVE DRIVER LOCATION"}}
 }
@@ -372,34 +368,53 @@ async function refreshTracking(id,initial){
     timelineEl.innerHTML=steps.map((x,i)=>`<div class="timeline-step ${i<=idx?"done":""}"><span>${i<=idx?"":"•"}</span><b>${x.replaceAll("_"," ")}</b></div>`).join("");
     const distance=hasCustomer&&hasDriver?trackingDistanceKm(Number(d.delivery.lat),Number(d.delivery.lng),Number(d.order.customer_lat),Number(d.order.customer_lng)):null;
     noteEl.innerHTML=hasDriver?`Driver: <b>${esc(d.delivery.driver_name||"Assigned driver")}</b> · ${distance!==null?`<b>${distance<1?Math.round(distance*1000)+" m":distance.toFixed(1)+" km"}</b> away · `:""}${d.delivery.last_seen?`last update ${new Date(d.delivery.last_seen).toLocaleTimeString()}`:"live"}`:(d.delivery?.driver_name?`Driver: <b>${esc(d.delivery.driver_name)}</b> · Waiting for GPS. Keep this screen open and tap the live-location button to refresh.`:"A driver will be assigned after your order is confirmed.");
-    if(window.maplibregl)loadTrackingMap(d.order.customer_lat,d.order.customer_lng,d.delivery?.lat,d.delivery?.lng);
+    if(window.L)loadTrackingMap(d.order.customer_lat,d.order.customer_lng,d.delivery?.lat,d.delivery?.lng);
     if(status==="DELIVERED")stopTrackingPolling();
   }catch(e){if(initial)$("trackingBody").innerHTML=`<div class="empty-search"><div></div><h3>Order not found</h3><p>${esc(e.message||"Check your order number.")}</p></div>`}
   finally{trackingRefreshing=false}
 }
 function mapMarker(label,type){
-  const el=document.createElement("div");el.className=`basse-map-marker ${type}-marker maplibre-marker`;
-  el.innerHTML=`<span></span><b>${label}</b>`;return el;
+  return L.divIcon({className:`basse-map-marker ${type}-marker`,html:`<span></span><b>${label}</b>`,iconSize:[90,34],iconAnchor:[12,30]});
+}
+function mapTiles(map){
+  const providers=[
+    ["https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png","© OpenStreetMap contributors © CARTO"],
+    ["https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png","© OpenStreetMap contributors"]
+  ];
+  let layer=L.tileLayer(providers[0][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[0][1]}).addTo(map);
+  let switched=false;
+  layer.on("tileerror",()=>{
+    if(switched)return;switched=true;
+    try{map.removeLayer(layer)}catch{}
+    layer=L.tileLayer(providers[1][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[1][1]}).addTo(map);
+  });
 }
 function renderTrackingMapContent(customerLat,customerLng,driverLat,driverLng){
-  const m=trackingMap;if(!m||!m.isStyleLoaded())return;
+  const m=trackingMap;if(!m)return;
   const clat=Number(customerLat),clng=Number(customerLng),dlat=Number(driverLat),dlng=Number(driverLng);
   const hc=Number.isFinite(clat)&&Number.isFinite(clng),hd=Number.isFinite(dlat)&&Number.isFinite(dlng);
-  if(hc){if(!m.__customer){m.__customer=new maplibregl.Marker({element:mapMarker("Customer","customer")}).setLngLat([clng,clat]).addTo(m)}else m.__customer.setLngLat([clng,clat])}
-  if(hd){if(!m.__driver){m.__driver=new maplibregl.Marker({element:mapMarker("Driver","driver")}).setLngLat([dlng,dlat]).addTo(m)}else m.__driver.setLngLat([dlng,dlat])}
-  if(hc&&hd){const coords=[[dlng,dlat],[clng,clat]];const source=m.getSource("basse-live-line");if(!source)m.addSource("basse-live-line",{type:"geojson",data:{type:"Feature",geometry:{type:"LineString",coordinates:coords}}});else source.setData({type:"Feature",geometry:{type:"LineString",coordinates:coords}});if(!m.getLayer("basse-live-line"))m.addLayer({id:"basse-live-line",type:"line",source:"basse-live-line",paint:{"line-color":"#2878ff","line-width":4,"line-dasharray":[2,2],"line-opacity":0.9}});if(m.__initialFit){const b=new maplibregl.LngLatBounds([dlng,dlat],[dlng,dlat]);b.extend([clng,clat]);m.fitBounds(b,{padding:30,maxZoom:16});m.__initialFit=false}}
-  else if(hc&&m.__initialFit){m.setCenter([clng,clat]);m.setZoom(15);m.__initialFit=false}
+  if(hc){
+    if(!m.__customer)m.__customer=L.marker([clat,clng],{icon:mapMarker("Customer","customer"),zIndexOffset:500}).addTo(m);
+    else m.__customer.setLatLng([clat,clng]);
+  }
+  if(hd){
+    if(!m.__driver)m.__driver=L.marker([dlat,dlng],{icon:mapMarker("Driver","driver"),zIndexOffset:1200}).addTo(m);
+    else m.__driver.setLatLng([dlat,dlng]);
+  }
+  if(hc&&hd){
+    const points=[[dlat,dlng],[clat,clng]];
+    if(!m.__line)m.__line=L.polyline(points,{weight:4,dashArray:"9 8"}).addTo(m);else m.__line.setLatLngs(points);
+    if(m.__initialFit){m.fitBounds(L.latLngBounds(points),{padding:[25,25],maxZoom:16});m.__initialFit=false}
+  }else if(hc&&m.__initialFit){m.setView([clat,clng],15);m.__initialFit=false}
+  requestAnimationFrame(()=>{try{m.invalidateSize({pan:false})}catch{}});
 }
 function loadTrackingMap(customerLat,customerLng,driverLat,driverLng){
-  const el=$('customerMap');if(!el)return;
+  const el=$("customerMap");if(!el)return;
   const hc=Number.isFinite(Number(customerLat))&&Number.isFinite(Number(customerLng));
   const hd=Number.isFinite(Number(driverLat))&&Number.isFinite(Number(driverLng));
-  if(!window.maplibregl){
+  if(!window.L){
     el.innerHTML='<div class="map-placeholder"><b>Loading live map…</b><small>Please wait a moment.</small></div>';
-    ensureMapLibre().then(lib=>{
-      if(lib&&$('customerMap')===el&&trackingOrderId) setTimeout(()=>loadTrackingMap(customerLat,customerLng,driverLat,driverLng),50);
-      else if(!lib) el.innerHTML='<div class="map-placeholder"><b>Live map unavailable</b><small>Please reload the tracking window.</small></div>';
-    });
+    ensureLeaflet().then(lib=>{if(lib&&$("customerMap")===el&&trackingOrderId)setTimeout(()=>loadTrackingMap(customerLat,customerLng,driverLat,driverLng),50);});
     return;
   }
   if(!hc&&!hd){
@@ -410,26 +425,30 @@ function loadTrackingMap(customerLat,customerLng,driverLat,driverLng){
   const clat=Number(customerLat),clng=Number(customerLng),dlat=Number(driverLat),dlng=Number(driverLng);
   try{
     if(!trackingMap){
-      el.innerHTML='';
-      const center=hd?[dlng,dlat]:[clng,clat];
-      el.classList.add('maplibre-host');trackingMap=new maplibregl.Map({container:el,style:BASSE_MAP_STYLE,center,zoom:15,attributionControl:true,dragRotate:false,touchPitchRotate:false,cooperativeGestures:false,trackResize:true,fadeDuration:0});
-      trackingMap.__customer=null;trackingMap.__driver=null;trackingMap.__initialFit=true;
-      const draw=()=>{try{trackingMap.resize();renderTrackingMapContent(trackingMap.__latest?.customerLat??clat,trackingMap.__latest?.customerLng??clng,trackingMap.__latest?.driverLat??dlat,trackingMap.__latest?.driverLng??dlng)}catch{}};trackingMap.on('load',draw);trackingMap.on('styledata',draw);setTimeout(draw,250);setTimeout(draw,1000);
-      trackingMap.on('error',()=>{
-        if($('customerMap')===el && !el.querySelector('.maplibregl-canvas')){
-          el.innerHTML='<div class="map-placeholder"><b>Live map could not load</b><small>Tap VIEW LIVE DRIVER LOCATION to retry.</small></div>';
-        }
-      });
+      el.innerHTML="";
+      const center=hd?[dlat,dlng]:[clat,clng];
+      el.classList.add("leaflet-host");
+      trackingMap=L.map(el,{zoomControl:true,scrollWheelZoom:false,dragging:true,doubleClickZoom:false,boxZoom:false,keyboard:true,preferCanvas:true,fadeAnimation:false,zoomAnimation:true,markerZoomAnimation:false}).setView(center,15);
+      mapTiles(trackingMap);
+      trackingMap.__customer=null;trackingMap.__driver=null;trackingMap.__line=null;trackingMap.__initialFit=true;
     }
     trackingMap.__latest={customerLat:clat,customerLng:clng,driverLat:dlat,driverLng:dlng};
-    if(trackingMap.isStyleLoaded())renderTrackingMapContent(clat,clng,dlat,dlng);
-    requestAnimationFrame(()=>{try{trackingMap.resize();if(trackingMap.isStyleLoaded())renderTrackingMapContent(clat,clng,dlat,dlng)}catch{}});
+    renderTrackingMapContent(clat,clng,dlat,dlng);
   }catch(e){
+    try{if(trackingMap)trackingMap.remove()}catch{}
     trackingMap=null;
     el.innerHTML='<div class="map-placeholder"><b>Live map could not load</b><small>Tap VIEW LIVE DRIVER LOCATION to retry.</small></div>';
   }
 }
-function stopTrackingPolling(){if(trackingPoll){clearInterval(trackingPoll);trackingPoll=null}if(trackingStream){try{trackingStream.close()}catch{}trackingStream=null}if(trackingLocationWatch!==null){try{navigator.geolocation.clearWatch(trackingLocationWatch)}catch{}trackingLocationWatch=null}trackingLastLocationSent=0;if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}trackingPhone="";trackingOrderId="";trackingRefreshing=false}
+function stopTrackingPolling(){
+  if(trackingPoll){clearInterval(trackingPoll);trackingPoll=null}
+  if(trackingStream){try{trackingStream.close()}catch{}trackingStream=null}
+  if(trackingLocationWatch!==null){try{navigator.geolocation.clearWatch(trackingLocationWatch)}catch{}trackingLocationWatch=null}
+  trackingLastLocationSent=0;
+  if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}
+  trackingPhone="";trackingOrderId="";trackingRefreshing=false;
+}
+
 function captureCheckoutLocation(){
   const state=$("checkoutGpsState");
   if(!navigator.geolocation){if(state)state.textContent="This phone/browser does not support GPS.";return}

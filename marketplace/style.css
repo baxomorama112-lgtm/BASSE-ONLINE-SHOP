@@ -1039,3 +1039,17 @@ html{scroll-behavior:smooth}body{background:#f7f9fd;color:#101a2c;overflow-x:hid
 .customer-map .maplibregl-map,.customer-map .maplibregl-canvas-container,.customer-map .maplibregl-canvas{width:100%!important;height:100%!important;min-height:100%!important;}
 .customer-map .maplibregl-canvas{position:absolute!important;inset:0!important;}
 #grid .product img,.store-products .product img{opacity:1!important;visibility:visible!important;transition:none!important;}
+
+/* V21: customer tracking uses the same stable Leaflet/raster path that was proven on mobile. */
+.customer-map{position:relative!important;height:300px!important;min-height:260px!important;overflow:hidden!important;border-radius:16px!important;background:#edf2f7!important;isolation:isolate}
+.customer-map .leaflet-container,.customer-map .leaflet-pane,.customer-map .leaflet-map-pane{width:100%!important;height:100%!important}
+.customer-map .leaflet-container{font-family:inherit!important;background:#edf2f7!important}
+.customer-map .leaflet-control-container{z-index:20!important}
+.customer-map .leaflet-top,.customer-map .leaflet-bottom{z-index:20!important}
+.customer-map .basse-map-marker{background:transparent!important;border:0!important;white-space:nowrap!important;display:flex;align-items:center;gap:3px;pointer-events:auto}
+.customer-map .basse-map-marker span{display:inline-block;width:12px;height:12px;border-radius:50%;background:#2878ff;border:3px solid #fff;box-shadow:0 2px 8px #0004;flex:none}
+.customer-map .basse-map-marker.driver-marker span{background:#7c3aed}
+.customer-map .basse-map-marker b{background:#fff;border:1px solid #d7deea;border-radius:12px;padding:4px 7px;color:#18346d;font-size:11px;box-shadow:0 2px 8px #0002;white-space:nowrap}
+.customer-map .basse-map-marker.customer-marker b{border-color:#3b82f6}
+.customer-map .basse-map-marker.driver-marker b{border-color:#7c3aed}
+@media(max-width:560px){.customer-map{height:270px!important;min-height:240px!important}}
