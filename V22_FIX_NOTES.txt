@@ -1,0 +1,8 @@
+BASSE ONLINE SHOP V22 — STABLE MAP FIX
+
+• Admin, Driver and Customer live maps use the same Leaflet map stack. No MapLibre/OpenFreeMap API key is required.
+• CARTO Voyager is primary tiles with OpenStreetMap fallback.
+• Driver GPS latitude/longitude no longer trigger a full delivery-card rebuild, eliminating map flashing/reloading during live tracking.
+• Admin live map updates markers/line in place.
+• Customer Track Order keeps its map instance and updates driver/customer markers in place.
+• Added map resize handling for mobile, modal and orientation changes.
