@@ -360,11 +360,11 @@ app.post("/api/admin/restore",guard,(req,res)=>{
     setImmediate(()=>{
       try{
         const uploadDir=path.join(DATA_DIR,"uploads");fs.mkdirSync(uploadDir,{recursive:true});
-        // Remove files that belong to the previous catalog only after the database is already restored.
-        // This keeps the restore request fast while the image set is rebuilt in the background.
-        for(const name of fs.readdirSync(uploadDir)){
-          const full=path.join(uploadDir,name);try{if(fs.statSync(full).isFile())fs.unlinkSync(full)}catch{}
-        }
+        // IMPORTANT: never delete the existing upload directory during restore.
+        // The database is restored first and the browser may request product images
+        // immediately. Deleting the directory first caused images to disappear/blink
+        // until the background copy finished. We now merge the backed-up files into
+        // the live directory and only replace a file when its backup size differs.
         let restoredFiles=0;
         for(const file of files){
           if(!file?.path||!file.path.startsWith("uploads/")||file.path.includes(".."))continue;

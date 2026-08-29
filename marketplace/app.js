@@ -7,7 +7,7 @@ async function sendViewerHeartbeat(){try{await fetch("/api/presence/heartbeat",{
 function startViewerPresence(){sendViewerHeartbeat();clearInterval(window.__viewerPresence);window.__viewerPresence=setInterval(sendViewerHeartbeat,15000);window.addEventListener("pageshow",sendViewerHeartbeat);document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")sendViewerHeartbeat()})}
 window.addEventListener("pagehide",()=>{try{navigator.sendBeacon("/api/presence/leave",new Blob([JSON.stringify({id:BASSE_VIEWER_ID})],{type:"application/json"}))}catch{}});
 const $=id=>document.getElementById(id),money=n=>"D"+Number(n||0).toLocaleString();
-let checkoutGps={lat:null,lng:null,accuracy:null},selectedChoices=[],trackingMap=null,trackingPoll=null,trackingStream=null,trackingPhone="",trackingOrderId="",trackingRefreshing=false,trackingLastEvent=0;
+let checkoutGps={lat:null,lng:null,accuracy:null},selectedChoices=[],trackingMap=null,trackingPoll=null,trackingStream=null,trackingLocationWatch=null,trackingLastLocationSent=0,trackingPhone="",trackingOrderId="",trackingRefreshing=false,trackingLastEvent=0;
 let mapLibrePromise=null;
 const BASSE_MAP_STYLE="https://tiles.openfreemap.org/styles/liberty";
 function ensureMapLibre(){
@@ -36,7 +36,7 @@ function renderProductGrid(ps, silent=false){
   ps.forEach((p,i)=>{
     const el=existing[i];
     const img=el.querySelector("img"), tag=el.querySelector(".tag"), name=el.querySelector("h3"), price=el.querySelector(".price");
-    if(img && img.getAttribute("src")!==String(p.image||"")) img.src=p.image||"";
+    if(img && p.image && img.getAttribute("src")!==String(p.image)) img.src=p.image;
     if(img) img.alt=p.name||"Product";
     if(tag) tag.textContent=p.category||"";
     if(name) name.textContent=p.name||"";
@@ -248,8 +248,29 @@ async function openOrderTracking(id,phone=""){
   await refreshTracking(id,true);
   await mapReady;
   await refreshTracking(id,false);
+  // Start live driver refresh immediately. The customer location is also watched
+  // automatically while this tracking window is open, so the customer does not
+  // have to keep pressing UPDATE MY LOCATION.
+  startCustomerLocationWatch();
   startTrackingLiveStream(id);
-  trackingPoll=setInterval(()=>{if(document.visibilityState!=="hidden")refreshTracking(id,false)},5000);
+  trackingPoll=setInterval(()=>{if(document.visibilityState!=="hidden")refreshTracking(id,false)},3000);
+}
+function startCustomerLocationWatch(){
+  if(trackingLocationWatch!==null || !trackingOrderId || !trackingPhone || !navigator.geolocation)return;
+  const send=async(pos)=>{
+    const accuracy=Number(pos.coords.accuracy||999999);
+    if(!Number.isFinite(accuracy)||accuracy>1500)return;
+    const now=Date.now();
+    if(now-trackingLastLocationSent<8000)return;
+    trackingLastLocationSent=now;
+    try{
+      const r=await fetch(`/api/order/${encodeURIComponent(trackingOrderId)}/customer-location`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:trackingPhone,lat:pos.coords.latitude,lng:pos.coords.longitude,accuracy}),cache:"no-store"});
+      if(r.ok)await refreshTracking(trackingOrderId,false);
+    }catch{}
+  };
+  try{
+    trackingLocationWatch=navigator.geolocation.watchPosition(send,()=>{}, {enableHighAccuracy:true,maximumAge:5000,timeout:15000});
+  }catch{trackingLocationWatch=null}
 }
 function trackingDistanceKm(a,b,c,d){const R=6371,rad=x=>x*Math.PI/180;const p1=rad(a),p2=rad(c),dp=rad(c-a),dl=rad(d-b);const h=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;return R*2*Math.atan2(Math.sqrt(h),Math.sqrt(1-h))}
 function startTrackingLiveStream(orderId){
@@ -326,14 +347,18 @@ function renderTrackingMapContent(customerLat,customerLng,driverLat,driverLng){
 function loadTrackingMap(customerLat,customerLng,driverLat,driverLng){
   const el=$("customerMap");if(!el)return;
   const hc=Number.isFinite(Number(customerLat))&&Number.isFinite(Number(customerLng));const hd=Number.isFinite(Number(driverLat))&&Number.isFinite(Number(driverLng));
-  if(!window.maplibregl){el.innerHTML='<div class="map-placeholder"><br><b>Map service is loading</b><small>Please wait a moment and tap Track Order again.</small></div>';return}
+  if(!window.maplibregl){
+    el.innerHTML='<div class="map-placeholder"><br><b>Map service is loading</b><small>Connecting to the live delivery map…</small></div>';
+    ensureMapLibre().then(()=>{if($('customerMap')===el && trackingOrderId) loadTrackingMap(customerLat,customerLng,driverLat,driverLng)}).catch(()=>{});
+    return;
+  }
   if(!hc&&!hd){el.innerHTML='<div class="map-placeholder"><br><b>Waiting for location</b><small>The order has no GPS location yet.</small></div>';if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}return}
   const clat=Number(customerLat),clng=Number(customerLng),dlat=Number(driverLat),dlng=Number(driverLng);
   if(!trackingMap){el.innerHTML="";const center=[hd?dlng:clng,hd?dlat:clat];trackingMap=new maplibregl.Map({container:el,style:BASSE_MAP_STYLE,center,zoom:15,attributionControl:true,dragRotate:false,touchPitchRotate:false});trackingMap.__customer=null;trackingMap.__driver=null;trackingMap.__initialFit=true;trackingMap.on("load",()=>renderTrackingMapContent(customerLat,customerLng,driverLat,driverLng));}
   trackingMap.__latest={customerLat,customerLng,driverLat,driverLng};if(trackingMap.isStyleLoaded())renderTrackingMapContent(customerLat,customerLng,driverLat,driverLng);
   requestAnimationFrame(()=>{try{trackingMap.resize()}catch{}});
 }
-function stopTrackingPolling(){if(trackingPoll){clearInterval(trackingPoll);trackingPoll=null}if(trackingStream){try{trackingStream.close()}catch{}trackingStream=null}if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}trackingPhone="";trackingOrderId="";trackingRefreshing=false}
+function stopTrackingPolling(){if(trackingPoll){clearInterval(trackingPoll);trackingPoll=null}if(trackingStream){try{trackingStream.close()}catch{}trackingStream=null}if(trackingLocationWatch!==null){try{navigator.geolocation.clearWatch(trackingLocationWatch)}catch{}trackingLocationWatch=null}trackingLastLocationSent=0;if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}trackingPhone="";trackingOrderId="";trackingRefreshing=false}
 function captureCheckoutLocation(){
   const state=$("checkoutGpsState");
   if(!navigator.geolocation){if(state)state.textContent="This phone/browser does not support GPS.";return}
