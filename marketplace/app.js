@@ -94,35 +94,73 @@ function renderProductDetail(product){
   $("modal").innerHTML=`<div class="sheet product-sheet product-sheet-modern">
     <button class="close modern-close" onclick="closeModal()" aria-label="Close">×</button>
     <div class="product-detail">
-      <div class="gallery"><div class="main-photo-wrap"><img id="mainProductImage" src="${imgs[0]}" alt="${esc(product.name)}"></div>${thumbs}</div>
+      <div class="gallery"><div class="main-photo-wrap"><img id="mainProductImage" src="${imgs[0]}" alt="${esc(product.name)}" loading="eager" decoding="async"></div>${thumbs}</div>
       <div class="detail-info modern-detail-info"><span class="tagline">${esc(product.category)}</span><h2>${esc(product.name)}</h2><div class="detail-price">${money(product.price)}</div><p class="muted">${esc(product.description||"Quality product from BASSE MARKET.")}</p>${renderOptionFields(product)?`<div class="product-options"><b>Choose options</b>${renderOptionFields(product)}</div>`:""}<div class="stock-note ${product.stock<1?'out':''}">${product.stock>0?` ${product.stock} available`:"Out of stock"}</div><div class="detail-actions"><button class="pay buy-now-modern" ${product.stock<1?"disabled":""} onclick="openCheckout()"><span></span><b>BUY NOW</b><span class="arrow">→</span></button></div><div class="product-hint">Secure checkout · Pay with Waychit</div></div>
     </div></div>`;
   window.__productImages=imgs;
   $("modal").classList.add("show");
 }
+async function preloadProductImages(images){
+  const list=[...new Set((images||[]).filter(Boolean).map(String))];
+  await Promise.all(list.map(src=>new Promise(resolve=>{
+    const im=new Image();
+    im.onload=()=>resolve(true);
+    im.onerror=()=>resolve(false);
+    im.src=src;
+  })));
+  return list;
+}
+function setProductGallery(images){
+  const imgs=Array.isArray(images)&&images.length?images:[""];
+  window.__productImages=imgs;
+  const gallery=document.querySelector('.gallery');
+  if(!gallery)return;
+  let main=gallery.querySelector('#mainProductImage');
+  if(!main){
+    const wrap=document.createElement('div');wrap.className='main-photo-wrap';
+    main=document.createElement('img');main.id='mainProductImage';wrap.appendChild(main);gallery.prepend(wrap);
+  }
+  main.alt=selected?.name||'Product';
+  const oldThumbs=gallery.querySelector('.thumbs');
+  const thumbs=document.createElement('div');thumbs.className='thumbs';thumbs.setAttribute('aria-label','Product photos');
+  imgs.forEach((im,i)=>{
+    const b=document.createElement('button');b.type='button';b.className=i===0?'active':'';b.setAttribute('aria-label',`View photo ${i+1}`);
+    const t=document.createElement('img');t.src=im;t.alt='';t.decoding='async';b.appendChild(t);
+    b.onclick=()=>{const src=window.__productImages?.[i];if(src){main.src=src;thumbs.querySelectorAll('button').forEach((x,n)=>x.classList.toggle('active',n===i))}};
+    thumbs.appendChild(b);
+  });
+  main.src=imgs[0];main.decoding='async';main.loading='eager';
+  if(oldThumbs)oldThumbs.replaceWith(thumbs);else if(imgs.length>1)gallery.appendChild(thumbs);
+}
 async function buy(id){
-  // Open immediately from the cached catalog. Do not rebuild the modal when
-  // fresh data arrives: rebuilding caused the brief white/light blink.
+  // Open immediately from the cached catalog. Never rebuild an already-open product sheet.
   const cached=cachedCatalog().find(p=>Number(p.id)===Number(id)) || searchIndex.find(p=>Number(p.id)===Number(id));
   if(cached) renderProductDetail(cached);
   try{
-    const r=await fetch("/api/products/"+id,{cache:"no-store"});
+    const r=await fetch(`/api/products/${id}`,{cache:'no-store'});
     const fresh=await r.json();
-    if(!r.ok)throw new Error(fresh.error||"Product unavailable");
+    if(!r.ok)throw new Error(fresh.error||'Product unavailable');
     saveCatalogCache((cachedCatalog().filter(p=>Number(p.id)!==Number(id))).concat([fresh]));
-    // If the same product is already open, update only its data without
-    // recreating the sheet, preventing flicker and keeping the UI instant.
-    if(cached && $("modal").classList.contains("show") && Number(selected?.id)===Number(id)){
+    if(cached && $('modal').classList.contains('show') && Number(selected?.id)===Number(id)){
+      const oldImages=normalizeProductImages(selected);
+      const newImages=normalizeProductImages(fresh);
       selected=fresh;
-      const name=document.querySelector(".modern-detail-info h2");
-      const price=document.querySelector(".modern-detail-info .detail-price");
-      const desc=document.querySelector(".modern-detail-info .muted");
-      const stock=document.querySelector(".modern-detail-info .stock-note");
+      const name=document.querySelector('.modern-detail-info h2');
+      const price=document.querySelector('.modern-detail-info .detail-price');
+      const desc=document.querySelector('.modern-detail-info .muted');
+      const stock=document.querySelector('.modern-detail-info .stock-note');
       if(name)name.textContent=fresh.name;
       if(price)price.textContent=money(fresh.price);
-      if(desc)desc.textContent=fresh.description||"Quality product from BASSE MARKET.";
-      if(stock){stock.className="stock-note"+(fresh.stock<1?" out":"");stock.textContent=fresh.stock>0?` ${fresh.stock} available`:"Out of stock";}
+      if(desc)desc.textContent=fresh.description||'Quality product from BASSE MARKET.';
+      if(stock){stock.className='stock-note'+(fresh.stock<1?' out':'');stock.textContent=fresh.stock>0?` ${fresh.stock} available`:'Out of stock';}
+      if(JSON.stringify(oldImages)!==JSON.stringify(newImages)){
+        // Decode the new gallery before touching the visible gallery. This prevents the
+        // image "come and go" blink when the live catalog refreshes after restore.
+        await preloadProductImages(newImages);
+        if($('modal').classList.contains('show') && Number(selected?.id)===Number(id))setProductGallery(newImages);
+      }
     }else if(!cached){
+      await preloadProductImages(normalizeProductImages(fresh));
       renderProductDetail(fresh);
     }
   }catch(e){if(!cached)toast(e.message)}
@@ -248,6 +286,9 @@ async function openOrderTracking(id,phone=""){
   await refreshTracking(id,true);
   await mapReady;
   await refreshTracking(id,false);
+  // The modal is fully laid out now; force a map resize on the next paint so
+  // MapLibre never initializes against a partially-sized mobile sheet.
+  setTimeout(()=>{try{if(trackingMap){trackingMap.resize();if(trackingMap.__latest)renderTrackingMapContent(trackingMap.__latest.customerLat,trackingMap.__latest.customerLng,trackingMap.__latest.driverLat,trackingMap.__latest.driverLng)}}catch{}},80);
   // Start live driver refresh immediately. The customer location is also watched
   // automatically while this tracking window is open, so the customer does not
   // have to keep pressing UPDATE MY LOCATION.
@@ -345,18 +386,42 @@ function renderTrackingMapContent(customerLat,customerLng,driverLat,driverLng){
   else if(hc&&m.__initialFit){m.setCenter([clng,clat]);m.setZoom(15);m.__initialFit=false}
 }
 function loadTrackingMap(customerLat,customerLng,driverLat,driverLng){
-  const el=$("customerMap");if(!el)return;
-  const hc=Number.isFinite(Number(customerLat))&&Number.isFinite(Number(customerLng));const hd=Number.isFinite(Number(driverLat))&&Number.isFinite(Number(driverLng));
+  const el=$('customerMap');if(!el)return;
+  const hc=Number.isFinite(Number(customerLat))&&Number.isFinite(Number(customerLng));
+  const hd=Number.isFinite(Number(driverLat))&&Number.isFinite(Number(driverLng));
   if(!window.maplibregl){
-    el.innerHTML='<div class="map-placeholder"><br><b>Map service is loading</b><small>Connecting to the live delivery map…</small></div>';
-    ensureMapLibre().then(()=>{if($('customerMap')===el && trackingOrderId) loadTrackingMap(customerLat,customerLng,driverLat,driverLng)}).catch(()=>{});
+    el.innerHTML='<div class="map-placeholder"><b>Loading live map…</b><small>Please wait a moment.</small></div>';
+    ensureMapLibre().then(()=>{if($('customerMap')===el&&trackingOrderId)loadTrackingMap(customerLat,customerLng,driverLat,driverLng)}).catch(()=>{
+      el.innerHTML='<div class="map-placeholder"><b>Live map unavailable</b><small>Tap VIEW LIVE DRIVER LOCATION to retry.</small></div>';
+    });
     return;
   }
-  if(!hc&&!hd){el.innerHTML='<div class="map-placeholder"><br><b>Waiting for location</b><small>The order has no GPS location yet.</small></div>';if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}return}
+  if(!hc&&!hd){
+    el.innerHTML='<div class="map-placeholder"><b>Waiting for GPS</b><small>The customer or driver has not shared a valid location yet.</small></div>';
+    if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}
+    return;
+  }
   const clat=Number(customerLat),clng=Number(customerLng),dlat=Number(driverLat),dlng=Number(driverLng);
-  if(!trackingMap){el.innerHTML="";const center=[hd?dlng:clng,hd?dlat:clat];trackingMap=new maplibregl.Map({container:el,style:BASSE_MAP_STYLE,center,zoom:15,attributionControl:true,dragRotate:false,touchPitchRotate:false});trackingMap.__customer=null;trackingMap.__driver=null;trackingMap.__initialFit=true;trackingMap.on("load",()=>renderTrackingMapContent(customerLat,customerLng,driverLat,driverLng));}
-  trackingMap.__latest={customerLat,customerLng,driverLat,driverLng};if(trackingMap.isStyleLoaded())renderTrackingMapContent(customerLat,customerLng,driverLat,driverLng);
-  requestAnimationFrame(()=>{try{trackingMap.resize()}catch{}});
+  try{
+    if(!trackingMap){
+      el.innerHTML='';
+      const center=hd?[dlng,dlat]:[clng,clat];
+      trackingMap=new maplibregl.Map({container:el,style:BASSE_MAP_STYLE,center,zoom:15,attributionControl:true,dragRotate:false,touchPitchRotate:false,cooperativeGestures:false});
+      trackingMap.__customer=null;trackingMap.__driver=null;trackingMap.__initialFit=true;
+      trackingMap.on('load',()=>{try{trackingMap.resize();renderTrackingMapContent(clat,clng,dlat,dlng)}catch{}});
+      trackingMap.on('error',()=>{
+        if($('customerMap')===el && !el.querySelector('.maplibregl-canvas')){
+          el.innerHTML='<div class="map-placeholder"><b>Live map could not load</b><small>Tap VIEW LIVE DRIVER LOCATION to retry.</small></div>';
+        }
+      });
+    }
+    trackingMap.__latest={customerLat:clat,customerLng:clng,driverLat:dlat,driverLng:dlng};
+    if(trackingMap.isStyleLoaded())renderTrackingMapContent(clat,clng,dlat,dlng);
+    requestAnimationFrame(()=>{try{trackingMap.resize();if(trackingMap.isStyleLoaded())renderTrackingMapContent(clat,clng,dlat,dlng)}catch{}});
+  }catch(e){
+    trackingMap=null;
+    el.innerHTML='<div class="map-placeholder"><b>Live map could not load</b><small>Tap VIEW LIVE DRIVER LOCATION to retry.</small></div>';
+  }
 }
 function stopTrackingPolling(){if(trackingPoll){clearInterval(trackingPoll);trackingPoll=null}if(trackingStream){try{trackingStream.close()}catch{}trackingStream=null}if(trackingLocationWatch!==null){try{navigator.geolocation.clearWatch(trackingLocationWatch)}catch{}trackingLocationWatch=null}trackingLastLocationSent=0;if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}trackingPhone="";trackingOrderId="";trackingRefreshing=false}
 function captureCheckoutLocation(){

@@ -352,35 +352,27 @@ app.post("/api/admin/restore",guard,(req,res)=>{
       for(const table of Object.keys(schemas)){const cols=schemas[table],ins=db.prepare(`INSERT INTO ${table} (${cols.join(",")}) VALUES (${cols.map(()=>"?").join(",")})`);for(const x of (data.tables[table]||[]))ins.run(...cols.map(k=>x[k]??null))}
     });
     tx();
-    // Restore the database immediately. Uploaded images are copied in the background so the
-    // admin does not sit waiting on a large base64 image payload after the catalog is already restored.
-    const files=Array.isArray(data.files)?data.files:[];
+    // Restore uploaded images before exposing the restored catalog. The old background
+    // copy caused the browser to request new product records while their image files were
+    // still missing, which produced the visible image blinking. Files are written atomically.
     const productCount=(data.tables.products||[]).length, orderCount=(data.tables.orders||[]).length, vendorCount=(data.tables.vendors||[]).length, driverCount=(data.tables.delivery_drivers||[]).length, deliveryCount=(data.tables.deliveries||[]).length;
-    res.json({ok:true,message:`Catalog restored immediately: ${productCount} products, ${orderCount} orders, ${vendorCount} vendors, ${driverCount} drivers and ${deliveryCount} deliveries. Product options were restored. Images are being restored in the background.`});
-    setImmediate(()=>{
+    const files=Array.isArray(data.files)?data.files:[];
+    const uploadDir=path.join(DATA_DIR,"uploads");fs.mkdirSync(uploadDir,{recursive:true});
+    let restoredFiles=0;
+    for(const file of files){
+      if(!file?.path||!file.path.startsWith("uploads/")||file.path.includes(".."))continue;
+      const rel=file.path.slice("uploads/".length);if(!rel||rel.includes("/")||rel.includes("\\"))continue;
+      const dest=path.join(uploadDir,rel),tmp=dest+".restore-"+crypto.randomBytes(4).toString("hex");
       try{
-        const uploadDir=path.join(DATA_DIR,"uploads");fs.mkdirSync(uploadDir,{recursive:true});
-        // IMPORTANT: never delete the existing upload directory during restore.
-        // The database is restored first and the browser may request product images
-        // immediately. Deleting the directory first caused images to disappear/blink
-        // until the background copy finished. We now merge the backed-up files into
-        // the live directory and only replace a file when its backup size differs.
-        let restoredFiles=0;
-        for(const file of files){
-          if(!file?.path||!file.path.startsWith("uploads/")||file.path.includes(".."))continue;
-          const rel=file.path.slice("uploads/".length);if(!rel||rel.includes("/")||rel.includes("\\"))continue;
-          const dest=path.join(uploadDir,rel);
-          try{
-            const expected=Number(file.size||0), existing=fs.existsSync(dest)?fs.statSync(dest).size:-1;
-            if(existing===expected && expected>=0)continue;
-            fs.writeFileSync(dest,Buffer.from(file.content||"","base64"));restoredFiles++;
-          }catch{}
-        }
-        backupShopData("restore-images-complete");
-        broadcastLive("refresh",{});
-        console.log(`BACKGROUND RESTORE completed: ${restoredFiles} image files processed.`);
-      }catch(e){console.error("Background image restore failed:",e.message)}
-    });
+        const expected=Number(file.size||0),existing=fs.existsSync(dest)?fs.statSync(dest).size:-1;
+        if(existing===expected && expected>=0)continue;
+        fs.writeFileSync(tmp,Buffer.from(file.content||"","base64"));
+        fs.renameSync(tmp,dest);restoredFiles++;
+      }catch(e){try{fs.unlinkSync(tmp)}catch{}}
+    }
+    backupShopData("restore-complete");
+    broadcastLive("refresh",{});
+    res.json({ok:true,message:`Restore complete: ${productCount} products, ${orderCount} orders, ${vendorCount} vendors, ${driverCount} drivers and ${deliveryCount} deliveries. Product options and images are restored and ready.` ,restoredFiles});
   }catch(e){console.error("Backup restore failed:",e);res.status(500).json({error:"Restore failed. The backup format may not match this shop version."})}
 });
 app.get("/api/admin/stats",guard,(req,res)=>res.json({products:db.prepare("SELECT COUNT(*) c FROM products WHERE active=1").get().c,orders:db.prepare("SELECT COUNT(*) c FROM orders").get().c,customers:db.prepare("SELECT COUNT(*) c FROM (SELECT whatsapp FROM customer_accounts UNION SELECT whatsapp FROM orders WHERE whatsapp IS NOT NULL AND whatsapp!='')").get().c,pending:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PENDING'").get().c,paid:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PAID'").get().c,cancelled:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='CANCELLED' OR order_status='CANCELLED'").get().c,refunded:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='REFUNDED'").get().c,sales:db.prepare("SELECT COALESCE(SUM(total),0) s FROM orders WHERE payment_status='PAID' AND order_status!='CANCELLED' AND date(created_at)=date('now','localtime')").get().s,liveViewers:liveViewerStats()}));
@@ -653,7 +645,8 @@ app.post("/api/order/:id/customer-location",(req,res)=>{
   if(!validGambiaGps(lat,lng))return res.status(422).json({error:"GPS location appears to be outside The Gambia. Enable Precise Location and try again."});
   if(accuracy>1500)return res.status(422).json({error:`GPS accuracy is too low (±${Math.round(accuracy)}m). Turn on Precise Location, move outdoors for a few seconds, and try again.`});
   db.prepare("UPDATE orders SET customer_lat=?,customer_lng=?,customer_accuracy=? WHERE id=?").run(lat,lng,accuracy,o.id);
-  backupShopData("customer-gps-updated");
+  // GPS changes are live state, not catalog data. Do not rebuild the large base64 backup
+  // on every location update; doing so can stall the shop and make images blink.
   broadcastLive("orders",{orderId:o.id,customerLocation:true});
   res.json({ok:true,customerLat:lat,customerLng:lng,accuracy});
 });
