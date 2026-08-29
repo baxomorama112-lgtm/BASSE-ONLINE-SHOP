@@ -8,21 +8,17 @@ function startViewerPresence(){sendViewerHeartbeat();clearInterval(window.__view
 window.addEventListener("pagehide",()=>{try{navigator.sendBeacon("/api/presence/leave",new Blob([JSON.stringify({id:BASSE_VIEWER_ID})],{type:"application/json"}))}catch{}});
 const $=id=>document.getElementById(id),money=n=>"D"+Number(n||0).toLocaleString();
 let checkoutGps={lat:null,lng:null,accuracy:null},selectedChoices=[],trackingMap=null,trackingPoll=null,trackingStream=null,trackingPhone="",trackingOrderId="",trackingRefreshing=false,trackingLastEvent=0;
-let leafletPromise=null;
-function ensureLeaflet(){
-  if(window.L&&window.L.maplibreGL)return Promise.resolve(window.L);
-  if(leafletPromise)return leafletPromise;
-  leafletPromise=new Promise(resolve=>{
-    if(!document.querySelector('link[data-basse-leaflet]')){const css=document.createElement("link");css.rel="stylesheet";css.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";css.dataset.basseLeaflet="1";document.head.appendChild(css)}
+let mapLibrePromise=null;
+const BASSE_MAP_STYLE="https://tiles.openfreemap.org/styles/liberty";
+function ensureMapLibre(){
+  if(window.maplibregl)return Promise.resolve(window.maplibregl);
+  if(mapLibrePromise)return mapLibrePromise;
+  mapLibrePromise=new Promise(resolve=>{
     if(!document.querySelector('link[data-basse-maplibre]')){const css=document.createElement("link");css.rel="stylesheet";css.href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css";css.dataset.basseMaplibre="1";document.head.appendChild(css)}
-    const load=(src,ok,fail)=>{const sc=document.createElement("script");sc.src=src;sc.onload=ok;sc.onerror=fail;document.head.appendChild(sc)};
-    const finish=()=>resolve(window.L||null);
-    const loadPlugin=()=>load("https://unpkg.com/@maplibre/maplibre-gl-leaflet/leaflet-maplibre-gl.js",finish,finish);
-    const loadMapLibre=()=>load("https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js",loadPlugin,finish);
-    const loadLeaflet=()=>load("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",loadMapLibre,()=>load("https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js",loadMapLibre,finish));
-    if(window.L){if(window.maplibregl)loadPlugin();else loadMapLibre()}else loadLeaflet();
+    const load=(src,next)=>{const sc=document.createElement("script");sc.src=src;sc.onload=()=>resolve(window.maplibregl);sc.onerror=next;document.head.appendChild(sc)};
+    load("https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js",()=>load("https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.js",()=>resolve(null)));
   });
-  return leafletPromise;
+  return mapLibrePromise;
 }
 
 function renderProductGrid(ps, silent=false){
@@ -209,6 +205,7 @@ async function submitGuestTracking(){
     clearTimeout(timeout);
     const d=await r.json().catch(()=>({}));
     if(!r.ok)throw Error(d.error||"Order not found. Check the order number and WhatsApp number.");
+    closeModal();
     await openOrderTracking(d.order?.id||id,phone);
   }catch(e){
     toast(e.name==="AbortError"?"The server took too long to respond. Please try again.":(e.message||"Could not find this order."));
@@ -247,7 +244,7 @@ async function openOrderTracking(id,phone=""){
   const modal=$("modal");
   modal.innerHTML=`<div class="sheet tracking-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="mini-bag" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M12 18h24l-2 23H14z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M18 18v-4a6 6 0 0 1 12 0v4" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></span><div><small>BASSE DELIVERY</small><h2>Track Order</h2></div></div><div id="trackingBody"><div class="store-loading">Loading tracking…</div></div></div>`;
   modal.classList.add("show");
-  const mapReady=ensureLeaflet();
+  const mapReady=ensureMapLibre();
   await refreshTracking(id,true);
   await mapReady;
   await refreshTracking(id,false);
@@ -267,6 +264,27 @@ function startTrackingLiveStream(orderId){
   }catch{}
 }
 
+async function viewLiveDriverLocation(){
+  if(!trackingOrderId){toast("Enter an order number first.");return}
+  const btn=document.querySelector(".live-location-refresh");
+  if(btn){btn.disabled=true;btn.dataset.originalText=btn.innerHTML;btn.innerHTML=" LOADING LIVE LOCATION…"}
+  try{
+    await refreshTracking(trackingOrderId,false);
+    if(trackingMap){
+      const p=trackingMap.__latest||{};
+      const hc=Number.isFinite(Number(p.customerLat))&&Number.isFinite(Number(p.customerLng));
+      const hd=Number.isFinite(Number(p.driverLat))&&Number.isFinite(Number(p.driverLng));
+      if(hc||hd){
+        if(hc&&hd){const b=new maplibregl.LngLatBounds([Number(p.driverLng),Number(p.driverLat)],[Number(p.driverLng),Number(p.driverLat)]);b.extend([Number(p.customerLng),Number(p.customerLat)]);trackingMap.fitBounds(b,{padding:35,maxZoom:16,animate:true});}
+        else if(hc)trackingMap.flyTo({center:[Number(p.customerLng),Number(p.customerLat)],zoom:15,animate:true});
+        else trackingMap.flyTo({center:[Number(p.driverLng),Number(p.driverLat)],zoom:15,animate:true});
+        toast(hd?"Live driver location updated.":"Waiting for driver GPS.");
+      }else toast("No GPS location is available yet.");
+    }
+  }catch(e){toast(e.message||"Could not load live driver location.")}
+  finally{if(btn){btn.disabled=false;btn.innerHTML=btn.dataset.originalText||" VIEW LIVE DRIVER LOCATION"}}
+}
+
 async function refreshTracking(id,initial){
   if(trackingRefreshing)return;
   trackingRefreshing=true;
@@ -279,96 +297,48 @@ async function refreshTracking(id,initial){
     const hasDriver=Number.isFinite(Number(d.delivery?.lat))&&Number.isFinite(Number(d.delivery?.lng));
     if(initial){
       const map=`<div class="live-map-wrap"><div id="customerMap" class="customer-map"><div class="map-placeholder"><br><b>Live delivery map</b><small>Loading map…</small></div></div></div>`;
-      $("trackingBody").innerHTML=`<div class="tracking-card"><div class="track-top"><b>#${esc(d.order.id)}</b><span id="trackingStatus" class="badge"></span></div><h3 id="trackingProduct"></h3><p id="trackingLocation"></p>${map}<div class="tracking-location-actions"><button type="button" class="live-location-btn" onclick="captureTrackingLocation()"><span aria-hidden="true">⌖</span> UPDATE MY LOCATION</button><button type="button" class="live-location-refresh" onclick="showLiveDriverLocation()"><span aria-hidden="true">◉</span> VIEW LIVE DRIVER LOCATION</button></div><div class="timeline" id="trackingTimeline"></div><p class="muted" id="trackingNote"></p></div>`;
+      $("trackingBody").innerHTML=`<div class="tracking-card"><div class="track-top"><b>#${esc(d.order.id)}</b><span id="trackingStatus" class="badge"></span></div><h3 id="trackingProduct"></h3><p id="trackingLocation"></p>${map}<div class="tracking-location-actions"><button type="button" class="live-location-btn" onclick="captureTrackingLocation()"><span aria-hidden="true">⌖</span> UPDATE MY LOCATION</button><button type="button" class="live-location-refresh" onclick="viewLiveDriverLocation()"><span aria-hidden="true">◉</span> VIEW LIVE DRIVER LOCATION</button></div><div class="timeline" id="trackingTimeline"></div><p class="muted" id="trackingNote"></p></div>`;
     }
     const statusEl=$("trackingStatus"),productEl=$("trackingProduct"),locationEl=$("trackingLocation"),timelineEl=$("trackingTimeline"),noteEl=$("trackingNote");
     if(!statusEl||!productEl||!locationEl||!timelineEl||!noteEl)return;
     statusEl.textContent=status.replaceAll("_"," ");productEl.textContent=`${d.order.product_name} × ${d.order.quantity}`;locationEl.textContent=(d.order.location||"Delivery location pending")+(hasCustomer?" ·  GPS location saved":"");
     timelineEl.innerHTML=steps.map((x,i)=>`<div class="timeline-step ${i<=idx?"done":""}"><span>${i<=idx?"":"•"}</span><b>${x.replaceAll("_"," ")}</b></div>`).join("");
     const distance=hasCustomer&&hasDriver?trackingDistanceKm(Number(d.delivery.lat),Number(d.delivery.lng),Number(d.order.customer_lat),Number(d.order.customer_lng)):null;
-    const liveAge=d.delivery?.last_seen?(Date.now()-new Date(d.delivery.last_seen).getTime()):Infinity;
-    const liveText=Number.isFinite(liveAge)&&liveAge<45000?"LIVE GPS":d.delivery?.last_seen?`last update ${new Date(d.delivery.last_seen).toLocaleTimeString()}`:"waiting for GPS";
-    noteEl.innerHTML=hasDriver?`Driver: <b>${esc(d.delivery.driver_name||"Assigned driver")}</b> · ${distance!==null?`<b>${distance<1?Math.round(distance*1000)+" m":distance.toFixed(1)+" km"}</b> away · `:""}${esc(liveText)}`:(d.delivery?.driver_name?`Driver: <b>${esc(d.delivery.driver_name)}</b> · Waiting for GPS. Keep this screen open and tap the live-location button to refresh.`:"A driver will be assigned after your order is confirmed.");
-    if(window.L)loadTrackingMap(d.order.customer_lat,d.order.customer_lng,d.delivery?.lat,d.delivery?.lng);
+    noteEl.innerHTML=hasDriver?`Driver: <b>${esc(d.delivery.driver_name||"Assigned driver")}</b> · ${distance!==null?`<b>${distance<1?Math.round(distance*1000)+" m":distance.toFixed(1)+" km"}</b> away · `:""}${d.delivery.last_seen?`last update ${new Date(d.delivery.last_seen).toLocaleTimeString()}`:"live"}`:(d.delivery?.driver_name?`Driver: <b>${esc(d.delivery.driver_name)}</b> · Waiting for GPS. Keep this screen open and tap the live-location button to refresh.`:"A driver will be assigned after your order is confirmed.");
+    if(window.maplibregl)loadTrackingMap(d.order.customer_lat,d.order.customer_lng,d.delivery?.lat,d.delivery?.lng);
     if(status==="DELIVERED")stopTrackingPolling();
   }catch(e){if(initial)$("trackingBody").innerHTML=`<div class="empty-search"><div></div><h3>Order not found</h3><p>${esc(e.message||"Check your order number.")}</p></div>`}
   finally{trackingRefreshing=false}
 }
-function mapTiles(map){
-  const style="https://tiles.openfreemap.org/styles/liberty";
-  if(window.L?.maplibreGL&&window.maplibregl){
-    try{return L.maplibreGL({style}).addTo(map)}catch(e){}
-  }
-  const providers=[
-    ["https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",'© OpenStreetMap contributors © CARTO'],
-    ["https://tile.openstreetmap.org/{z}/{x}/{y}.png",'© OpenStreetMap contributors']
-  ];
-  let layer=L.tileLayer(providers[0][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[0][1]}).addTo(map);
-  let switched=false;layer.on("tileerror",()=>{if(switched)return;switched=true;try{map.removeLayer(layer)}catch{};layer=L.tileLayer(providers[1][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[1][1]}).addTo(map)});
-  return layer;
+function mapMarker(label,type){
+  const el=document.createElement("div");el.className=`basse-map-marker ${type}-marker maplibre-marker`;
+  el.innerHTML=`<span></span><b>${label}</b>`;return el;
 }
-function showLiveDriverLocation(){
-  if(!trackingOrderId)return toast("Enter your order number first.");
-  const btn=document.querySelector('.live-location-refresh');
-  if(btn){btn.disabled=true;btn.dataset.originalText=btn.innerHTML;btn.innerHTML=' CHECKING LIVE GPS…'}
-  refreshTracking(trackingOrderId,false).then(()=>{
-    const m=trackingMap;
-    if(m){
-      const points=[];
-      if(m.__driver)points.push(m.__driver.getLatLng());
-      if(m.__customer)points.push(m.__customer.getLatLng());
-      if(points.length>1)m.fitBounds(L.latLngBounds(points),{padding:[30,30],maxZoom:17});
-      else if(points.length===1)m.setView(points[0],16);
-      m.invalidateSize({pan:false});
-    }
-    const note=document.querySelector('#trackingNote');
-    const hasDriver=!!trackingMap?.__driver;
-    if(!hasDriver)toast('The driver has not shared a fresh GPS location yet. Keep tracking open and try again.');
-    else toast('Driver location refreshed.');
-  }).catch(()=>{}).finally(()=>{if(btn){btn.disabled=false;btn.innerHTML=btn.dataset.originalText||' VIEW LIVE DRIVER LOCATION'}});
+function renderTrackingMapContent(customerLat,customerLng,driverLat,driverLng){
+  const m=trackingMap;if(!m||!m.isStyleLoaded())return;
+  const clat=Number(customerLat),clng=Number(customerLng),dlat=Number(driverLat),dlng=Number(driverLng);
+  const hc=Number.isFinite(clat)&&Number.isFinite(clng),hd=Number.isFinite(dlat)&&Number.isFinite(dlng);
+  if(hc){if(!m.__customer){m.__customer=new maplibregl.Marker({element:mapMarker("Customer","customer")}).setLngLat([clng,clat]).addTo(m)}else m.__customer.setLngLat([clng,clat])}
+  if(hd){if(!m.__driver){m.__driver=new maplibregl.Marker({element:mapMarker("Driver","driver")}).setLngLat([dlng,dlat]).addTo(m)}else m.__driver.setLngLat([dlng,dlat])}
+  if(hc&&hd){const coords=[[dlng,dlat],[clng,clat]];const source=m.getSource("basse-live-line");if(!source)m.addSource("basse-live-line",{type:"geojson",data:{type:"Feature",geometry:{type:"LineString",coordinates:coords}}});else source.setData({type:"Feature",geometry:{type:"LineString",coordinates:coords}});if(!m.getLayer("basse-live-line"))m.addLayer({id:"basse-live-line",type:"line",source:"basse-live-line",paint:{"line-color":"#2878ff","line-width":4,"line-dasharray":[2,2],"line-opacity":0.9}});if(m.__initialFit){const b=new maplibregl.LngLatBounds([dlng,dlat],[dlng,dlat]);b.extend([clng,clat]);m.fitBounds(b,{padding:30,maxZoom:16});m.__initialFit=false}}
+  else if(hc&&m.__initialFit){m.setCenter([clng,clat]);m.setZoom(15);m.__initialFit=false}
 }
 function loadTrackingMap(customerLat,customerLng,driverLat,driverLng){
   const el=$("customerMap");if(!el)return;
-  const hasCustomer=Number.isFinite(Number(customerLat))&&Number.isFinite(Number(customerLng));
-  const hasDriver=Number.isFinite(Number(driverLat))&&Number.isFinite(Number(driverLng));
-  if(!window.L){
-    el.innerHTML='<div class="map-placeholder"><br><b>Map service is loading</b><small>Please wait a moment and tap Track Order again.</small></div>';
-    return;
-  }
-  if(!hasCustomer&&!hasDriver){
-    el.innerHTML='<div class="map-placeholder"><br><b>Waiting for location</b><small>The order has no GPS location yet.</small></div>';
-    if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}return;
-  }
+  const hc=Number.isFinite(Number(customerLat))&&Number.isFinite(Number(customerLng));const hd=Number.isFinite(Number(driverLat))&&Number.isFinite(Number(driverLng));
+  if(!window.maplibregl){el.innerHTML='<div class="map-placeholder"><br><b>Map service is loading</b><small>Please wait a moment and tap Track Order again.</small></div>';return}
+  if(!hc&&!hd){el.innerHTML='<div class="map-placeholder"><br><b>Waiting for location</b><small>The order has no GPS location yet.</small></div>';if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}return}
   const clat=Number(customerLat),clng=Number(customerLng),dlat=Number(driverLat),dlng=Number(driverLng);
-  if(!trackingMap){
-    el.innerHTML="";
-    const center=[hasDriver?dlat:clat,hasDriver?dlng:clng];
-    trackingMap=L.map(el,{zoomControl:true,scrollWheelZoom:false,dragging:true,doubleClickZoom:false,boxZoom:false,keyboard:true,preferCanvas:true,fadeAnimation:false,zoomAnimation:true,markerZoomAnimation:false}).setView(center,15);
-    mapTiles(trackingMap);
-    trackingMap.__customer=null;trackingMap.__driver=null;trackingMap.__line=null;trackingMap.__initialFit=true;
-  }
-  const m=trackingMap;
-  if(hasCustomer){
-    if(!m.__customer)m.__customer=L.marker([clat,clng],{icon:L.divIcon({className:"basse-map-marker customer-marker",html:"<span></span><b>Customer</b>",iconSize:[82,30],iconAnchor:[12,28],zIndexOffset:500})}).addTo(m).bindPopup(" Your delivery location");
-    else m.__customer.setLatLng([clat,clng]);
-  }
-  if(hasDriver){
-    if(!m.__driver)m.__driver=L.marker([dlat,dlng],{icon:L.divIcon({className:"basse-map-marker driver-marker",html:"<span></span><b>Driver</b>",iconSize:[70,30],iconAnchor:[12,28],zIndexOffset:1200})}).addTo(m).bindPopup(" Driver — live");
-    else m.__driver.setLatLng([dlat,dlng]);
-  }
-  if(hasCustomer&&hasDriver){
-    const points=[[dlat,dlng],[clat,clng]];
-    if(!m.__line)m.__line=L.polyline(points,{weight:4,dashArray:"9 8"}).addTo(m);else m.__line.setLatLngs(points);
-    if(m.__initialFit){m.fitBounds(L.latLngBounds(points),{padding:[25,25],maxZoom:16});m.__initialFit=false}
-  }else if(hasCustomer&&m.__initialFit){m.setView([clat,clng],15);m.__initialFit=false}
-  requestAnimationFrame(()=>{try{m.invalidateSize({pan:false})}catch(e){}});
+  if(!trackingMap){el.innerHTML="";const center=[hd?dlng:clng,hd?dlat:clat];trackingMap=new maplibregl.Map({container:el,style:BASSE_MAP_STYLE,center,zoom:15,attributionControl:true,dragRotate:false,touchPitchRotate:false});trackingMap.__customer=null;trackingMap.__driver=null;trackingMap.__initialFit=true;trackingMap.on("load",()=>renderTrackingMapContent(customerLat,customerLng,driverLat,driverLng));}
+  trackingMap.__latest={customerLat,customerLng,driverLat,driverLng};if(trackingMap.isStyleLoaded())renderTrackingMapContent(customerLat,customerLng,driverLat,driverLng);
+  requestAnimationFrame(()=>{try{trackingMap.resize()}catch{}});
 }
 function stopTrackingPolling(){if(trackingPoll){clearInterval(trackingPoll);trackingPoll=null}if(trackingStream){try{trackingStream.close()}catch{}trackingStream=null}if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}trackingPhone="";trackingOrderId="";trackingRefreshing=false}
 function captureCheckoutLocation(){
   const state=$("checkoutGpsState");
   if(!navigator.geolocation){if(state)state.textContent="This phone/browser does not support GPS.";return}
   if(state)state.textContent="Getting your location…";
-  navigator.geolocation.getCurrentPosition(p=>{const lat=Number(p.coords.latitude),lng=Number(p.coords.longitude),accuracy=Number(p.coords.accuracy||0);const inGambia=lat>=12.90&&lat<=13.90&&lng>=-17.20&&lng<=-13.40;if(!inGambia){checkoutGps={lat:null,lng:null,accuracy:null};if(state)state.textContent="GPS reading looks outside The Gambia. Please enable Precise Location and try again.";return}checkoutGps={lat,lng,accuracy};if(state)state.textContent=` GPS location saved (±${Math.round(p.coords.accuracy||0)}m).`;},()=>{if(state)state.textContent="GPS permission was not granted. You can continue with the delivery area."},{enableHighAccuracy:true,maximumAge:10000,timeout:15000});
+  navigator.geolocation.getCurrentPosition(p=>{checkoutGps={lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy};if(state)state.textContent=` GPS location saved (±${Math.round(p.coords.accuracy||0)}m).`;},()=>{if(state)state.textContent="GPS permission was not granted. You can continue with the delivery area."},{enableHighAccuracy:true,maximumAge:10000,timeout:15000});
 }
 
 async function placeOrder(){
@@ -406,7 +376,7 @@ Please confirm my order. Thank you.`}
 function showReturn(o,msg,paid,adminWhatsApp,note=""){
   let target=String(adminWhatsApp||o.whatsappSupport||"").replace(/\D/g,"");
   let href=target?`https://wa.me/${target}?text=${encodeURIComponent(msg||receiptMessage(o))}`:"#";
-  $("modal").innerHTML=`<div class="sheet return-sheet"><button class="close" onclick="closeModal()">×</button><div class="result-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="m10 25 9 9 19-20" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div><h2>${paid?"Payment successful!":"Order received"}</h2><p>${paid?"Your payment has been confirmed.":note||"Your order has been received."}</p>${o.id?`<div class="summary"><div class="row"><span>Order</span><b>${esc(o.id)}</b></div><div class="row"><span>Total</span><b>${money(o.total)}</b></div><div class="row"><span>Payment</span><b>${paid?"PAID":"PENDING"}</b></div></div>`:""}${target&&o.id?`<a class="whats" href="${href}" target="_blank" rel="noopener"> SEND ORDER TO BASSE SHOP</a>`:""}${o.id?`<button class="secondary-btn" onclick="openOrderTracking('${o.id}')"> TRACK ORDER</button>`:""}<button class="secondary-btn" onclick="closeModal()">CONTINUE SHOPPING</button></div>`;$('modal').classList.add('show')
+  $("modal").innerHTML=`<div class="sheet return-sheet"><button class="close" onclick="closeModal()">×</button><div class="result-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="m10 25 9 9 19-20" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div><h2>${paid?"Payment successful!":"Order received"}</h2><p>${paid?"Your payment has been confirmed.":note||"Your order has been received."}</p>${o.id?`<div class="summary"><div class="row"><span>Order</span><b>${esc(o.id)}</b></div><div class="row"><span>Total</span><b>${money(o.total)}</b></div><div class="row"><span>Payment</span><b>${paid?"PAID":"PENDING"}</b></div></div>`:""}${target&&o.id?`<a class="whats" href="${href}" target="_blank" rel="noopener"> SEND ORDER TO BASSE SHOP</a>`:""}${o.id?`<button class="secondary-btn" onclick="openOrderTracking('${o.id}','${esc(o.whatsapp||'')}')"> TRACK ORDER</button>`:""}<button class="secondary-btn" onclick="closeModal()">CONTINUE SHOPPING</button></div>`;$('modal').classList.add('show')
 }
 async function waitForPayment(id,attempt=0){
   try{

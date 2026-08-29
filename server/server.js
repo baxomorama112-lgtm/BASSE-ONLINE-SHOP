@@ -56,10 +56,10 @@ try{db.exec("ALTER TABLE orders ADD COLUMN customer_lng REAL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_accuracy REAL")}catch(e){}
 const BACKUP_TABLES=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys","delivery_drivers","deliveries"];
 function buildShopSnapshot(){
-  const data={version:5,createdAt:new Date().toISOString(),tables:{}};
+  const data={version:3,createdAt:new Date().toISOString(),tables:{}};
   for(const table of BACKUP_TABLES)data.tables[table]=db.prepare(`SELECT * FROM ${table}`).all();
-  data.productDetails=(data.tables.products||[]).map(p=>({id:p.id,name:p.name,description:p.description||"",options_json:p.options_json||"{}",images:p.images||"",image:p.image||"",stock:Number(p.stock||0),category:p.category||"",price:Number(p.price||0)}));
-  data.meta={productCount:data.tables.products.length,productDetailsCount:data.productDetails.length,productsWithOptions:data.productDetails.filter(p=>p.options_json&&p.options_json!=="{}").length,orderCount:data.tables.orders.length,vendorCount:data.tables.vendors.length,driverCount:(data.tables.delivery_drivers||[]).length,deliveryCount:(data.tables.deliveries||[]).length,orderTotal:data.tables.orders.reduce((n,o)=>n+Number(o.total||0),0)};
+  data.tables.products=data.tables.products.map(normalizeProductBackupRow);
+  data.meta={productCount:data.tables.products.length,orderCount:data.tables.orders.length,vendorCount:data.tables.vendors.length,driverCount:(data.tables.delivery_drivers||[]).length,deliveryCount:(data.tables.deliveries||[]).length,orderTotal:data.tables.orders.reduce((n,o)=>n+Number(o.total||0),0)};
   return data;
 }
 function collectBackupFiles(){
@@ -70,12 +70,23 @@ function collectBackupFiles(){
     const full=path.join(dir,name);
     try{
       if(fs.statSync(full).isFile()){
-        out.push({path:`uploads/${name}`,content:fs.readFileSync(full).toString("base64")});
+        out.push({path:`uploads/${name}`,size:fs.statSync(full).size,content:fs.readFileSync(full).toString("base64")});
       }
     }catch{}
   }
   return out;
 }
+function normalizeProductBackupRow(row){
+  const x={...row};
+  let opts={};
+  try{if(typeof x.options_json==='string')opts=JSON.parse(x.options_json||"{}");else if(x.options_json&&typeof x.options_json==='object')opts={...x.options_json}}catch{}
+  // Preserve option data even if an older backup stored these fields separately.
+  for(const k of ["option_colors","option_sizes","option_phone_type","option_phone_model","option_storage","option_other"]){if(x[k]&&!opts[k])opts[k]=String(x[k])}
+  x.options_json=Object.keys(opts).length?JSON.stringify(opts):"{}";
+  x.options=opts;
+  return x;
+}
+
 function buildFullBackupSnapshot(reason="auto"){
   const data=buildShopSnapshot();
   data.version=4;
@@ -138,7 +149,7 @@ function restoreShopBackupIfEmpty(){
         const cols=schemas[table], rows=Array.isArray(data.tables[table])?data.tables[table]:[];
         if(!rows.length)continue;
         const ins=db.prepare(`INSERT INTO ${table} (${cols.join(",")}) VALUES (${cols.map(()=>"?").join(",")})`);
-        for(const row of rows)ins.run(...cols.map(k=>row[k]??null));
+        for(const row of rows){const r=table==="products"?normalizeProductBackupRow(row):row;ins.run(...cols.map(k=>r[k]??null));}
       }
     });
     tx();
@@ -259,7 +270,7 @@ app.get("/api/stores/:id",(req,res)=>{
 
 app.get("/api/products",(req,res)=>{
   const c=String(req.query.category||"All"),q=String(req.query.q||"").trim().toLowerCase();
-  let p=db.prepare("SELECT id,name,category,price,stock,description,image,active,vendor_id FROM products WHERE active=1 ORDER BY id DESC").all();
+  let p=db.prepare("SELECT id,name,category,price,stock,description,image,active,vendor_id,options_json FROM products WHERE active=1 ORDER BY id DESC").all();
   if(c!=="All")p=p.filter(x=>x.category===c);
   if(q)p=p.filter(x=>(x.name+" "+x.category+" "+(x.description||"")).toLowerCase().includes(q));
   res.set("Cache-Control",q?"private,max-age=5":"public,max-age=5,stale-while-revalidate=20");
@@ -277,14 +288,14 @@ app.post("/api/admin/login",(req,res)=>{
 app.get("/api/admin/products",guard,(req,res)=>res.json(db.prepare("SELECT * FROM products ORDER BY id DESC").all()));
 app.post("/api/admin/products",guard,upload.array("images",8),(req,res)=>{let b=req.body,files=req.files||[],fileImgs=files.map(f=>"/uploads/"+f.filename),img=fileImgs[0]||b.imageUrl||"",imgs=JSON.stringify(fileImgs.length?fileImgs:(b.images?String(b.images).split(",").map(x=>x.trim()).filter(Boolean):[]));
 let x=db.prepare("INSERT INTO products(name,category,price,stock,description,image,images,vendor_id,options_json) VALUES(?,?,?,?,?,?,?,?,?)").run(b.name,b.category,+b.price,+b.stock||0,b.description||"",img,imgs,b.vendorId?+b.vendorId:null,productOptionsFromBody(b));let created=db.prepare("SELECT * FROM products WHERE id=?").get(x.lastInsertRowid);backupCatalog();broadcastLive("catalog",{productId:created.id});res.json(created)});
-app.put("/api/admin/products/:id",guard,upload.array("images",8),(req,res)=>{let p=db.prepare("SELECT * FROM products WHERE id=?").get(req.params.id);if(!p)return res.status(404).json({error:"Product not found"});let b=req.body,files=req.files||[],fileImgs=files.map(f=>"/uploads/"+f.filename),img=fileImgs[0]||b.imageUrl||p.image,oldImgs=p.images||"[]",imgs=fileImgs.length?JSON.stringify(fileImgs):(b.images?JSON.stringify(String(b.images).split(",").map(x=>x.trim()).filter(Boolean)):oldImgs);db.prepare("UPDATE products SET name=?,category=?,price=?,stock=?,description=?,image=?,images=?,vendor_id=?,options_json=? WHERE id=?").run(b.name,b.category,+b.price,+b.stock,b.description||"",img,imgs,b.vendorId?+b.vendorId:p.vendor_id||null,productOptionsFromBody(b)||p.options_json||"{}",p.id);let updated=db.prepare("SELECT * FROM products WHERE id=?").get(p.id);backupCatalog();broadcastLive("catalog",{productId:p.id});res.json(updated)});
+app.put("/api/admin/products/:id",guard,upload.array("images",8),(req,res)=>{let p=db.prepare("SELECT * FROM products WHERE id=?").get(req.params.id);if(!p)return res.status(404).json({error:"Product not found"});let b=req.body,files=req.files||[],fileImgs=files.map(f=>"/uploads/"+f.filename),img=fileImgs[0]||b.imageUrl||p.image,oldImgs=p.images||"[]",imgs=fileImgs.length?JSON.stringify(fileImgs):(b.images?JSON.stringify(String(b.images).split(",").map(x=>x.trim()).filter(Boolean)):oldImgs);db.prepare("UPDATE products SET name=?,category=?,price=?,stock=?,description=?,image=?,images=?,vendor_id=?,options_json=? WHERE id=?").run(b.name,b.category,+b.price,+b.stock,b.description||"",img,imgs,b.vendorId?+b.vendorId:p.vendor_id||null,productOptionsFromBody(b,p.options_json)||"{}",p.id);let updated=db.prepare("SELECT * FROM products WHERE id=?").get(p.id);backupCatalog();broadcastLive("catalog",{productId:p.id});res.json(updated)});
 app.delete("/api/admin/products/:id",guard,(req,res)=>{db.prepare("UPDATE products SET active=0 WHERE id=?").run(req.params.id);backupCatalog();broadcastLive("catalog",{productId:Number(req.params.id)});res.json({ok:true})});
 app.get("/api/admin/orders",guard,(req,res)=>res.json(db.prepare(`SELECT o.*,v.business_name AS vendor_business_name,v.whatsapp AS vendor_whatsapp FROM orders o LEFT JOIN vendors v ON v.id=o.vendor_id ORDER BY datetime(o.created_at) DESC`).all()));
 app.get("/api/admin/backup",guard,(req,res)=>{
   try{
     const data=buildFullBackupSnapshot("manual-download");
-    data.version=5;
-    data.backupNote="Includes complete shop database records, product options/details, stock, vendor links and uploaded files from server/data/uploads.";
+    data.version=4;
+    data.backupNote="Includes shop database records AND uploaded files from server/data/uploads.";
     res.set("Content-Disposition",`attachment; filename="basse-online-shop-full-backup-${new Date().toISOString().slice(0,10)}.json"`);
     res.type("application/json").send(JSON.stringify(data,null,2));
   }catch(e){res.status(500).json({error:"Could not create backup with images."})}
@@ -327,8 +338,7 @@ app.post("/api/admin/restore",guard,(req,res)=>{
       for(const table of tables)db.prepare(`DELETE FROM ${table}`).run();
       const productCols=["id","name","category","price","stock","description","image","active","created_at","images","vendor_id","options_json"];
       const productIns=db.prepare(`INSERT INTO products (${productCols.join(",")}) VALUES (${productCols.map(()=>"?").join(",")})`);
-      const productDetails=new Map((data.productDetails||[]).map(x=>[String(x.id),x]));
-      for(const x of (data.tables.products||[])){const detail=productDetails.get(String(x.id))||{};productIns.run(...productCols.map(k=>{if(x[k]!==undefined&&x[k]!==null)return x[k];if(k==="options_json")return detail.options_json||"{}";if(k==="images")return detail.images||"";return null}));}
+      for(const x of (data.tables.products||[])){const r=normalizeProductBackupRow(x);productIns.run(...productCols.map(k=>r[k]??null));}
       const schemas={
         orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings","stock_reserved","stock_released","customer_lat","customer_lng","customer_accuracy"],
         vendors:["id","full_name","business_name","whatsapp","email","email_verified","verification_code","verification_expires","location","category","description","password_hash","status","created_at"],
@@ -342,24 +352,35 @@ app.post("/api/admin/restore",guard,(req,res)=>{
       for(const table of Object.keys(schemas)){const cols=schemas[table],ins=db.prepare(`INSERT INTO ${table} (${cols.join(",")}) VALUES (${cols.map(()=>"?").join(",")})`);for(const x of (data.tables[table]||[]))ins.run(...cols.map(k=>x[k]??null))}
     });
     tx();
-    // Restore the actual uploaded image files that were embedded in the backup.
-    const uploadDir=path.join(DATA_DIR,"uploads");
-    fs.mkdirSync(uploadDir,{recursive:true});
-    for(const name of fs.readdirSync(uploadDir)){
-      const full=path.join(uploadDir,name);
-      try{ if(fs.statSync(full).isFile()) fs.unlinkSync(full); }catch{}
-    }
-    let restoredFiles=0;
-    for(const file of (data.files||[])){
-      if(!file?.path || !file.path.startsWith("uploads/") || file.path.includes("..")) continue;
-      const rel=file.path.slice("uploads/".length);
-      if(!rel || rel.includes("/") || rel.includes("\\")) continue;
-      const dest=path.join(uploadDir,rel);
-      try{ fs.writeFileSync(dest,Buffer.from(file.content||"","base64")); restoredFiles++; }catch{}
-    }
-    backupShopData("restore");
-    broadcastLive("refresh",{});
-    res.json({ok:true,message:`Backup restored successfully: ${data.tables.products.length} products, ${(data.tables.orders||[]).length} orders, ${(data.tables.vendors||[]).length} vendors, ${(data.tables.delivery_drivers||[]).length} drivers, ${(data.tables.deliveries||[]).length} deliveries and ${restoredFiles} image files.`});
+    // Restore the database immediately. Uploaded images are copied in the background so the
+    // admin does not sit waiting on a large base64 image payload after the catalog is already restored.
+    const files=Array.isArray(data.files)?data.files:[];
+    const productCount=(data.tables.products||[]).length, orderCount=(data.tables.orders||[]).length, vendorCount=(data.tables.vendors||[]).length, driverCount=(data.tables.delivery_drivers||[]).length, deliveryCount=(data.tables.deliveries||[]).length;
+    res.json({ok:true,message:`Catalog restored immediately: ${productCount} products, ${orderCount} orders, ${vendorCount} vendors, ${driverCount} drivers and ${deliveryCount} deliveries. Product options were restored. Images are being restored in the background.`});
+    setImmediate(()=>{
+      try{
+        const uploadDir=path.join(DATA_DIR,"uploads");fs.mkdirSync(uploadDir,{recursive:true});
+        // Remove files that belong to the previous catalog only after the database is already restored.
+        // This keeps the restore request fast while the image set is rebuilt in the background.
+        for(const name of fs.readdirSync(uploadDir)){
+          const full=path.join(uploadDir,name);try{if(fs.statSync(full).isFile())fs.unlinkSync(full)}catch{}
+        }
+        let restoredFiles=0;
+        for(const file of files){
+          if(!file?.path||!file.path.startsWith("uploads/")||file.path.includes(".."))continue;
+          const rel=file.path.slice("uploads/".length);if(!rel||rel.includes("/")||rel.includes("\\"))continue;
+          const dest=path.join(uploadDir,rel);
+          try{
+            const expected=Number(file.size||0), existing=fs.existsSync(dest)?fs.statSync(dest).size:-1;
+            if(existing===expected && expected>=0)continue;
+            fs.writeFileSync(dest,Buffer.from(file.content||"","base64"));restoredFiles++;
+          }catch{}
+        }
+        backupShopData("restore-images-complete");
+        broadcastLive("refresh",{});
+        console.log(`BACKGROUND RESTORE completed: ${restoredFiles} image files processed.`);
+      }catch(e){console.error("Background image restore failed:",e.message)}
+    });
   }catch(e){console.error("Backup restore failed:",e);res.status(500).json({error:"Restore failed. The backup format may not match this shop version."})}
 });
 app.get("/api/admin/stats",guard,(req,res)=>res.json({products:db.prepare("SELECT COUNT(*) c FROM products WHERE active=1").get().c,orders:db.prepare("SELECT COUNT(*) c FROM orders").get().c,customers:db.prepare("SELECT COUNT(*) c FROM (SELECT whatsapp FROM customer_accounts UNION SELECT whatsapp FROM orders WHERE whatsapp IS NOT NULL AND whatsapp!='')").get().c,pending:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PENDING'").get().c,paid:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PAID'").get().c,cancelled:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='CANCELLED' OR order_status='CANCELLED'").get().c,refunded:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='REFUNDED'").get().c,sales:db.prepare("SELECT COALESCE(SUM(total),0) s FROM orders WHERE payment_status='PAID' AND order_status!='CANCELLED' AND date(created_at)=date('now','localtime')").get().s,liveViewers:liveViewerStats()}));
@@ -490,18 +511,11 @@ app.get("/api/order/:id/tracking",(req,res)=>{
   const orderPhone=normalizePhone(o.whatsapp);
   if(suppliedPhone && suppliedPhone!==orderPhone)return res.status(403).json({error:"The WhatsApp number does not match this order."});
   if(req.query.phone && !suppliedPhone)return res.status(403).json({error:"Enter the WhatsApp number used for this order."});
-  let d=db.prepare(`
+  const d=db.prepare(`
     SELECT d.*,dr.full_name AS driver_name,dr.whatsapp AS driver_whatsapp
     FROM deliveries d LEFT JOIN delivery_drivers dr ON dr.id=d.driver_id
     WHERE UPPER(REPLACE(d.order_id,' ',''))=?
   `).get(rawId);
-  if(d){
-    const lat=Number(d.lat),lng=Number(d.lng);
-    const sane=validGambiaGps(lat,lng);
-    const stale=d.last_seen?((Date.now()-new Date(d.last_seen).getTime())>10*60*1000):true;
-    const tooFar=o.customer_lat!=null&&o.customer_lng!=null&&sane&&gpsDistanceKm(lat,lng,Number(o.customer_lat),Number(o.customer_lng))>500;
-    if(!sane||tooFar||stale){d={...d,lat:null,lng:null,accuracy:null,last_seen:d.last_seen};}
-  }
   res.set("Cache-Control","no-store");
   res.json({order:o,delivery:d||null,trackingActive:String(d?.status||o.order_status)!=="DELIVERED"});
 });
@@ -651,9 +665,6 @@ app.post("/api/driver/deliveries/:id/location",driverGuard,(req,res)=>{
   if(!Number.isFinite(lat)||!Number.isFinite(lng)||lat<-90||lat>90||lng<-180||lng>180)return res.status(400).json({error:"Invalid GPS coordinates."});
   if(!validGambiaGps(lat,lng))return res.status(422).json({error:"GPS location appears to be outside The Gambia. Enable Precise Location and try again."});
   if(accuracy>1500)return res.status(422).json({error:`GPS accuracy is too low (±${Math.round(accuracy)}m). Turn on Precise Location and try again.`});
-  const orderForGps=db.prepare("SELECT order_status,customer_lat,customer_lng FROM orders WHERE id=?").get(d.order_id);
-  if(String(orderForGps?.order_status||"").toUpperCase()==="DELIVERED")return res.status(409).json({error:"This delivery is already marked delivered."});
-  if(orderForGps?.customer_lat!=null&&orderForGps?.customer_lng!=null){const km=gpsDistanceKm(lat,lng,Number(orderForGps.customer_lat),Number(orderForGps.customer_lng));if(km>500)return res.status(422).json({error:`GPS reading is about ${Math.round(km)} km from the customer's saved location. The location looks incorrect; enable Precise Location and try again.`});}
   db.prepare("UPDATE deliveries SET lat=?,lng=?,accuracy=?,last_seen=? WHERE id=?").run(lat,lng,accuracy,new Date().toISOString(),d.id);
   const now=Date.now(), last=lastLocationBroadcast.get(String(d.order_id))||0;
   if(now-last>=2000){lastLocationBroadcast.set(String(d.order_id),now);broadcastLive("orders",{orderId:d.order_id,location:true});}
@@ -722,7 +733,7 @@ app.get("/api/vendor/products",vendorGuard,(req,res)=>res.json(db.prepare("SELEC
 
 
 try{db.prepare("ALTER TABLE products ADD COLUMN options_json TEXT DEFAULT '{}'").run()}catch{}
-function productOptionsFromBody(b){const o={};[['option_colors','Colors'],['option_sizes','Sizes'],['option_phone_type','Phone Type / Brand'],['option_phone_model','Phone Model'],['option_storage','Storage / Variant'],['option_other','Other Options']].forEach(([k])=>{const v=String(b?.[k]||'').trim();if(v)o[k]=v});if(b?.options_json){try{const x=typeof b.options_json==='string'?JSON.parse(b.options_json):b.options_json;Object.assign(o,x||{})}catch{}}return Object.keys(o).length?JSON.stringify(o):''}
+function productOptionsFromBody(b,existing=""){const o={};if(existing){try{const x=typeof existing==='string'?JSON.parse(existing):existing;Object.assign(o,x||{})}catch{}}[['option_colors','Colors'],['option_sizes','Sizes'],['option_phone_type','Phone Type / Brand'],['option_phone_model','Phone Model'],['option_storage','Storage / Variant'],['option_other','Other Options']].forEach(([k])=>{if(b&&Object.prototype.hasOwnProperty.call(b,k)){const v=String(b[k]||'').trim();if(v)o[k]=v;else delete o[k]}});if(b?.options_json){try{const x=typeof b.options_json==='string'?JSON.parse(b.options_json):b.options_json;Object.assign(o,x||{})}catch{}}return Object.keys(o).length?JSON.stringify(o):''}
 function orderOptionsLabel(options){if(!Array.isArray(options))return '';return options.map(x=>String(x||'').trim()).filter(Boolean).join(' · ')}
 function hashPin(pin){return crypto.createHash("sha256").update(String(pin)).digest("hex")}
 

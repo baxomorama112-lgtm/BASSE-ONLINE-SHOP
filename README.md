@@ -91,7 +91,7 @@ Full backups now include the actual uploaded files from `server/data/uploads` as
 - Driver mobile portal at `/driver/`
 - Live GPS sharing only during active deliveries
 - Customer order tracking at `/api/order/:id/tracking` and Track Order UI
-- Uses browser GPS + OpenFreeMap/MapLibre (with a fallback tile layer); no Google Maps API required
+- Uses browser GPS + MapLibre GL JS with the OpenFreeMap Liberty style; no Google Maps API key required. OpenFreeMap provides the map data/style from OpenStreetMap and is free to use, with attribution handled by MapLibre.
 
 ## Delivery workflow (V6 DRIVER STEADY)
 - A PAID order changed to READY automatically creates an unassigned delivery record.
@@ -109,3 +109,12 @@ Full backups now include the actual uploaded files from `server/data/uploads` as
 - Admin Orders now displays the vendor/store attached to each ordered product.
 - Order tracking remains available throughout the delivery lifecycle and stops live polling after DELIVERED.
 - Public product API responses are smaller and static assets are cacheable/compressed for faster marketplace loading.
+
+## V17 tracking and restore reliability
+- Payment/order receipt Track Order now passes the order's WhatsApp number into tracking.
+- Customer "VIEW LIVE DRIVER LOCATION" performs an explicit refresh and recenters/fits the MapLibre map.
+- MapLibre loader has an additional jsDelivr fallback.
+- `/api/products` now includes `options_json`, so catalog caches retain phone models, sizes, colors and other product choices.
+- Product edits preserve existing options unless the admin explicitly changes/removes them.
+- Full backups normalize product option data and include file sizes.
+- Full restore restores the database/options immediately; uploaded images are rebuilt in the background to reduce perceived restore time.

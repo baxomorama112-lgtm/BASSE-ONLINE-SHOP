@@ -102,3 +102,5 @@ main{display:block;margin-left:232px;width:calc(100% - 232px);max-width:none;pad
 }
 
 .order-vendor{display:flex;align-items:center;gap:10px;margin:10px 0;padding:10px 12px;border:1px solid #e2e8f2;border-radius:12px;background:#f7f9fc}.order-vendor b{display:block}.order-vendor small{display:block;color:#738097;margin-top:3px}.vendor-order-icon{width:30px;height:30px;border-radius:9px;background:#eaf1ff;color:#1748a8;display:grid;place-items:center;font-weight:900}
+
+.maplibregl-map{height:100%;width:100%;font-family:inherit}.maplibregl-canvas{outline:none}.maplibregl-ctrl-attrib{font-size:9px!important}.maplibre-marker{pointer-events:auto}.maplibre-marker span{display:inline-block;width:12px;height:12px;border-radius:50%;background:#2878ff;border:3px solid #fff;box-shadow:0 2px 8px #0004;vertical-align:middle;margin-right:4px}.maplibre-marker.driver-marker span{background:#7c3aed}.maplibre-marker b{background:#fff;border:1px solid #d7deea;border-radius:12px;padding:4px 7px;color:#18346d;font-size:11px;box-shadow:0 2px 8px #0002;white-space:nowrap}.maplibre-marker.customer-marker b{border-color:#3b82f6}.maplibre-marker.driver-marker b{border-color:#7c3aed}
