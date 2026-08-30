@@ -1,0 +1,8 @@
+BASSE ONLINE SHOP V24
+
+1. GPS/map fix: use the actual The Gambia country polygon instead of a loose rectangle.
+2. Invalid/stale customer and driver GPS coordinates are cleared on startup, restore, and tracking responses.
+3. Manual restore no longer rebuilds the entire base64 backup after copying all images; this removes the large restore delay.
+4. Admin live delivery modal polls every 2 seconds while open so live driver GPS remains visible even if SSE reconnects.
+5. Driver GPS client uses the same tighter Gambia geographic sanity bounds before sending.
+6. Maps remain standard Leaflet + OpenStreetMap raster tiles with the normal Leaflet attribution: "Leaflet | © OpenStreetMap contributors". No API key.

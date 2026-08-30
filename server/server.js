@@ -352,6 +352,16 @@ app.post("/api/admin/restore",guard,(req,res)=>{
       for(const table of Object.keys(schemas)){const cols=schemas[table],ins=db.prepare(`INSERT INTO ${table} (${cols.join(",")}) VALUES (${cols.map(()=>"?").join(",")})`);for(const x of (data.tables[table]||[]))ins.run(...cols.map(k=>x[k]??null))}
     });
     tx();
+    // Never reintroduce stale GPS coordinates from an older backup. Product/order data
+    // stays intact; only invalid live-location fields are cleared.
+    for(const row of (data.tables.orders||[])){
+      if((row.customer_lat!=null||row.customer_lng!=null) && !validGambiaGps(Number(row.customer_lat),Number(row.customer_lng)))
+        db.prepare('UPDATE orders SET customer_lat=NULL,customer_lng=NULL,customer_accuracy=NULL WHERE id=?').run(row.id);
+    }
+    for(const row of (data.tables.deliveries||[])){
+      if((row.lat!=null||row.lng!=null) && !validGambiaGps(Number(row.lat),Number(row.lng)))
+        db.prepare('UPDATE deliveries SET lat=NULL,lng=NULL,accuracy=NULL,last_seen=NULL WHERE id=?').run(row.id);
+    }
     // Restore uploaded images before exposing the restored catalog. The old background
     // copy caused the browser to request new product records while their image files were
     // still missing, which produced the visible image blinking. Files are written atomically.
@@ -370,7 +380,10 @@ app.post("/api/admin/restore",guard,(req,res)=>{
         fs.renameSync(tmp,dest);restoredFiles++;
       }catch(e){try{fs.unlinkSync(tmp)}catch{}}
     }
-    backupShopData("restore-complete");
+    // Do NOT rebuild the full base64 backup here. That duplicates every uploaded image
+    // in memory/JSON and was the main reason manual restore felt slow. The restored
+    // database and files are already in place; the next explicit SAVE SHOP NOW can
+    // create a fresh backup when desired.
     broadcastLive("refresh",{});
     res.json({ok:true,message:`Restore complete: ${productCount} products, ${orderCount} orders, ${vendorCount} vendors, ${driverCount} drivers and ${deliveryCount} deliveries. Product options and images are restored and ready.` ,restoredFiles});
   }catch(e){console.error("Backup restore failed:",e);res.status(500).json({error:"Restore failed. The backup format may not match this shop version."})}
@@ -480,18 +493,44 @@ app.post("/api/orders",async(req,res)=>{
 });
 app.get("/api/order/:id",(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);o?res.json({...o,whatsappSupport:SHOP_WHATSAPP}):res.status(404).json({error:"Order not found"})});
 
-// Gambia geographic sanity bounds. These are intentionally generous enough to cover
-// Banjul/Kombo, Basse, Bansang, Fatoto and the rest of The Gambia while rejecting
-// obvious provider/network GPS errors such as a 2,000+ km jump into another country.
-const GAMBIA_GPS={minLat:12.90,maxLat:13.90,minLng:-17.20,maxLng:-13.40};
-function validGambiaGps(lat,lng){return Number.isFinite(lat)&&Number.isFinite(lng)&&lat>=GAMBIA_GPS.minLat&&lat<=GAMBIA_GPS.maxLat&&lng>=GAMBIA_GPS.minLng&&lng<=GAMBIA_GPS.maxLng;}
+// The Gambia geographic polygon.  A simple rectangular bbox is not enough because
+// Senegal surrounds The Gambia on three sides; old/stale GPS readings inside Senegal
+// can otherwise pass the check. Coordinates are [longitude, latitude] and are based
+// on the country polygon published in the countries GeoJSON dataset.
+const GAMBIA_POLYGON=[
+  [-16.841525,13.151394],[-16.713729,13.594959],[-15.624596,13.623587],
+  [-15.398770,13.860369],[-15.081735,13.876492],[-14.687031,13.630357],
+  [-14.376714,13.625680],[-14.046992,13.794068],[-13.791500,13.424000],
+  [-13.800000,13.360000],[-13.900000,13.300000],[-14.277702,13.280585],
+  [-14.712197,13.298207],[-15.141163,13.509512],[-15.511813,13.278570],
+  [-15.691001,13.270353],[-15.931296,13.130284]
+];
+const GAMBIA_GPS={minLat:13.02,maxLat:13.90,minLng:-16.90,maxLng:-13.70};
+function pointInGambia(lat,lng){
+  if(!Number.isFinite(lat)||!Number.isFinite(lng)||lat<GAMBIA_GPS.minLat||lat>GAMBIA_GPS.maxLat||lng<GAMBIA_GPS.minLng||lng>GAMBIA_GPS.maxLng)return false;
+  let inside=false;
+  for(let i=0,j=GAMBIA_POLYGON.length-1;i<GAMBIA_POLYGON.length;j=i++){
+    const xi=GAMBIA_POLYGON[i][0],yi=GAMBIA_POLYGON[i][1],xj=GAMBIA_POLYGON[j][0],yj=GAMBIA_POLYGON[j][1];
+    const intersect=((yi>lat)!=(yj>lat)) && (lng < (xj-xi)*(lat-yi)/(yj-yi)+xi);
+    if(intersect)inside=!inside;
+  }
+  return inside;
+}
+function validGambiaGps(lat,lng){return pointInGambia(Number(lat),Number(lng));}
 function gpsDistanceKm(a,b,c,d){const R=6371,rad=x=>x*Math.PI/180,p1=rad(a),p2=rad(c),dp=rad(c-a),dl=rad(d-b),h=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;return R*2*Math.atan2(Math.sqrt(h),Math.sqrt(1-h));}
 // Remove obviously stale coordinates left by older tracking versions. This does not
 // touch written delivery addresses, products, vendors, orders or payments.
 try{
-  db.prepare(`UPDATE orders SET customer_lat=NULL,customer_lng=NULL,customer_accuracy=NULL WHERE (customer_lat IS NOT NULL OR customer_lng IS NOT NULL) AND (customer_lat<? OR customer_lat>? OR customer_lng<? OR customer_lng>?)`).run(GAMBIA_GPS.minLat,GAMBIA_GPS.maxLat,GAMBIA_GPS.minLng,GAMBIA_GPS.maxLng);
+  // Remove GPS coordinates that are outside the actual country polygon. This runs on
+  // startup so coordinates restored by an older backup cannot appear on a live map.
+  const ordersWithGps=db.prepare(`SELECT id,customer_lat,customer_lng FROM orders WHERE customer_lat IS NOT NULL OR customer_lng IS NOT NULL`).all();
+  const clearOrder=db.prepare('UPDATE orders SET customer_lat=NULL,customer_lng=NULL,customer_accuracy=NULL WHERE id=?');
+  for(const x of ordersWithGps){if(!validGambiaGps(Number(x.customer_lat),Number(x.customer_lng)))clearOrder.run(x.id);}
+  const deliveriesWithGps=db.prepare(`SELECT id,lat,lng FROM deliveries WHERE lat IS NOT NULL OR lng IS NOT NULL`).all();
+  const clearDelivery=db.prepare('UPDATE deliveries SET lat=NULL,lng=NULL,accuracy=NULL,last_seen=NULL WHERE id=?');
+  for(const x of deliveriesWithGps){if(!validGambiaGps(Number(x.lat),Number(x.lng)))clearDelivery.run(x.id);}
   const bad=db.prepare(`SELECT d.id,d.lat,d.lng,o.customer_lat,o.customer_lng FROM deliveries d JOIN orders o ON o.id=d.order_id WHERE d.lat IS NOT NULL AND d.lng IS NOT NULL AND o.customer_lat IS NOT NULL AND o.customer_lng IS NOT NULL`).all();
-  const clear=db.transaction(()=>{for(const x of bad){if(gpsDistanceKm(Number(x.lat),Number(x.lng),Number(x.customer_lat),Number(x.customer_lng))>500)db.prepare('UPDATE deliveries SET lat=NULL,lng=NULL,accuracy=NULL,last_seen=NULL WHERE id=?').run(x.id);}}); clear();
+  for(const x of bad){if(gpsDistanceKm(Number(x.lat),Number(x.lng),Number(x.customer_lat),Number(x.customer_lng))>500)clearDelivery.run(x.id);}
 }catch(e){console.warn('GPS stale-coordinate cleanup skipped:',e.message)}
 
 app.get("/api/order/:id/tracking",(req,res)=>{
@@ -508,8 +547,14 @@ app.get("/api/order/:id/tracking",(req,res)=>{
     FROM deliveries d LEFT JOIN delivery_drivers dr ON dr.id=d.driver_id
     WHERE UPPER(REPLACE(d.order_id,' ',''))=?
   `).get(rawId);
+  // Do not expose invalid/stale coordinates to any client. The map should either show
+  // real Gambia GPS or explicitly wait for a fresh GPS reading.
+  const safeOrder={...o};
+  if(!validGambiaGps(Number(safeOrder.customer_lat),Number(safeOrder.customer_lng))){safeOrder.customer_lat=null;safeOrder.customer_lng=null;safeOrder.customer_accuracy=null;}
+  let safeDelivery=d?{...d}:null;
+  if(safeDelivery && !validGambiaGps(Number(safeDelivery.lat),Number(safeDelivery.lng))){safeDelivery.lat=null;safeDelivery.lng=null;safeDelivery.accuracy=null;safeDelivery.last_seen=null;}
   res.set("Cache-Control","no-store");
-  res.json({order:o,delivery:d||null,trackingActive:String(d?.status||o.order_status)!=="DELIVERED"});
+  res.json({order:safeOrder,delivery:safeDelivery,trackingActive:String(safeDelivery?.status||o.order_status)!=="DELIVERED"});
 });
 app.post("/api/admin/orders/:id/payment",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});if(o.payment_status==='REFUNDED'||o.payment_status==='CANCELLED')return res.status(400).json({error:'This payment is already closed.'});db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE id=?").run(req.params.id);backupShopData("payment-confirmed");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true})});
 app.post("/api/admin/orders/:id/cancel-payment",guard,(req,res)=>{
