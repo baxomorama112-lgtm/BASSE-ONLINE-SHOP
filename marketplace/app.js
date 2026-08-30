@@ -10,18 +10,20 @@ const $=id=>document.getElementById(id),money=n=>"D"+Number(n||0).toLocaleString
 let checkoutGps={lat:null,lng:null,accuracy:null},selectedChoices=[],trackingMap=null,trackingPoll=null,trackingStream=null,trackingLocationWatch=null,trackingLastLocationSent=0,trackingPhone="",trackingOrderId="",trackingRefreshing=false,trackingLastEvent=0;
 let leafletPromise=null;
 function ensureLeaflet(){
-  if(window.L)return Promise.resolve(window.L);
+  if(window.L&&window.L.maplibreGL)return Promise.resolve(window.L);
   if(leafletPromise)return leafletPromise;
   leafletPromise=new Promise(resolve=>{
-    if(!document.querySelector('link[data-basse-leaflet]')){
-      const css=document.createElement("link");css.rel="stylesheet";css.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";css.dataset.basseLeaflet="1";document.head.appendChild(css)
-    }
-    const load=(src,next)=>{const sc=document.createElement("script");sc.src=src;sc.onload=()=>resolve(window.L);sc.onerror=next;document.head.appendChild(sc)};
-    load("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",()=>load("https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js",()=>resolve(null)));
+    if(!document.querySelector('link[data-basse-leaflet]')){const css=document.createElement("link");css.rel="stylesheet";css.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";css.dataset.basseLeaflet="1";document.head.appendChild(css)}
+    if(!document.querySelector('link[data-basse-maplibre]')){const css=document.createElement("link");css.rel="stylesheet";css.href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css";css.dataset.basseMaplibre="1";document.head.appendChild(css)}
+    const load=(src,ok,fail)=>{const sc=document.createElement("script");sc.src=src;sc.onload=ok;sc.onerror=fail;document.head.appendChild(sc)};
+    const finish=()=>resolve(window.L||null);
+    const loadPlugin=()=>load("https://unpkg.com/@maplibre/maplibre-gl-leaflet/leaflet-maplibre-gl.js",finish,finish);
+    const loadMapLibre=()=>load("https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js",loadPlugin,finish);
+    const loadLeaflet=()=>load("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",loadMapLibre,()=>load("https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js",loadMapLibre,finish));
+    if(window.L){if(window.maplibregl)loadPlugin();else loadMapLibre()}else loadLeaflet();
   });
   return leafletPromise;
 }
-
 
 function renderProductGrid(ps, silent=false){
   const grid=$("grid");
@@ -328,24 +330,24 @@ function startTrackingLiveStream(orderId){
 }
 
 async function viewLiveDriverLocation(){
-  if(!trackingOrderId){toast("Enter an order number first.");return}
-  const btn=document.querySelector(".live-location-refresh");
-  if(btn){btn.disabled=true;btn.dataset.originalText=btn.innerHTML;btn.innerHTML=" LOADING LIVE LOCATION…"}
-  try{
-    await refreshTracking(trackingOrderId,false);
-    await ensureLeaflet();
-    if(window.L && trackingMap){
-      setTimeout(()=>{try{trackingMap.invalidateSize({pan:false})}catch{}},0);
-      const p=trackingMap.__latest||{};
-      const hc=Number.isFinite(Number(p.customerLat))&&Number.isFinite(Number(p.customerLng));
-      const hd=Number.isFinite(Number(p.driverLat))&&Number.isFinite(Number(p.driverLng));
-      if(hc&&hd){trackingMap.fitBounds(L.latLngBounds([[Number(p.driverLat),Number(p.driverLng)],[Number(p.customerLat),Number(p.customerLng)]]),{padding:[25,25],maxZoom:16,animate:true})}
-      else if(hc)trackingMap.setView([Number(p.customerLat),Number(p.customerLng)],15,{animate:true});
-      else if(hd)trackingMap.setView([Number(p.driverLat),Number(p.driverLng)],15,{animate:true});
-      toast(hd?"Live driver location updated.":"Waiting for driver GPS.");
-    }else toast("Live map is still loading. Please tap again in a moment.");
-  }catch(e){toast(e.message||"Could not load live driver location.")}
-  finally{if(btn){btn.disabled=false;btn.innerHTML=btn.dataset.originalText||" VIEW LIVE DRIVER LOCATION"}}
+  if(!trackingOrderId)return toast("Enter your order number first.");
+  const btn=document.querySelector('.live-location-refresh');
+  if(btn){btn.disabled=true;btn.dataset.originalText=btn.innerHTML;btn.innerHTML=' CHECKING LIVE GPS…'}
+  refreshTracking(trackingOrderId,false).then(()=>{
+    const m=trackingMap;
+    if(m){
+      const points=[];
+      if(m.__driver)points.push(m.__driver.getLatLng());
+      if(m.__customer)points.push(m.__customer.getLatLng());
+      if(points.length>1)m.fitBounds(L.latLngBounds(points),{padding:[30,30],maxZoom:17});
+      else if(points.length===1)m.setView(points[0],16);
+      m.invalidateSize({pan:false});
+    }
+    const note=document.querySelector('#trackingNote');
+    const hasDriver=!!trackingMap?.__driver;
+    if(!hasDriver)toast('The driver has not shared a fresh GPS location yet. Keep tracking open and try again.');
+    else toast('Driver location refreshed.');
+  }).catch(()=>{}).finally(()=>{if(btn){btn.disabled=false;btn.innerHTML=btn.dataset.originalText||' VIEW LIVE DRIVER LOCATION'}});
 }
 
 async function refreshTracking(id,initial){
@@ -377,15 +379,17 @@ function mapMarker(label,type){
   return L.divIcon({className:`basse-map-marker ${type}-marker`,html:`<span></span><b>${label}</b>`,iconSize:[90,34],iconAnchor:[12,30]});
 }
 function mapTiles(map){
-  // BASSE uses the public OpenStreetMap raster tiles directly.
-  // No external map API key is required.
-  return L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
-    maxZoom:19,
-    keepBuffer:2,
-    updateWhenIdle:true,
-    updateWhenZooming:false,
-    attribution:"© OpenStreetMap contributors"
-  }).addTo(map);
+  const style="https://tiles.openfreemap.org/styles/liberty";
+  if(window.L?.maplibreGL&&window.maplibregl){
+    try{return L.maplibreGL({style}).addTo(map)}catch(e){}
+  }
+  const providers=[
+    ["https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",'© OpenStreetMap contributors © CARTO'],
+    ["https://tile.openstreetmap.org/{z}/{x}/{y}.png",'© OpenStreetMap contributors']
+  ];
+  let layer=L.tileLayer(providers[0][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[0][1]}).addTo(map);
+  let switched=false;layer.on("tileerror",()=>{if(switched)return;switched=true;try{map.removeLayer(layer)}catch{};layer=L.tileLayer(providers[1][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[1][1]}).addTo(map)});
+  return layer;
 }
 function renderTrackingMapContent(customerLat,customerLng,driverLat,driverLng){
   const m=trackingMap;if(!m)return;
@@ -406,42 +410,62 @@ function renderTrackingMapContent(customerLat,customerLng,driverLat,driverLng){
   }else if(hc&&m.__initialFit){m.setView([clat,clng],15);m.__initialFit=false}
   requestAnimationFrame(()=>{try{m.invalidateSize({pan:false})}catch{}});
 }
+function showLiveDriverLocation(){
+  if(!trackingOrderId)return toast("Enter your order number first.");
+  const btn=document.querySelector('.live-location-refresh');
+  if(btn){btn.disabled=true;btn.dataset.originalText=btn.innerHTML;btn.innerHTML=' CHECKING LIVE GPS…'}
+  refreshTracking(trackingOrderId,false).then(()=>{
+    const m=trackingMap;
+    if(m){
+      const points=[];
+      if(m.__driver)points.push(m.__driver.getLatLng());
+      if(m.__customer)points.push(m.__customer.getLatLng());
+      if(points.length>1)m.fitBounds(L.latLngBounds(points),{padding:[30,30],maxZoom:17});
+      else if(points.length===1)m.setView(points[0],16);
+      m.invalidateSize({pan:false});
+    }
+    const note=document.querySelector('#trackingNote');
+    const hasDriver=!!trackingMap?.__driver;
+    if(!hasDriver)toast('The driver has not shared a fresh GPS location yet. Keep tracking open and try again.');
+    else toast('Driver location refreshed.');
+  }).catch(()=>{}).finally(()=>{if(btn){btn.disabled=false;btn.innerHTML=btn.dataset.originalText||' VIEW LIVE DRIVER LOCATION'}});
+}
+
 function loadTrackingMap(customerLat,customerLng,driverLat,driverLng){
   const el=$("customerMap");if(!el)return;
-  const hc=Number.isFinite(Number(customerLat))&&Number.isFinite(Number(customerLng));
-  const hd=Number.isFinite(Number(driverLat))&&Number.isFinite(Number(driverLng));
+  const hasCustomer=Number.isFinite(Number(customerLat))&&Number.isFinite(Number(customerLng));
+  const hasDriver=Number.isFinite(Number(driverLat))&&Number.isFinite(Number(driverLng));
   if(!window.L){
-    el.innerHTML='<div class="map-placeholder"><b>Loading live map…</b><small>Please wait a moment.</small></div>';
-    ensureLeaflet().then(lib=>{if(lib&&$("customerMap")===el&&trackingOrderId)setTimeout(()=>loadTrackingMap(customerLat,customerLng,driverLat,driverLng),50);});
+    el.innerHTML='<div class="map-placeholder"><br><b>Map service is loading</b><small>Please wait a moment and tap Track Order again.</small></div>';
     return;
   }
-  if(!hc&&!hd){
-    el.innerHTML='<div class="map-placeholder"><b>Waiting for GPS</b><small>The customer or driver has not shared a valid location yet.</small></div>';
-    if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}
-    return;
+  if(!hasCustomer&&!hasDriver){
+    el.innerHTML='<div class="map-placeholder"><br><b>Waiting for location</b><small>The order has no GPS location yet.</small></div>';
+    if(trackingMap){try{trackingMap.remove()}catch{}trackingMap=null}return;
   }
   const clat=Number(customerLat),clng=Number(customerLng),dlat=Number(driverLat),dlng=Number(driverLng);
-  try{
-    // Never let a previously opened order's map/markers leak into this order.
-    if(trackingMap && trackingMap.__orderId && trackingMap.__orderId!==trackingOrderId){
-      try{trackingMap.remove()}catch{}
-      trackingMap=null;
-    }
-    if(!trackingMap){
-      el.innerHTML="";
-      const center=hd?[dlat,dlng]:[clat,clng];
-      el.classList.add("leaflet-host");
-      trackingMap=L.map(el,{zoomControl:true,scrollWheelZoom:false,dragging:true,doubleClickZoom:false,boxZoom:false,keyboard:true,preferCanvas:true,fadeAnimation:false,zoomAnimation:true,markerZoomAnimation:false}).setView(center,15);
-      mapTiles(trackingMap);
-      trackingMap.__customer=null;trackingMap.__driver=null;trackingMap.__line=null;trackingMap.__initialFit=true;trackingMap.__orderId=trackingOrderId;
-    }
-    trackingMap.__latest={customerLat:clat,customerLng:clng,driverLat:dlat,driverLng:dlng};
-    renderTrackingMapContent(clat,clng,dlat,dlng);
-  }catch(e){
-    try{if(trackingMap)trackingMap.remove()}catch{}
-    trackingMap=null;
-    el.innerHTML='<div class="map-placeholder"><b>Live map could not load</b><small>Tap VIEW LIVE DRIVER LOCATION to retry.</small></div>';
+  if(!trackingMap){
+    el.innerHTML="";
+    const center=[hasDriver?dlat:clat,hasDriver?dlng:clng];
+    trackingMap=L.map(el,{zoomControl:true,scrollWheelZoom:false,dragging:true,doubleClickZoom:false,boxZoom:false,keyboard:true,preferCanvas:true,fadeAnimation:false,zoomAnimation:true,markerZoomAnimation:false}).setView(center,15);
+    mapTiles(trackingMap);
+    trackingMap.__customer=null;trackingMap.__driver=null;trackingMap.__line=null;trackingMap.__initialFit=true;
   }
+  const m=trackingMap;
+  if(hasCustomer){
+    if(!m.__customer)m.__customer=L.marker([clat,clng],{icon:L.divIcon({className:"basse-map-marker customer-marker",html:"<span></span><b>Customer</b>",iconSize:[82,30],iconAnchor:[12,28],zIndexOffset:500})}).addTo(m).bindPopup(" Your delivery location");
+    else m.__customer.setLatLng([clat,clng]);
+  }
+  if(hasDriver){
+    if(!m.__driver)m.__driver=L.marker([dlat,dlng],{icon:L.divIcon({className:"basse-map-marker driver-marker",html:"<span></span><b>Driver</b>",iconSize:[70,30],iconAnchor:[12,28],zIndexOffset:1200})}).addTo(m).bindPopup(" Driver — live");
+    else m.__driver.setLatLng([dlat,dlng]);
+  }
+  if(hasCustomer&&hasDriver){
+    const points=[[dlat,dlng],[clat,clng]];
+    if(!m.__line)m.__line=L.polyline(points,{weight:4,dashArray:"9 8"}).addTo(m);else m.__line.setLatLngs(points);
+    if(m.__initialFit){m.fitBounds(L.latLngBounds(points),{padding:[25,25],maxZoom:16});m.__initialFit=false}
+  }else if(hasCustomer&&m.__initialFit){m.setView([clat,clng],15);m.__initialFit=false}
+  requestAnimationFrame(()=>{try{m.invalidateSize({pan:false})}catch(e){}});
 }
 function stopTrackingPolling(){
   if(trackingPoll){clearInterval(trackingPoll);trackingPoll=null}

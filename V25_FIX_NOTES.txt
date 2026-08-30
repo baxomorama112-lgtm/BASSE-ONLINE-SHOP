@@ -1,0 +1,9 @@
+BASSE ONLINE SHOP V25
+
+- Map implementation copied from V15 for customer, driver and admin tracking.
+- MapLibre/OpenFreeMap is the first map layer; Carto/OSM fallback is retained where applicable.
+- No Google Maps API key is used.
+- V24 Gambia GPS validation, stale-coordinate cleanup and fast restore are retained.
+- V24 customer automatic location watch is retained.
+- V24 admin live polling remains 2 seconds.
+- V15 driver updateDriverMap/fallback behavior restored.

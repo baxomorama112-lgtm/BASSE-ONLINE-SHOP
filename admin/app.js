@@ -83,11 +83,29 @@ async function restoreBackup(input){
 }
 let liveDeliveryStream=null,liveDeliveryTimer=null,liveDeliveryMap=null,liveDeliveryMarker=null,liveCustomerMarker=null,liveDeliveryLine=null,liveDeliveryId=null,liveDeliveryOrderId=null;
 let leafletPromise=null;
-function ensureLeaflet(){if(window.L)return Promise.resolve(window.L);if(leafletPromise)return leafletPromise;leafletPromise=new Promise(resolve=>{if(!document.querySelector('link[data-basse-leaflet]')){const css=document.createElement("link");css.rel="stylesheet";css.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";css.dataset.basseLeaflet="1";document.head.appendChild(css)}const load=(src,next)=>{const sc=document.createElement("script");sc.src=src;sc.onload=()=>resolve(window.L);sc.onerror=next;document.head.appendChild(sc)};load("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",()=>load("https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js",()=>resolve(null)))});return leafletPromise}
-function mapMarker(label,type){return L.divIcon({className:`basse-map-marker ${type}-marker`,html:`<span></span><b>${label}</b>`,iconSize:[90,34],iconAnchor:[12,30]})}
+function ensureLeaflet(){
+  if(window.L&&window.L.maplibreGL)return Promise.resolve(window.L);
+  if(leafletPromise)return leafletPromise;
+  leafletPromise=new Promise(resolve=>{
+    if(!document.querySelector('link[data-basse-leaflet]')){const css=document.createElement("link");css.rel="stylesheet";css.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";css.dataset.basseLeaflet="1";document.head.appendChild(css)}
+    if(!document.querySelector('link[data-basse-maplibre]')){const css=document.createElement("link");css.rel="stylesheet";css.href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css";css.dataset.basseMaplibre="1";document.head.appendChild(css)}
+    const load=(src,ok,fail)=>{const sc=document.createElement("script");sc.src=src;sc.onload=ok;sc.onerror=fail;document.head.appendChild(sc)};
+    const finish=()=>resolve(window.L||null);
+    const loadPlugin=()=>load("https://unpkg.com/@maplibre/maplibre-gl-leaflet/leaflet-maplibre-gl.js",finish,finish);
+    const loadMapLibre=()=>load("https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js",loadPlugin,finish);
+    const loadLeaflet=()=>load("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",loadMapLibre,()=>load("https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js",loadMapLibre,finish));
+    if(window.L){if(window.maplibregl)loadPlugin();else loadMapLibre()}else loadLeaflet();
+  });return leafletPromise
+}function mapMarker(label,type){return L.divIcon({className:`basse-map-marker ${type}-marker`,html:`<span></span><b>${label}</b>`,iconSize:[90,34],iconAnchor:[12,30]})}
 function mapTiles(map){
-  // Standard OpenStreetMap tiles; no API key required.
-  return L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,keepBuffer:3,updateWhenIdle:true,updateWhenZooming:false,attribution:"© OpenStreetMap contributors"}).addTo(map);
+  if(window.L?.maplibreGL&&window.maplibregl){try{return L.maplibreGL({style:"https://tiles.openfreemap.org/styles/liberty"}).addTo(map)}catch(e){}}
+  const providers=[
+    ["https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png","© OpenStreetMap contributors © CARTO"],
+    ["https://tile.openstreetmap.org/{z}/{x}/{y}.png","© OpenStreetMap contributors"]
+  ];
+  let layer=L.tileLayer(providers[0][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[0][1]}).addTo(map);
+  let switched=false;layer.on("tileerror",()=>{if(switched)return;switched=true;try{map.removeLayer(layer)}catch{};layer=L.tileLayer(providers[1][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[1][1]}).addTo(map)});
+  return layer;
 }
 function stopLiveDelivery(){if(liveDeliveryStream){try{liveDeliveryStream.close()}catch{}liveDeliveryStream=null}if(liveDeliveryTimer){clearInterval(liveDeliveryTimer);liveDeliveryTimer=null}if(liveDeliveryMap){try{liveDeliveryMap.remove()}catch{}liveDeliveryMap=null}liveDeliveryMarker=null;liveCustomerMarker=null;liveDeliveryLine=null;liveDeliveryId=null;liveDeliveryOrderId=null}
 async function openLiveDelivery(deliveryId){stopLiveDelivery();liveDeliveryId=deliveryId;const modal=$("modal"),editor=$("editor");modal.classList.remove("hidden");editor.innerHTML=`<div class="modal-title"><span></span><div><small>LIVE DELIVERY TRACKING</small><h2>Driver Live Location</h2></div></div><div id="adminLiveMeta" class="admin-live-meta">Connecting to live delivery…</div><div id="adminLiveMap" class="admin-live-map"><div class="map-placeholder"><br><b>Loading live map…</b><small>Waiting for driver GPS</small></div></div><div class="admin-live-footer"><span id="adminLiveStatus" class="live-status">● CONNECTING</span><span id="adminLiveDistance">Distance —</span><span id="adminLiveUpdated">Last update —</span></div>`;await ensureLeaflet();await refreshLiveDelivery(true);try{const es=new EventSource("/api/live");const onEvent=ev=>{try{const x=JSON.parse(ev.data||"{}");if(String(x.orderId||"")===String(liveDeliveryOrderId))refreshLiveDelivery(false)}catch{}};es.addEventListener("orders",onEvent);es.onopen=()=>{const e=$("adminLiveStatus");if(e)e.textContent="● LIVE"};es.onerror=()=>{const e=$("adminLiveStatus");if(e)e.textContent="● RECONNECTING"};liveDeliveryStream=es}catch{}liveDeliveryTimer=setInterval(()=>refreshLiveDelivery(false),2000)}
