@@ -1,0 +1,7 @@
+BASSE ONLINE SHOP V23 — MAP FIX
+
+- Removed the CARTO raster layer that was returning “API key required”.
+- Marketplace/customer, Admin, and Driver maps now use standard OpenStreetMap raster tiles directly. No map API key is required.
+- Customer tracking map is tagged with the current order ID. If another order is opened, the old map is destroyed so old markers/coordinates cannot leak into the new order.
+- Existing live GPS updates move markers and the distance line on the existing map; they do not rebuild the map.
+- JavaScript syntax checks passed for marketplace, admin, driver, and server.

@@ -377,17 +377,15 @@ function mapMarker(label,type){
   return L.divIcon({className:`basse-map-marker ${type}-marker`,html:`<span></span><b>${label}</b>`,iconSize:[90,34],iconAnchor:[12,30]});
 }
 function mapTiles(map){
-  const providers=[
-    ["https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png","© OpenStreetMap contributors © CARTO"],
-    ["https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png","© OpenStreetMap contributors"]
-  ];
-  let layer=L.tileLayer(providers[0][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[0][1]}).addTo(map);
-  let switched=false;
-  layer.on("tileerror",()=>{
-    if(switched)return;switched=true;
-    try{map.removeLayer(layer)}catch{}
-    layer=L.tileLayer(providers[1][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[1][1]}).addTo(map);
-  });
+  // BASSE uses the public OpenStreetMap raster tiles directly.
+  // No external map API key is required.
+  return L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+    maxZoom:19,
+    keepBuffer:2,
+    updateWhenIdle:true,
+    updateWhenZooming:false,
+    attribution:"© OpenStreetMap contributors"
+  }).addTo(map);
 }
 function renderTrackingMapContent(customerLat,customerLng,driverLat,driverLng){
   const m=trackingMap;if(!m)return;
@@ -424,13 +422,18 @@ function loadTrackingMap(customerLat,customerLng,driverLat,driverLng){
   }
   const clat=Number(customerLat),clng=Number(customerLng),dlat=Number(driverLat),dlng=Number(driverLng);
   try{
+    // Never let a previously opened order's map/markers leak into this order.
+    if(trackingMap && trackingMap.__orderId && trackingMap.__orderId!==trackingOrderId){
+      try{trackingMap.remove()}catch{}
+      trackingMap=null;
+    }
     if(!trackingMap){
       el.innerHTML="";
       const center=hd?[dlat,dlng]:[clat,clng];
       el.classList.add("leaflet-host");
       trackingMap=L.map(el,{zoomControl:true,scrollWheelZoom:false,dragging:true,doubleClickZoom:false,boxZoom:false,keyboard:true,preferCanvas:true,fadeAnimation:false,zoomAnimation:true,markerZoomAnimation:false}).setView(center,15);
       mapTiles(trackingMap);
-      trackingMap.__customer=null;trackingMap.__driver=null;trackingMap.__line=null;trackingMap.__initialFit=true;
+      trackingMap.__customer=null;trackingMap.__driver=null;trackingMap.__line=null;trackingMap.__initialFit=true;trackingMap.__orderId=trackingOrderId;
     }
     trackingMap.__latest={customerLat:clat,customerLng:clng,driverLat:dlat,driverLng:dlng};
     renderTrackingMapContent(clat,clng,dlat,dlng);
