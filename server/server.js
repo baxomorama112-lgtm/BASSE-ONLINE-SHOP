@@ -10,6 +10,12 @@ app.use("/downloads",express.static(path.join(ROOT,"../downloads"),{fallthrough:
 app.get("/download",(req,res)=>{
   res.sendFile(path.join(ROOT,"../marketplace/download.html"));
 });
+// Waychit return endpoint: Waychit redirects the customer's browser here after hosted payment.
+// Serve the marketplace shell so marketplace/app.js can read ?payment=success&order=...
+// and poll the server until the signed webhook marks the order PAID.
+app.get("/payment-return",(req,res)=>{
+  res.sendFile(path.join(ROOT,"../marketplace/index.html"));
+});
 app.get("/api/health",(req,res)=>{
   const productCount=Number(db.prepare("SELECT COUNT(*) c FROM products").get().c);
   res.json({ok:true,productCount,dataDir:DATA_DIR,persistentDataDir:DATA_DIR});
