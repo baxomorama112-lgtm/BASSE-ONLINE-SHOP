@@ -1,6 +1,3 @@
 User-agent: *
 Allow: /
-Disallow: /admin/
-Disallow: /vendor/
-Disallow: /driver/
 Sitemap: https://basseonlineshop.com/sitemap.xml

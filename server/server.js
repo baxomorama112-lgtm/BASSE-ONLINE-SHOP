@@ -16,6 +16,15 @@ app.get("/download",(req,res)=>{
 app.get("/payment-return",(req,res)=>{
   res.sendFile(path.join(ROOT,"../marketplace/index.html"));
 });
+// SEO: serve sitemap/robots explicitly so they are never affected by SPA/static fallback.
+app.get("/sitemap.xml",(req,res)=>{
+  res.type("application/xml");
+  res.sendFile(path.join(ROOT,"../marketplace/sitemap.xml"));
+});
+app.get("/robots.txt",(req,res)=>{
+  res.type("text/plain");
+  res.sendFile(path.join(ROOT,"../marketplace/robots.txt"));
+});
 app.get("/api/health",(req,res)=>{
   const productCount=Number(db.prepare("SELECT COUNT(*) c FROM products").get().c);
   res.json({ok:true,productCount,dataDir:DATA_DIR,persistentDataDir:DATA_DIR});
