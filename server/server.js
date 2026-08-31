@@ -16,29 +16,48 @@ app.get("/download",(req,res)=>{
 app.get("/payment-return",(req,res)=>{
   res.sendFile(path.join(ROOT,"../marketplace/index.html"));
 });
-// SEO: serve sitemap/robots explicitly so they are never affected by SPA/static fallback.
-app.get("/sitemap.xml",(req,res)=>{
-  res.status(200)
-    .set("Content-Type","application/xml; charset=utf-8")
-    .set("Cache-Control","public, max-age=3600")
-    .send(`<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>${PUBLIC_BASE_URL}/</loc>
-    <changefreq>daily</changefreq>
-    <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>${PUBLIC_BASE_URL}/download</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-</urlset>`);
-} );
-app.get("/robots.txt",(req,res)=>{
-  res.type("text/plain");
-  res.sendFile(path.join(ROOT,"../marketplace/robots.txt"));
+// SEO: public marketplace pages, sitemap and robots are served explicitly so they
+// are never swallowed by the static SPA fallback. Product/store pages contain real
+// server-rendered text so Google can discover and understand the marketplace even
+// though the shopping UI itself is JavaScript-driven.
+function xmlEscape(v){return String(v??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;").replace(/'/g,"&apos;")}
+function slugPart(v){return encodeURIComponent(String(v||"").trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,""))}
+function seoPage({title,description,canonical,heading,bodyHtml}){
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${xmlEscape(title)}</title><meta name="description" content="${xmlEscape(description)}"><meta name="robots" content="index,follow,max-image-preview:large"><link rel="canonical" href="${xmlEscape(canonical)}"><meta property="og:type" content="website"><meta property="og:title" content="${xmlEscape(title)}"><meta property="og:description" content="${xmlEscape(description)}"><meta property="og:url" content="${xmlEscape(canonical)}"><meta name="theme-color" content="#071a4a"><style>body{margin:0;background:#f6f8fc;color:#101827;font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif}.wrap{max-width:900px;margin:0 auto;padding:28px 18px 80px}.brand{display:inline-flex;align-items:center;gap:10px;text-decoration:none;color:#071a4a;font-weight:950}.brand img{width:48px;height:48px;border-radius:14px;object-fit:cover}.card{margin-top:24px;background:#fff;border:1px solid #e4e9f1;border-radius:24px;padding:28px;box-shadow:0 12px 40px #071a4a12}h1{font-size:32px;margin:0 0 12px;color:#071a4a}h2{color:#071a4a}p{line-height:1.6;color:#5e6878}.price{font-size:26px;font-weight:950;color:#1748a8}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.item{display:block;padding:16px;border:1px solid #e5e9f0;border-radius:16px;text-decoration:none;color:inherit}.item b{display:block;margin-bottom:6px}.back{display:inline-block;margin-top:20px;padding:12px 16px;border-radius:12px;background:#071a4a;color:#fff;text-decoration:none;font-weight:850}@media(max-width:520px){h1{font-size:26px}.card{padding:20px}}</style></head><body><main class="wrap"><a class="brand" href="/"><img src="/basse-marketplace-logo.jpg" alt="BASSE ONLINE SHOP"><span>BASSE ONLINE SHOP</span></a><section class="card"><h1>${heading}</h1>${bodyHtml}<a class="back" href="/">← Shop BASSE ONLINE SHOP</a></section></main></body></html>`
+}
+app.get("/product/:id",(req,res)=>{
+  const p=db.prepare("SELECT id,name,category,price,stock,description,image,vendor_id FROM products WHERE id=? AND active=1").get(req.params.id);
+  if(!p)return res.status(404).send("<!doctype html><title>Product not found | BASSE ONLINE SHOP</title><h1>Product not found</h1><p><a href="/">Return to BASSE ONLINE SHOP</a></p>");
+  const canonical=`${PUBLIC_BASE_URL}/product/${p.id}`;
+  const desc=String(p.description||`Shop ${p.name} in ${p.category||"the marketplace"} on BASSE ONLINE SHOP in The Gambia.`).slice(0,155);
+  const image=p.image?`<img src="${xmlEscape(p.image)}" alt="${xmlEscape(p.name)}" style="width:100%;max-height:420px;object-fit:contain;border-radius:18px;background:#f4f6fa;margin:10px 0 18px">`:"";
+  const body=`${image}<p><strong>Category:</strong> ${xmlEscape(p.category||"General")}</p><p>${xmlEscape(p.description||`Shop ${p.name} online through BASSE ONLINE SHOP, a marketplace serving Basse and surrounding areas in The Gambia.`)}</p><div class="price">D${Number(p.price||0).toLocaleString()}</div><p>${Number(p.stock||0)>0?"Available to order online.":"Currently out of stock."}</p>`;
+  res.status(200).set("Cache-Control","public, max-age=300").send(seoPage({title:`${p.name} | BASSE ONLINE SHOP`,description:desc,canonical,heading:xmlEscape(p.name),bodyHtml:body}));
 });
+app.get("/store/:id",(req,res)=>{
+  const v=db.prepare("SELECT id,business_name,full_name,category,description,location FROM vendors WHERE id=? AND status='APPROVED'").get(req.params.id);
+  if(!v)return res.status(404).send("<!doctype html><title>Store not found | BASSE ONLINE SHOP</title><h1>Store not found</h1><p><a href="/">Return to BASSE ONLINE SHOP</a></p>");
+  const products=db.prepare("SELECT id,name,category,price,description,image FROM products WHERE vendor_id=? AND active=1 ORDER BY id DESC").all(v.id);
+  const canonical=`${PUBLIC_BASE_URL}/store/${v.id}`;
+  const title=`${v.business_name} | BASSE ONLINE SHOP`;
+  const description=String(v.description||`Shop products from ${v.business_name} on BASSE ONLINE SHOP in ${v.location||"The Gambia"}.`).slice(0,155);
+  const cards=products.map(x=>`<a class="item" href="/product/${x.id}"><b>${xmlEscape(x.name)}</b><span>${xmlEscape(x.category||"")}</span><div class="price" style="font-size:19px;margin-top:8px">D${Number(x.price||0).toLocaleString()}</div></a>`).join("");
+  const body=`<p><strong>Store:</strong> ${xmlEscape(v.business_name)}</p><p><strong>Category:</strong> ${xmlEscape(v.category||"Marketplace seller")}</p><p><strong>Location:</strong> ${xmlEscape(v.location||"The Gambia")}</p><p>${xmlEscape(v.description||`Shop ${v.business_name} products through BASSE ONLINE SHOP.`)}</p><h2>Products from this store</h2><div class="grid">${cards||"<p>No products are currently listed.</p>"}</div>`;
+  res.status(200).set("Cache-Control","public, max-age=300").send(seoPage({title,description,canonical,heading:xmlEscape(v.business_name),bodyHtml:body}));
+});
+app.get("/sitemap.xml",(req,res)=>{
+  const products=db.prepare("SELECT id,created_at FROM products WHERE active=1 ORDER BY id DESC").all();
+  const stores=db.prepare("SELECT id,created_at FROM vendors WHERE status='APPROVED' ORDER BY id DESC").all();
+  const urls=[
+    `<url><loc>${xmlEscape(PUBLIC_BASE_URL)}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>`,
+    `<url><loc>${xmlEscape(PUBLIC_BASE_URL)}/download</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>`,
+    ...stores.map(x=>`<url><loc>${xmlEscape(PUBLIC_BASE_URL)}/store/${x.id}</loc><changefreq>daily</changefreq><priority>0.8</priority></url>`),
+    ...products.map(x=>`<url><loc>${xmlEscape(PUBLIC_BASE_URL)}/product/${x.id}</loc><changefreq>daily</changefreq><priority>0.7</priority></url>`)
+  ];
+  res.status(200).set("Content-Type","application/xml; charset=utf-8").set("Cache-Control","public, max-age=3600").send(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.join("")}</urlset>`);
+});
+app.get("/robots.txt",(req,res)=>{res.type("text/plain");res.sendFile(path.join(ROOT,"../marketplace/robots.txt"));});
 app.get("/api/health",(req,res)=>{
   const productCount=Number(db.prepare("SELECT COUNT(*) c FROM products").get().c);
   res.json({ok:true,productCount,dataDir:DATA_DIR,persistentDataDir:DATA_DIR});

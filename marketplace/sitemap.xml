@@ -1,13 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- Production sitemap is generated dynamically by server/server.js so public products and approved stores are included. -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://basseonlineshop.com/</loc>
-    <changefreq>daily</changefreq>
-    <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>https://basseonlineshop.com/download</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
+  <url><loc>https://basseonlineshop.com/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>
+  <url><loc>https://basseonlineshop.com/download</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
 </urlset>

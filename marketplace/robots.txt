@@ -1,3 +1,8 @@
 User-agent: *
 Allow: /
+Disallow: /admin
+Disallow: /vendor
+Disallow: /driver
+Disallow: /api/
+Disallow: /payment-return
 Sitemap: https://basseonlineshop.com/sitemap.xml
