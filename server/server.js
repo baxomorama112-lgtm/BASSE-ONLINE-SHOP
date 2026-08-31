@@ -18,9 +18,23 @@ app.get("/payment-return",(req,res)=>{
 });
 // SEO: serve sitemap/robots explicitly so they are never affected by SPA/static fallback.
 app.get("/sitemap.xml",(req,res)=>{
-  res.type("application/xml");
-  res.sendFile(path.join(ROOT,"../marketplace/sitemap.xml"));
-});
+  res.status(200)
+    .set("Content-Type","application/xml; charset=utf-8")
+    .set("Cache-Control","public, max-age=3600")
+    .send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${PUBLIC_BASE_URL}/</loc>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>${PUBLIC_BASE_URL}/download</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+</urlset>`);
+} );
 app.get("/robots.txt",(req,res)=>{
   res.type("text/plain");
   res.sendFile(path.join(ROOT,"../marketplace/robots.txt"));
