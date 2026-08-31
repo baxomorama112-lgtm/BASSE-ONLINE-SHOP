@@ -25,7 +25,7 @@ If the live API request is unavailable, the site uses the configured Waychit sta
 Set these environment variables in Render:
 - `WAYCHIT_API_KEY` — private live/test API key
 - `WAYCHIT_WEBHOOK_SECRET` — webhook signing secret
-- `PUBLIC_BASE_URL` — `https://basse-online-shop.onrender.com`
+- `PUBLIC_BASE_URL` — `https://basseonlineshop.com`
 - `WAYCHIT_STATIC_URL` — optional static merchant payment fallback
 - `WHATSAPP_SUPPORT` — shop WhatsApp number in international digits
 - `ADMIN_EMAIL`
@@ -33,7 +33,7 @@ Set these environment variables in Render:
 - `DATA_DIR=/opt/render/project/src/server/data`
 
 Webhook URL:
-`https://basse-online-shop.onrender.com/api/waychit/webhook`
+`https://basseonlineshop.com/api/waychit/webhook`
 
 Keep the API key and webhook secret only in Render Environment Variables. Never place them in marketplace HTML/JavaScript.
 
