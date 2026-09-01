@@ -118,3 +118,7 @@ Full backups now include the actual uploaded files from `server/data/uploads` as
 - Product edits preserve existing options unless the admin explicitly changes/removes them.
 - Full backups normalize product option data and include file sizes.
 - Full restore restores the database/options immediately; uploaded images are rebuilt in the background to reduce perceived restore time.
+
+
+## Logo / Google favicon update
+The BASSE shopping-bag logo is served as `/basse-logo.png` and `/apple-touch-icon.png`, linked from the marketplace homepage and SEO landing pages. The homepage Organization/OnlineStore structured data now declares the same logo URL.
