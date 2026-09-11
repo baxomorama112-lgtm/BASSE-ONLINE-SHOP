@@ -1,0 +1,10 @@
+BASSE ONLINE SHOP - SHOPPING + CHAT UPDATE
+
+- Made the customer bottom navigation include a direct Chat button for Admin support.
+- Kept the existing real Add to Cart/cart checkout and Buy Now flow with Waychit.
+- Customer cart supports multiple products, quantities, removal, stock checks, checkout and Waychit payment.
+- Admin chat can now attach/select an active product and send it in the conversation.
+- Vendor chat can now attach/select an approved vendor product and send it in the conversation.
+- Customer can open attached products from chat and continue shopping.
+- Kept ModemPay unchanged as a future payment method; Waychit remains current.
+- Preserved existing vendor, admin, driver, delivery/GPS, orders, product images, SEO and app files.

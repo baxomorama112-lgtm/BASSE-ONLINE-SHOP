@@ -24,7 +24,7 @@ function xmlEscape(v){return String(v??"").replace(/&/g,"&amp;").replace(/</g,"&
 function slugPart(v){return encodeURIComponent(String(v||"").trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,""))}
 function seoPage({title,description,canonical,heading,bodyHtml}){
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${xmlEscape(title)}</title><meta name="description" content="${xmlEscape(description)}"><meta name="robots" content="index,follow,max-image-preview:large"><link rel="icon" type="image/png" sizes="512x512" href="/basse-logo.png"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"><link rel="canonical" href="${xmlEscape(canonical)}"><meta property="og:type" content="website"><meta property="og:image" content="${xmlEscape(PUBLIC_BASE_URL)}/basse-logo.png"><meta property="og:title" content="${xmlEscape(title)}"><meta property="og:description" content="${xmlEscape(description)}"><meta property="og:url" content="${xmlEscape(canonical)}"><meta name="theme-color" content="#071a4a"><style>body{margin:0;background:#f6f8fc;color:#101827;font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif}.wrap{max-width:900px;margin:0 auto;padding:28px 18px 80px}.brand{display:inline-flex;align-items:center;gap:10px;text-decoration:none;color:#071a4a;font-weight:950}.brand img{width:48px;height:48px;border-radius:14px;object-fit:cover}.card{margin-top:24px;background:#fff;border:1px solid #e4e9f1;border-radius:24px;padding:28px;box-shadow:0 12px 40px #071a4a12}h1{font-size:32px;margin:0 0 12px;color:#071a4a}h2{color:#071a4a}p{line-height:1.6;color:#5e6878}.price{font-size:26px;font-weight:950;color:#1748a8}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.item{display:block;padding:16px;border:1px solid #e5e9f0;border-radius:16px;text-decoration:none;color:inherit}.item b{display:block;margin-bottom:6px}.back{display:inline-block;margin-top:20px;padding:12px 16px;border-radius:12px;background:#071a4a;color:#fff;text-decoration:none;font-weight:850}@media(max-width:520px){h1{font-size:26px}.card{padding:20px}}</style></head><body><main class="wrap"><a class="brand" href="/"><img src="/basse-logo.png" alt="BASSE ONLINE SHOP"><span>BASSE ONLINE SHOP</span></a><section class="card"><h1>${heading}</h1>${bodyHtml}<a class="back" href="/">← Shop BASSE ONLINE SHOP</a></section></main></body></html>`
+<title>${xmlEscape(title)}</title><meta name="description" content="${xmlEscape(description)}"><meta name="robots" content="index,follow,max-image-preview:large"><link rel="canonical" href="${xmlEscape(canonical)}"><meta property="og:type" content="website"><meta property="og:title" content="${xmlEscape(title)}"><meta property="og:description" content="${xmlEscape(description)}"><meta property="og:url" content="${xmlEscape(canonical)}"><meta name="theme-color" content="#071a4a"><style>body{margin:0;background:#f6f8fc;color:#101827;font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif}.wrap{max-width:900px;margin:0 auto;padding:28px 18px 80px}.brand{display:inline-flex;align-items:center;gap:10px;text-decoration:none;color:#071a4a;font-weight:950}.brand img{width:48px;height:48px;border-radius:14px;object-fit:cover}.card{margin-top:24px;background:#fff;border:1px solid #e4e9f1;border-radius:24px;padding:28px;box-shadow:0 12px 40px #071a4a12}h1{font-size:32px;margin:0 0 12px;color:#071a4a}h2{color:#071a4a}p{line-height:1.6;color:#5e6878}.price{font-size:26px;font-weight:950;color:#1748a8}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.item{display:block;padding:16px;border:1px solid #e5e9f0;border-radius:16px;text-decoration:none;color:inherit}.item b{display:block;margin-bottom:6px}.back{display:inline-block;margin-top:20px;padding:12px 16px;border-radius:12px;background:#071a4a;color:#fff;text-decoration:none;font-weight:850}@media(max-width:520px){h1{font-size:26px}.card{padding:20px}}</style></head><body><main class="wrap"><a class="brand" href="/"><img src="/basse-marketplace-logo.jpg" alt="BASSE ONLINE SHOP"><span>BASSE ONLINE SHOP</span></a><section class="card"><h1>${heading}</h1>${bodyHtml}<a class="back" href="/">← Shop BASSE ONLINE SHOP</a></section></main></body></html>`
 }
 app.get("/product/:id",(req,res)=>{
   const p=db.prepare("SELECT id,name,category,price,stock,description,image,vendor_id FROM products WHERE id=? AND active=1").get(req.params.id);
@@ -67,7 +67,7 @@ app.use("/",express.static(path.join(ROOT,"../marketplace"),{maxAge:0}));
 const DB_PATH=path.join(DATA_DIR,"basse-shop.db"),BACKUP_PATH=path.join(DATA_DIR,"catalog-backup.json"),PREV_BACKUP_PATH=path.join(DATA_DIR,"catalog-backup.previous.json");
 const db=new Database(DB_PATH);db.pragma("journal_mode=WAL");db.pragma("synchronous=FULL");db.pragma("busy_timeout=5000");
 db.exec(`CREATE TABLE IF NOT EXISTS products(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT,category TEXT,price INTEGER,stock INTEGER,description TEXT,image TEXT,active INTEGER DEFAULT 1,created_at TEXT DEFAULT CURRENT_TIMESTAMP,options_json TEXT DEFAULT '{}');
-CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY,product_id INTEGER,product_name TEXT,quantity INTEGER,customer_name TEXT,whatsapp TEXT,location TEXT,total INTEGER,payment_status TEXT DEFAULT 'PENDING',order_status TEXT DEFAULT 'NEW',waychit_request_id TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,vendor_id INTEGER DEFAULT NULL,commission INTEGER DEFAULT 0,vendor_earnings INTEGER DEFAULT 0,stock_reserved INTEGER DEFAULT 0,stock_released INTEGER DEFAULT 0);
+CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY,product_id INTEGER,product_name TEXT,quantity INTEGER,customer_name TEXT,whatsapp TEXT,location TEXT,total INTEGER,payment_status TEXT DEFAULT 'PENDING',order_status TEXT DEFAULT 'NEW',waychit_request_id TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,vendor_id INTEGER DEFAULT NULL,commission INTEGER DEFAULT 0,vendor_earnings INTEGER DEFAULT 0,stock_reserved INTEGER DEFAULT 0,stock_released INTEGER DEFAULT 0,payment_group_id TEXT DEFAULT NULL);
 CREATE TABLE IF NOT EXISTS vendors(id INTEGER PRIMARY KEY AUTOINCREMENT,full_name TEXT,business_name TEXT,whatsapp TEXT,email TEXT DEFAULT '',email_verified INTEGER DEFAULT 0,verification_code TEXT,verification_expires TEXT,location TEXT,category TEXT,description TEXT,password_hash TEXT,status TEXT DEFAULT 'PENDING',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS vendor_products(id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER,vendor_id INTEGER,status TEXT DEFAULT 'PENDING',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS customer_accounts(id INTEGER PRIMARY KEY AUTOINCREMENT,full_name TEXT,whatsapp TEXT UNIQUE,password_hash TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -97,12 +97,35 @@ CREATE TABLE IF NOT EXISTS deliveries(
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(driver_id) REFERENCES delivery_drivers(id)
 );`);
+db.exec(`CREATE TABLE IF NOT EXISTS chat_conversations(
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ customer_id INTEGER,
+ customer_name TEXT NOT NULL,
+ customer_whatsapp TEXT DEFAULT '',
+ vendor_id INTEGER,
+ created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+ updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_customer_admin ON chat_conversations(customer_whatsapp) WHERE vendor_id IS NULL AND customer_whatsapp<>'';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_customer_vendor ON chat_conversations(customer_whatsapp,vendor_id) WHERE vendor_id IS NOT NULL AND customer_whatsapp<>'';
+CREATE TABLE IF NOT EXISTS chat_messages(
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ conversation_id INTEGER NOT NULL,
+ sender_type TEXT NOT NULL,
+ sender_id INTEGER,
+ sender_name TEXT DEFAULT '',
+ message TEXT NOT NULL,
+ product_id INTEGER,
+ read_at TEXT,
+ created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation ON chat_messages(conversation_id,id);`);
 try{db.exec(`CREATE TABLE IF NOT EXISTS login_attempts(id INTEGER PRIMARY KEY AUTOINCREMENT,portal TEXT NOT NULL,identifier TEXT NOT NULL,success INTEGER DEFAULT 0,reason TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP); CREATE INDEX IF NOT EXISTS idx_login_attempts_created ON login_attempts(created_at);`)}catch(e){console.error('Login log setup failed:',e.message)}
 try{db.exec("ALTER TABLE products ADD COLUMN images TEXT DEFAULT ''")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_lat REAL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_lng REAL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_accuracy REAL")}catch(e){}
-const BACKUP_TABLES=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys","delivery_drivers","deliveries"];
+const BACKUP_TABLES=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys","delivery_drivers","deliveries","chat_conversations","chat_messages"];
 function buildShopSnapshot(){
   const data={version:3,createdAt:new Date().toISOString(),tables:{}};
   for(const table of BACKUP_TABLES)data.tables[table]=db.prepare(`SELECT * FROM ${table}`).all();
@@ -220,6 +243,7 @@ try{db.exec("ALTER TABLE orders ADD COLUMN commission INTEGER DEFAULT 0")}catch(
 try{db.exec("ALTER TABLE orders ADD COLUMN vendor_earnings INTEGER DEFAULT 0")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN stock_reserved INTEGER DEFAULT 0")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN stock_released INTEGER DEFAULT 0")}catch(e){}
+try{db.exec("ALTER TABLE orders ADD COLUMN payment_group_id TEXT DEFAULT NULL")}catch(e){}
 // Restore from the local backup before serving traffic.
 // This version intentionally has no GitHub/cloud-backup dependency.
 restoreShopBackupIfEmpty();
@@ -471,6 +495,70 @@ app.post("/api/customers/login",(req,res)=>{
  res.json({ok:true,id:c.id,full_name:c.full_name,whatsapp:c.whatsapp,status:c.status||"ACTIVE"});
 });
 
+app.post("/api/chat/conversations",(req,res)=>{
+  const customerId=req.body?.customerId?Number(req.body.customerId):null;
+  const customerName=String(req.body?.customerName||"Guest Customer").trim().slice(0,120)||"Guest Customer";
+  const customerWhatsapp=String(req.body?.customerWhatsapp||"").replace(/\D/g,"").replace(/^220/,"").slice(0,15);
+  const vendorId=req.body?.vendorId?Number(req.body.vendorId):null;
+  if(vendorId){const v=db.prepare("SELECT id,business_name FROM vendors WHERE id=? AND status='APPROVED'").get(vendorId);if(!v)return res.status(404).json({error:"Vendor not found or not approved."});}
+  let c=vendorId?db.prepare("SELECT * FROM chat_conversations WHERE customer_whatsapp=? AND vendor_id=?").get("220"+customerWhatsapp,vendorId):db.prepare("SELECT * FROM chat_conversations WHERE customer_whatsapp=? AND vendor_id IS NULL").get("220"+customerWhatsapp);
+  if(!c){const x=db.prepare("INSERT INTO chat_conversations(customer_id,customer_name,customer_whatsapp,vendor_id) VALUES(?,?,?,?)").run(customerId,customerName,customerWhatsapp?"220"+customerWhatsapp:"",vendorId);c=db.prepare("SELECT * FROM chat_conversations WHERE id=?").get(x.lastInsertRowid);} else db.prepare("UPDATE chat_conversations SET customer_id=COALESCE(?,customer_id),customer_name=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(customerId,customerName,c.id);
+  res.json({ok:true,conversation:c});
+});
+app.get("/api/chat/messages/:id",(req,res)=>{const c=db.prepare("SELECT * FROM chat_conversations WHERE id=?").get(req.params.id);if(!c)return res.status(404).json({error:"Conversation not found"});const messages=db.prepare("SELECT * FROM chat_messages WHERE conversation_id=? ORDER BY id ASC LIMIT 300").all(c.id);res.json({conversation:c,messages});});
+app.post("/api/chat/messages/:id",(req,res)=>{const c=db.prepare("SELECT * FROM chat_conversations WHERE id=?").get(req.params.id);if(!c)return res.status(404).json({error:"Conversation not found"});const type=String(req.body?.senderType||"");if(!["customer","admin","vendor"].includes(type))return res.status(400).json({error:"Invalid sender."});const message=String(req.body?.message||"").trim().slice(0,2000);if(!message)return res.status(400).json({error:"Message cannot be empty."});if(type==="admin"){const s=getSession(req);if(!s||s.type!=="admin")return res.status(401).json({error:"Admin login required"});}if(type==="vendor"){const s=getSession(req);if(!s||s.type!=="vendor"||Number(c.vendor_id)!==Number(s.vendor_id))return res.status(401).json({error:"Vendor login required"});}const productId=req.body?.productId?Number(req.body.productId):null;const x=db.prepare("INSERT INTO chat_messages(conversation_id,sender_type,sender_id,sender_name,message,product_id) VALUES(?,?,?,?,?,?)").run(c.id,type,type==="vendor"?getSession(req)?.vendor_id:null,String(req.body?.senderName||type).slice(0,120),message,productId);db.prepare("UPDATE chat_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=?").run(c.id);backupShopData("chat-message");res.json({ok:true,message:db.prepare("SELECT * FROM chat_messages WHERE id=?").get(x.lastInsertRowid)});});
+app.get("/api/admin/chat/conversations",guard,(req,res)=>{res.json(db.prepare(`SELECT c.*,v.business_name AS vendor_name,(SELECT COUNT(*) FROM chat_messages m WHERE m.conversation_id=c.id AND m.sender_type='customer' AND m.read_at IS NULL) unread,(SELECT message FROM chat_messages m WHERE m.conversation_id=c.id ORDER BY m.id DESC LIMIT 1) last_message FROM chat_conversations c LEFT JOIN vendors v ON v.id=c.vendor_id ORDER BY datetime(c.updated_at) DESC`).all())});
+app.post("/api/admin/chat/messages/:id/read",guard,(req,res)=>{db.prepare("UPDATE chat_messages SET read_at=CURRENT_TIMESTAMP WHERE conversation_id=? AND sender_type='customer'").run(req.params.id);res.json({ok:true})});
+app.get("/api/vendor/chat/conversations",vendorGuard,(req,res)=>{res.json(db.prepare(`SELECT c.*,v.business_name AS vendor_name,(SELECT COUNT(*) FROM chat_messages m WHERE m.conversation_id=c.id AND m.sender_type='customer' AND m.read_at IS NULL) unread,(SELECT message FROM chat_messages m WHERE m.conversation_id=c.id ORDER BY m.id DESC LIMIT 1) last_message FROM chat_conversations c LEFT JOIN vendors v ON v.id=c.vendor_id WHERE c.vendor_id=? ORDER BY datetime(c.updated_at) DESC`).all(req.vendorId))});
+app.post("/api/orders/cart",async(req,res)=>{
+  const items=Array.isArray(req.body?.items)?req.body.items:[];
+  if(!items.length)return res.status(400).json({error:"Your cart is empty."});
+  const name=String(req.body.name||"").trim();
+  const rawPhone=String(req.body.whatsapp||"").replace(/\D/g,"").replace(/^220/,"");
+  if(!name)return res.status(400).json({error:"Please enter your full name."});
+  if(rawPhone.length<6)return res.status(400).json({error:"Enter a valid WhatsApp number"});
+  const phone="220"+rawPhone;
+  const customerAccount=db.prepare("SELECT status FROM customer_accounts WHERE whatsapp=?").get(phone);
+  if(customerAccount?.status==='BLOCKED')return res.status(403).json({error:"This customer account is blocked. Please contact BASSE Admin."});
+  const groupId="BOSG-"+crypto.randomBytes(4).toString("hex").toUpperCase();
+  const created=[];
+  try{
+    const tx=db.transaction(()=>{
+      for(const item of items){
+        const p=db.prepare("SELECT * FROM products WHERE id=? AND active=1").get(item.productId);
+        const q=Math.max(1,Math.floor(Number(item.quantity)||1));
+        if(!p)throw new Error("One of the products is no longer available.");
+        if(q>p.stock)throw new Error(`${p.name}: only ${p.stock} item${p.stock===1?'':'s'} available.`);
+        const total=p.price*q;
+        const id="BOS-"+crypto.randomBytes(4).toString("hex").toUpperCase();
+        const commission=Math.round(total*0.10),vendorEarnings=total-commission,vendorId=p.vendor_id||null;
+        const chosenOptions=orderOptionsLabel(item.options);
+        const orderProductName=chosenOptions?p.name+" ("+chosenOptions+")":p.name;
+        const changed=db.prepare("UPDATE products SET stock=stock-? WHERE id=? AND active=1 AND stock>=?").run(q,p.id,q);
+        if(!changed.changes)throw new Error(`${p.name}: not enough stock.`);
+        db.prepare("INSERT INTO orders(id,product_id,product_name,quantity,customer_name,whatsapp,location,total,vendor_id,commission,vendor_earnings,stock_reserved,stock_released,customer_lat,customer_lng,customer_accuracy,payment_group_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+          .run(id,p.id,orderProductName,q,name,phone,String(req.body.location||""),total,vendorId,commission,vendorEarnings,q,0,Number.isFinite(Number(req.body.customerLat))?Number(req.body.customerLat):null,Number.isFinite(Number(req.body.customerLng))?Number(req.body.customerLng):null,Number.isFinite(Number(req.body.customerAccuracy))?Number(req.body.customerAccuracy):null,groupId);
+        created.push({id,product_id:p.id,product_name:orderProductName,quantity:q,total,vendor_id:vendorId});
+      }
+    });
+    tx();
+  }catch(e){return res.status(400).json({error:e.message||"Could not create the cart order."})}
+  backupShopData("cart-order-created");
+  created.forEach(o=>broadcastLive("catalog",{productId:o.product_id,stockChanged:true}));
+  broadcastLive("orders",{orderGroupId:groupId});
+  const grandTotal=created.reduce((a,o)=>a+Number(o.total||0),0);
+  let paymentUrl="",paymentError="";
+  if(process.env.WAYCHIT_API_KEY){
+    try{
+      const r=await fetch("https://api.waychit.com/v1/payment-requests",{method:"POST",headers:{"Authorization":"Bearer "+process.env.WAYCHIT_API_KEY,"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({amount:grandTotal,description:`BASSE ONLINE SHOP cart (${created.length} items)`,clientReference:groupId,successRedirectUrl:PUBLIC_BASE_URL+"/payment-return?payment=success&order="+encodeURIComponent(created[0].id)+"&group="+encodeURIComponent(groupId),failureRedirectUrl:PUBLIC_BASE_URL+"/payment-return?payment=failed&order="+encodeURIComponent(created[0].id)+"&group="+encodeURIComponent(groupId)})});
+      const body=await r.text();let d={};try{d=JSON.parse(body)}catch{}
+      console.log("Waychit cart payment request:",r.status,body.slice(0,1200));
+      if(r.ok&&d.paymentRequest?.waychitLaunchUrl){paymentUrl=d.paymentRequest.waychitLaunchUrl;db.prepare("UPDATE orders SET waychit_request_id=? WHERE payment_group_id=?").run(d.paymentRequest.id,groupId)}else paymentError=d.error?.message||d.message||"Waychit payment could not be created.";
+    }catch(e){paymentError=e.message||"Waychit is unavailable."}
+  }else paymentError="Waychit API is not configured.";
+  res.json({ok:true,paymentUrl,paymentMode:paymentUrl?"dynamic":"fallback",paymentError,order:created[0],orders:created,groupId,total:grandTotal,whatsappSupport:process.env.WHATSAPP_SUPPORT||""});
+});
+
 app.post("/api/orders",async(req,res)=>{
   let p=db.prepare("SELECT * FROM products WHERE id=? AND active=1").get(req.body.productId);
   let q=Math.max(1,+req.body.quantity||1);
@@ -674,7 +762,7 @@ app.post("/api/waychit/webhook",(req,res)=>{
     let e=JSON.parse(raw);
     let ref=e.paymentRequest?.clientReference||e.paymentSession?.clientReference||e.data?.clientReference;
     if((e.type==="payment.request.completed"||e.type==="payment.session.completed")&&ref){
-      db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE id=? AND payment_status!='REFUNDED'").run(ref);backupShopData("webhook-payment");broadcastLive("orders",{orderId:ref});
+      const group=db.prepare("SELECT payment_group_id FROM orders WHERE id=?").get(ref)?.payment_group_id; if(group) db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE payment_group_id=? AND payment_status!='REFUNDED'").run(group); else db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE id=? AND payment_status!='REFUNDED'").run(ref); backupShopData("webhook-payment");broadcastLive("orders",{orderId:ref,orderGroupId:group||null});
     }
     res.sendStatus(200);
   }catch(e){res.status(400).send("Bad webhook")}

@@ -99,7 +99,7 @@ function renderProductDetail(product){
     <button class="close modern-close" onclick="closeModal()" aria-label="Close">×</button>
     <div class="product-detail">
       <div class="gallery"><div class="main-photo-wrap"><img id="mainProductImage" src="${imgs[0]}" alt="${esc(product.name)}" loading="eager" decoding="async"></div>${thumbs}</div>
-      <div class="detail-info modern-detail-info"><span class="tagline">${esc(product.category)}</span><h2>${esc(product.name)}</h2><div class="detail-price">${money(product.price)}</div><p class="muted">${esc(product.description||"Quality product from BASSE MARKET.")}</p>${renderOptionFields(product)?`<div class="product-options"><b>Choose options</b>${renderOptionFields(product)}</div>`:""}<div class="stock-note ${product.stock<1?'out':''}">${product.stock>0?` ${product.stock} available`:"Out of stock"}</div><div class="detail-actions"><button class="pay buy-now-modern" ${product.stock<1?"disabled":""} onclick="openCheckout()"><span></span><b>BUY NOW</b><span class="arrow">→</span></button></div><div class="product-hint">Secure checkout · Pay with Waychit</div></div>
+      <div class="detail-info modern-detail-info"><span class="tagline">${esc(product.category)}</span><h2>${esc(product.name)}</h2><div class="detail-price">${money(product.price)}</div><p class="muted">${esc(product.description||"Quality product from BASSE MARKET.")}</p>${renderOptionFields(product)?`<div class="product-options"><b>Choose options</b>${renderOptionFields(product)}</div>`:""}<div class="stock-note ${product.stock<1?'out':''}">${product.stock>0?` ${product.stock} available`:"Out of stock"}</div><div class="detail-actions"><button class="secondary-btn cart-add-btn" ${product.stock<1?"disabled":""} onclick="addSelectedToCart()"><b>ADD TO CART</b></button><button class="pay buy-now-modern" ${product.stock<1?"disabled":""} onclick="openCheckout()"><span></span><b>BUY NOW</b><span class="arrow">→</span></button>${product.vendor_id?`<button class="secondary-btn" type="button" onclick="openChat(${Number(product.vendor_id)},'Vendor')"><b>CHAT WITH VENDOR</b></button>`:""}</div><div class="product-hint">Secure checkout · Pay with Waychit</div></div>
     </div></div>`;
   window.__productImages=imgs;
   $("modal").classList.add("show");
@@ -170,6 +170,40 @@ async function buy(id){
   }catch(e){if(!cached)toast(e.message)}
 }
 function pickImage(i){let im=window.__productImages?.[i];if(im){$("mainProductImage").src=im;document.querySelectorAll(".thumbs button").forEach((b,n)=>b.classList.toggle("active",n===i))}}
+function getCart(){try{const c=JSON.parse(localStorage.getItem("basseCart")||"[]");return Array.isArray(c)?c:[]}catch{return []}}
+function saveCart(c){try{localStorage.setItem("basseCart",JSON.stringify(c));updateCartCount()}catch{}}
+function cartKey(item){return String(item.productId)+"|"+JSON.stringify(item.options||[])}
+function updateCartCount(){const n=getCart().reduce((a,x)=>a+Math.max(1,Number(x.quantity)||1),0);document.querySelectorAll("#cartCount").forEach(e=>e.textContent=n)}
+function addSelectedToCart(){
+  if(!selected||selected.stock<1)return;
+  if(!validateProductOptions())return;
+  const options=getSelectedOptionSummary(), c=getCart(), key=cartKey({productId:selected.id,options});
+  const existing=c.find(x=>cartKey(x)===key);
+  if(existing)existing.quantity=Math.min(Number(selected.stock),Math.max(1,Number(existing.quantity)||1)+1);
+  else c.push({productId:Number(selected.id),name:selected.name,price:Number(selected.price),image:selected.image||normalizeProductImages(selected)[0]||"",stock:Number(selected.stock),quantity:1,options});
+  saveCart(c);toast("Added to cart ✓");
+}
+function removeFromCart(i){const c=getCart();c.splice(i,1);saveCart(c);openCart()}
+function changeCartQty(i,d){const c=getCart(),x=c[i];if(!x)return;x.quantity=Math.max(1,Math.min(Number(x.stock)||1,(Number(x.quantity)||1)+d));saveCart(c);openCart()}
+function openCart(){
+  const c=getCart();
+  if(!c.length){$("modal").innerHTML='<div class="sheet return-sheet"><button class="close" onclick="closeModal()">×</button><div class="result-icon" aria-hidden="true">🛒</div><h2>Your cart is empty</h2><p>Add products to your cart and they will appear here.</p><button class="secondary-btn" onclick="closeModal()">CONTINUE SHOPPING</button></div>';$('modal').classList.add('show');return;}
+  const total=c.reduce((a,x)=>a+Number(x.price||0)*Math.max(1,Number(x.quantity)||1),0);
+  $("modal").innerHTML=`<div class="sheet checkout-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="mini-bag" aria-hidden="true">🛒</span><div><small>BASSE ONLINE SHOP</small><h2>Your cart</h2></div></div><div class="cart-list">${c.map((x,i)=>`<div class="cart-item"><img src="${esc(x.image||"")}" alt=""><div class="cart-item-main"><b>${esc(x.name)}</b><small>${(x.options||[]).map(esc).join(" · ")||"Standard"}</small><strong>${money(x.price*Math.max(1,x.quantity))}</strong><div class="qty-row"><button type="button" onclick="changeCartQty(${i},-1)">−</button><input value="${Math.max(1,x.quantity)}" readonly><button type="button" onclick="changeCartQty(${i},1)">+</button><button type="button" class="secondary-btn" onclick="removeFromCart(${i})">REMOVE</button></div></div></div>`).join("")}</div><div class="summary"><div class="row"><span>Items</span><b>${c.reduce((a,x)=>a+Math.max(1,x.quantity),0)}</b></div><div class="row total-row"><span>Total</span><b>${money(total)}</b></div></div><button class="pay pulse" onclick="openCartCheckout()">CHECKOUT WITH WAYCHIT <span>→</span></button></div>`;$('modal').classList.add('show');
+}
+function openCartCheckout(){
+  const c=getCart();if(!c.length)return openCart();
+  const saved=JSON.parse(localStorage.getItem("basseCustomer")||"null");const name=esc(saved?.name||""),phone=esc(String(saved?.phone||"").replace(/\D/g,"").replace(/^220/,""));
+  checkoutGps={lat:null,lng:null,accuracy:null};
+  const total=c.reduce((a,x)=>a+Number(x.price||0)*Math.max(1,Number(x.quantity)||1),0);
+  $("modal").innerHTML=`<div class="sheet checkout-sheet"><button class="close" onclick="openCart()">←</button><div class="checkout-head"><span class="mini-bag">🛒</span><div><small>SECURE CHECKOUT</small><h2>Cart checkout</h2></div></div><p class="muted">${c.length} product${c.length===1?'':'s'} · ${money(total)}</p><div class="form"><label>Full Name</label><input id="cartName" autocomplete="name" placeholder="Your name" value="${name}"><label>WhatsApp Number</label><input id="cartPhone" inputmode="numeric" placeholder="7XXXXXX" value="${phone}"><small>+220 will be added automatically.</small><label>Delivery Area</label><select id="cartLoc"><option>Basse</option><option>Bansang</option><option>Fatoto</option><option>Other</option></select><button type="button" class="location-btn" onclick="captureCheckoutLocationCart()"> USE MY CURRENT GPS LOCATION</button><small id="cartGpsState" class="gps-note">GPS is optional.</small><div class="summary"><div class="row total-row"><span>Total</span><b>${money(total)}</b></div></div><button class="pay pulse" onclick="placeCartOrder()">PAY WITH WAYCHIT <span>→</span></button></div></div>`;$('modal').classList.add('show');
+}
+function captureCheckoutLocationCart(){const state=$("cartGpsState");if(!navigator.geolocation){if(state)state.textContent="GPS is not supported.";return}if(state)state.textContent="Getting your location…";navigator.geolocation.getCurrentPosition(p=>{checkoutGps={lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy};if(state)state.textContent=`GPS location saved (±${Math.round(p.coords.accuracy||0)}m).`},()=>{if(state)state.textContent="GPS permission not granted. You can continue."},{enableHighAccuracy:true,maximumAge:10000,timeout:15000})}
+async function placeCartOrder(){
+  const c=getCart();if(!c.length)return openCart();let phone=$("cartPhone").value.replace(/\D/g,"").replace(/^220/,"");if(!$("cartName").value.trim())return toast("Please enter your full name.");if(phone.length<6)return toast("Please enter a valid WhatsApp number.");const btn=document.querySelector('.pay');if(btn){btn.disabled=true;btn.innerHTML=" CONNECTING TO WAYCHIT…"}
+  try{const r=await fetch("/api/orders/cart",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:c.map(x=>({productId:x.productId,quantity:x.quantity,options:x.options||[]})),name:$("cartName").value.trim(),whatsapp:phone,location:$("cartLoc").value,customerLat:checkoutGps.lat,customerLng:checkoutGps.lng,customerAccuracy:checkoutGps.accuracy})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||"Could not create your order.");localStorage.setItem("basseLastOrder",JSON.stringify(d.order));localStorage.setItem("bassePendingPayment",JSON.stringify({orderId:d.order.id,groupId:d.groupId,startedAt:Date.now(),paymentMode:d.paymentMode||"dynamic"}));localStorage.removeItem("basseCart");updateCartCount();if(d.paymentUrl){setTimeout(()=>window.location.href=d.paymentUrl,120);return}throw new Error(d.paymentError||"Waychit payment is not available right now.");}catch(e){if(btn){btn.disabled=false;btn.innerHTML="PAY WITH WAYCHIT <span>→</span>"}toast(e.message)}
+}
+
 function openCheckout(){
   if(!selected)return;
   if(!validateProductOptions())return;
@@ -567,11 +601,24 @@ function resumePendingPayment(){
     waitForPayment(p.orderId,0);
   }catch{}
 }
-function closeModal(){stopTrackingPolling();$("modal").classList.remove("show")}
-function openCart(){toast("Cart checkout is coming next — Buy Now is fully active.")}
+function closeModal(){stopTrackingPolling();stopChatPoll();$("modal").classList.remove("show")}
 async function openOrders(){let raw=localStorage.getItem("basseLastOrder");if(!raw)return toast("No recent order found on this phone.");try{let old=JSON.parse(raw),r=await fetch("/api/order/"+encodeURIComponent(old.id)),o=await r.json();if(!r.ok)throw new Error(o.error||"Order not found");showReturn(o,"",o.payment_status==="PAID",o.whatsappSupport,o.payment_status==="PENDING"?"Your order is waiting for payment confirmation.":"")}catch(e){toast(e.message)}}
 
 
+
+let activeChatId=null,chatPoll=null;
+function customerIdentity(){const c=JSON.parse(localStorage.getItem("basseCustomer")||"null");return {customerId:c?.id||null,name:c?.name||"Guest Customer",whatsapp:(c?.phone||"").replace(/\D/g,"").replace(/^220/,"")};}
+async function chatApi(u,o={}){const r=await fetch(u,{...o,headers:{"Content-Type":"application/json",...(o.headers||{})},cache:"no-store"});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||"Chat request failed");return d;}
+async function openChat(vendorId=null,vendorName="Admin"){
+  stopChatPoll();
+  const modal=$("modal"), who=customerIdentity();
+  modal.innerHTML=`<div class="sheet chat-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="support-modal-icon">💬</span><div><small>BASSE ONLINE SHOP</small><h2>Chat with ${esc(vendorName)}</h2></div></div><div id="chatMessages" class="chat-messages"><div class="muted">Loading conversation…</div></div><div class="chat-compose"><input id="chatText" placeholder="Type your message…" autocomplete="off"><button class="pay" onclick="sendChatMessage()">SEND</button></div></div>`;
+  modal.classList.add('show');
+  try{const d=await chatApi('/api/chat/conversations',{method:'POST',body:JSON.stringify({customerId:who.customerId,customerName:who.name,customerWhatsapp:who.whatsapp,vendorId:vendorId||null})});activeChatId=d.conversation.id;await loadChatMessages();chatPoll=setInterval(loadChatMessages,3000);setTimeout(()=>$("chatText")?.focus(),100)}catch(e){$("chatMessages").innerHTML=`<p class="muted">${esc(e.message)}</p>`}
+}
+async function loadChatMessages(){if(!activeChatId)return;try{const d=await chatApi('/api/chat/messages/'+activeChatId);const box=$("chatMessages");if(!box)return;box.innerHTML=d.messages.length?d.messages.map(m=>`<div class="chat-bubble ${m.sender_type==='customer'?'mine':'theirs'}"><div>${esc(m.message)}</div>${m.product_id?`<button class="chat-product" onclick="buy(${m.product_id})">VIEW PRODUCT →</button>`:''}<small>${new Date(m.created_at).toLocaleString()}</small></div>`).join(''):`<div class="muted chat-empty">Start the conversation.</div>`;box.scrollTop=box.scrollHeight}catch{}}
+async function sendChatMessage(){const input=$("chatText"),text=input?.value.trim();if(!text||!activeChatId)return;const btn=document.querySelector('.chat-compose .pay');if(btn)btn.disabled=true;try{await chatApi('/api/chat/messages/'+activeChatId,{method:'POST',body:JSON.stringify({senderType:'customer',senderName:customerIdentity().name,message:text})});input.value='';await loadChatMessages()}catch(e){toast(e.message)}finally{if(btn)btn.disabled=false}}
+function stopChatPoll(){if(chatPoll){clearInterval(chatPoll);chatPoll=null}activeChatId=null}
 function showSupport(){
   const modal=$("modal");
   modal.innerHTML=`<div class="sheet support-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="support-modal-icon"><svg viewBox="0 0 48 48"><path d="M10 25v-4a14 14 0 0 1 28 0v4" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><rect x="6" y="23" width="9" height="13" rx="4" fill="none" stroke="currentColor" stroke-width="2.8"/><rect x="33" y="23" width="9" height="13" rx="4" fill="none" stroke="currentColor" stroke-width="2.8"/><path d="M33 36c-1 5-5 7-10 7h-3" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg></span><div><small>BASSE ONLINE SHOP</small><h2>Customer Support</h2></div></div><p class="muted">Need help with an order, payment or delivery? Call our support team.</p><div class="support-number">+220 6963349</div><a class="pay support-call" href="tel:+2206963349">CALL CUSTOMER SUPPORT <span>→</span></a><button class="secondary-btn" type="button" onclick="closeModal()">CLOSE</button></div>`;
@@ -715,7 +762,7 @@ async function loadStorePreview(){
   }
 }
 
-const initialSearch=new URLSearchParams(location.search).get("q");if(initialSearch){$("search").value=initialSearch;}loadProducts();loadStorePreview();handleReturn();setTimeout(()=>{if(new URLSearchParams(location.search).get("vendor")==="apply"){openVendorApply();history.replaceState({},"",location.pathname)}resumeVendorApplication();if(!new URLSearchParams(location.search).get("payment"))resumePendingPayment()},200);
+updateCartCount();const initialSearch=new URLSearchParams(location.search).get("q");if(initialSearch){$("search").value=initialSearch;}loadProducts();loadStorePreview();handleReturn();setTimeout(()=>{if(new URLSearchParams(location.search).get("vendor")==="apply"){openVendorApply();history.replaceState({},"",location.pathname)}resumeVendorApplication();if(!new URLSearchParams(location.search).get("payment"))resumePendingPayment()},200);
 // Instant catalog/order updates. EventSource reconnects automatically if the connection drops.
 function connectLive(){
   try{

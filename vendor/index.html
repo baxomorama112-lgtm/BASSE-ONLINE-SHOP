@@ -9,7 +9,7 @@
 <button class="active" data-tab="overview" onclick="showVendorTab('overview',this)">Overview</button>
 <button data-tab="products-tab" onclick="showVendorTab('products-tab',this)">Products</button>
 <button data-tab="orders-tab" onclick="showVendorTab('orders-tab',this)">Orders</button>
-<button data-tab="transactions-tab" onclick="showVendorTab('transactions-tab',this)">Transactions</button>
+<button data-tab="transactions-tab" onclick="showVendorTab('transactions-tab',this)">Transactions</button><button data-tab="chat-tab" onclick="showVendorTab('chat-tab',this);loadVendorChats()">Chat</button>
 <button data-tab="store-tab" onclick="showVendorTab('store-tab',this)">Store profile</button>
 </nav>
 <section id="overview" class="vendor-panel">
@@ -19,6 +19,7 @@
 <section id="products-tab" class="vendor-panel hidden"><div class="card"><div class="bar"><div><span class="eyebrow">CATALOG</span><h2>Products</h2><small>Manage what customers see in the marketplace.</small></div><button class="small-action primary" onclick="openAdd()">ADD PRODUCT</button></div><div id="productsList"></div></div></section>
 <section id="orders-tab" class="vendor-panel hidden"><div class="card"><div class="bar"><div><span class="eyebrow">SALES</span><h2>Orders</h2><small>Orders belonging to your store.</small></div></div><div id="orders"></div></div></section>
 <section id="transactions-tab" class="vendor-panel hidden"><div class="card"><div class="bar"><div><span class="eyebrow">FINANCE</span><h2>Transactions</h2><small>Sales, commission and your earnings.</small></div></div><div id="transactions"></div></div></section>
+<section id="chat-tab" class="vendor-panel hidden"><div class="card"><div class="bar"><div><span class="eyebrow">CUSTOMERS</span><h2>Customer Chat</h2><small>Answer questions about your products.</small></div><button class="small-action" onclick="loadVendorChats()">↻ Refresh</button></div><div class="vendor-chat-grid"><div id="vendorChatList"><p>Select Chat to load conversations.</p></div><div><div id="vendorChatMessages" class="vendor-chat-messages"><p class="muted">Select a conversation.</p></div><div class="vendor-chat-compose"><select id="vendorChatProduct"><option value="">No product</option></select><input id="vendorChatText" placeholder="Reply to customer…"><button onclick="sendVendorChat()">SEND</button></div></div></div></div></section>
 <section id="store-tab" class="vendor-panel hidden"><div class="card store-profile-card"><div class="store-profile-mark" id="storeMark">B</div><div><span class="eyebrow">YOUR STORE</span><h2 id="storeProfileName">My Shop</h2><p id="storeProfileMeta">Store information</p></div></div><div class="card"><h3>Store status</h3><p>Your store is connected to the BASSE marketplace. Product approval and account security are managed by BASSE Admin.</p><div class="status-row"><span>Marketplace status</span><b class="status-live">ACTIVE</b></div></div></section>
 </main></div>
 <div id="modal" class="modal hidden" role="dialog" aria-modal="true"><div class="card" id="form"></div></div><div id="toast" class="toast hidden" role="status" aria-live="polite"></div><script src="app.js"></script></body></html>
