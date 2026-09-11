@@ -502,7 +502,19 @@ app.post("/api/chat/conversations",(req,res)=>{
   const vendorId=req.body?.vendorId?Number(req.body.vendorId):null;
   if(vendorId){const v=db.prepare("SELECT id,business_name FROM vendors WHERE id=? AND status='APPROVED'").get(vendorId);if(!v)return res.status(404).json({error:"Vendor not found or not approved."});}
   let c=vendorId?db.prepare("SELECT * FROM chat_conversations WHERE customer_whatsapp=? AND vendor_id=?").get("220"+customerWhatsapp,vendorId):db.prepare("SELECT * FROM chat_conversations WHERE customer_whatsapp=? AND vendor_id IS NULL").get("220"+customerWhatsapp);
-  if(!c){const x=db.prepare("INSERT INTO chat_conversations(customer_id,customer_name,customer_whatsapp,vendor_id) VALUES(?,?,?,?)").run(customerId,customerName,customerWhatsapp?"220"+customerWhatsapp:"",vendorId);c=db.prepare("SELECT * FROM chat_conversations WHERE id=?").get(x.lastInsertRowid);} else db.prepare("UPDATE chat_conversations SET customer_id=COALESCE(?,customer_id),customer_name=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(customerId,customerName,c.id);
+  if(!c){
+    const x=db.prepare("INSERT INTO chat_conversations(customer_id,customer_name,customer_whatsapp,vendor_id) VALUES(?,?,?,?)").run(customerId,customerName,customerWhatsapp?"220"+customerWhatsapp:"",vendorId);
+    c=db.prepare("SELECT * FROM chat_conversations WHERE id=?").get(x.lastInsertRowid);
+    const v=vendorId?db.prepare("SELECT business_name FROM vendors WHERE id=?").get(vendorId):null;
+    const welcome=vendorId
+      ? `Hello 👋 Welcome to ${v?.business_name||"this store"}. Thanks for contacting us. How can we help you with a product today?`
+      : "Hello 👋 Welcome to BASSE ONLINE SHOP! How can we help you today? You can ask about products, prices, orders, payments, delivery, or anything else.";
+    const senderName=vendorId?(v?.business_name||"Vendor"):"BASSE Support";
+    db.prepare("INSERT INTO chat_messages(conversation_id,sender_type,sender_id,sender_name,message) VALUES(?,?,?,?,?)").run(c.id,vendorId?"vendor":"admin",vendorId||null,senderName,welcome);
+    db.prepare("UPDATE chat_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=?").run(c.id);
+    c=db.prepare("SELECT * FROM chat_conversations WHERE id=?").get(c.id);
+    backupShopData("chat-welcome");
+  } else db.prepare("UPDATE chat_conversations SET customer_id=COALESCE(?,customer_id),customer_name=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(customerId,customerName,c.id);
   res.json({ok:true,conversation:c});
 });
 app.get("/api/chat/messages/:id",(req,res)=>{const c=db.prepare("SELECT * FROM chat_conversations WHERE id=?").get(req.params.id);if(!c)return res.status(404).json({error:"Conversation not found"});const messages=db.prepare("SELECT * FROM chat_messages WHERE conversation_id=? ORDER BY id ASC LIMIT 300").all(c.id);res.json({conversation:c,messages});});
@@ -510,6 +522,7 @@ app.post("/api/chat/messages/:id",(req,res)=>{const c=db.prepare("SELECT * FROM 
 app.get("/api/admin/chat/conversations",guard,(req,res)=>{res.json(db.prepare(`SELECT c.*,v.business_name AS vendor_name,(SELECT COUNT(*) FROM chat_messages m WHERE m.conversation_id=c.id AND m.sender_type='customer' AND m.read_at IS NULL) unread,(SELECT message FROM chat_messages m WHERE m.conversation_id=c.id ORDER BY m.id DESC LIMIT 1) last_message FROM chat_conversations c LEFT JOIN vendors v ON v.id=c.vendor_id ORDER BY datetime(c.updated_at) DESC`).all())});
 app.post("/api/admin/chat/messages/:id/read",guard,(req,res)=>{db.prepare("UPDATE chat_messages SET read_at=CURRENT_TIMESTAMP WHERE conversation_id=? AND sender_type='customer'").run(req.params.id);res.json({ok:true})});
 app.get("/api/vendor/chat/conversations",vendorGuard,(req,res)=>{res.json(db.prepare(`SELECT c.*,v.business_name AS vendor_name,(SELECT COUNT(*) FROM chat_messages m WHERE m.conversation_id=c.id AND m.sender_type='customer' AND m.read_at IS NULL) unread,(SELECT message FROM chat_messages m WHERE m.conversation_id=c.id ORDER BY m.id DESC LIMIT 1) last_message FROM chat_conversations c LEFT JOIN vendors v ON v.id=c.vendor_id WHERE c.vendor_id=? ORDER BY datetime(c.updated_at) DESC`).all(req.vendorId))});
+app.post("/api/vendor/chat/messages/:id/read",vendorGuard,(req,res)=>{const c=db.prepare("SELECT id FROM chat_conversations WHERE id=? AND vendor_id=?").get(req.params.id,req.vendorId);if(!c)return res.status(404).json({error:"Conversation not found"});db.prepare("UPDATE chat_messages SET read_at=CURRENT_TIMESTAMP WHERE conversation_id=? AND sender_type='customer'").run(c.id);res.json({ok:true})});
 app.post("/api/orders/cart",async(req,res)=>{
   const items=Array.isArray(req.body?.items)?req.body.items:[];
   if(!items.length)return res.status(400).json({error:"Your cart is empty."});

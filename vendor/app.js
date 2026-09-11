@@ -159,11 +159,11 @@ async function submitProduct(e){
   }
 }
 
-let activeVendorChat=null,vendorChatTimer=null;
+let activeVendorChat=null,vendorChatTimer=null,vendorChatListTimer=null;
 async function loadVendorChatProducts(){try{const ps=await api('/api/vendor/products');const sel=$('vendorChatProduct');if(sel)sel.innerHTML='<option value="">No product</option>'+ps.filter(p=>p.approval_status==='APPROVED'&&p.active!==0).map(p=>`<option value="${p.id}">${esc(p.name)} · ${money(p.price)}</option>`).join('')}catch{}}
 
-async function loadVendorChats(){try{await loadVendorChatProducts();const rows=await api('/api/vendor/chat/conversations');const box=$('vendorChatList');box.innerHTML=rows.length?rows.map(c=>`<button class="vendor-chat-row" onclick="openVendorChat(${c.id})"><b>${esc(c.customer_name)}</b><small>${esc(c.last_message||'No messages')}</small>${c.unread?`<i>${c.unread}</i>`:''}</button>`).join(''):'<p>No customer chats yet.</p>'}catch(e){showToast(e.message,'error')}}
-async function openVendorChat(id){activeVendorChat=id;await loadVendorChatMessages();if(vendorChatTimer)clearInterval(vendorChatTimer);vendorChatTimer=setInterval(loadVendorChatMessages,3000)}
+async function loadVendorChats(){try{await loadVendorChatProducts();const rows=await api('/api/vendor/chat/conversations');const box=$('vendorChatList');box.innerHTML=rows.length?rows.map(c=>`<button class="vendor-chat-row" onclick="openVendorChat(${c.id})"><b>${esc(c.customer_name)}</b><small>${esc(c.last_message||'No messages')}</small>${c.unread?`<i>${c.unread}</i>`:''}</button>`).join(''):'<p>No customer chats yet.</p>'}catch(e){showToast(e.message,'error')}finally{if(!vendorChatListTimer)vendorChatListTimer=setInterval(()=>{if(document.getElementById('chat-tab')&&!document.getElementById('chat-tab').classList.contains('hidden'))loadVendorChats()},5000)}}
+async function openVendorChat(id){activeVendorChat=id;await loadVendorChatMessages();await api('/api/vendor/chat/messages/'+id+'/read',{method:'POST'}).catch(()=>{});enableVendorChatEnter();if(vendorChatTimer)clearInterval(vendorChatTimer);vendorChatTimer=setInterval(loadVendorChatMessages,3000)}
 async function loadVendorChatMessages(){if(!activeVendorChat)return;try{const d=await api('/api/chat/messages/'+activeVendorChat);const box=$('vendorChatMessages');box.innerHTML=d.messages.map(m=>`<div class="vendor-chat-bubble ${m.sender_type==='vendor'?'mine':'theirs'}"><b>${esc(m.sender_name||m.sender_type)}</b><div>${esc(m.message)}</div>${m.product_id?`<a href="/product/${m.product_id}" target="_blank">VIEW PRODUCT →</a>`:''}<small>${new Date(m.created_at).toLocaleString()}</small></div>`).join('')||'<p class="muted">No messages yet.</p>';box.scrollTop=box.scrollHeight}catch{}}
 async function sendVendorChat(){const x=$('vendorChatText'),text=x?.value.trim(),productId=Number($('vendorChatProduct')?.value||0)||null;if(!activeVendorChat||(!text&&!productId))return;try{await api('/api/chat/messages/'+activeVendorChat,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({senderType:'vendor',senderName:'Vendor',message:text||'Please see this product.',productId})});x.value='';if($('vendorChatProduct'))$('vendorChatProduct').value='';loadVendorChatMessages();loadVendorChats()}catch(e){showToast(e.message,'error')}}
 
@@ -177,3 +177,5 @@ document.addEventListener("DOMContentLoaded",()=>{
   $("modal")?.addEventListener("click",e=>{if(e.target.id==="modal")closeModal()});
   boot();
 });
+
+function enableVendorChatEnter(){const x=$('vendorChatText');if(x&&!x.dataset.enterBound){x.dataset.enterBound='1';x.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendVendorChat()}})}}
