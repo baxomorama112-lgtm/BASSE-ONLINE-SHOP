@@ -1099,3 +1099,5 @@ html{scroll-behavior:smooth}body{background:#f7f9fd;color:#101a2c;overflow-x:hid
  .chat-sheet .chat-send-btn{min-width:82px;min-height:50px;padding:10px 12px}
  .messenger-home-sheet{width:calc(100vw - 16px);max-height:calc(100dvh - 18px);border-radius:22px}
 }
+
+.chat-nav-btn .chat-nav-icon{position:relative;display:grid;place-items:center}.chat-nav-btn .chat-nav-icon>svg{display:block}.chat-unread-badge,.chat-row-badge{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#e53935;color:#fff;font-size:9px;font-weight:950;line-height:1;box-shadow:0 2px 7px rgba(229,57,53,.28)}.chat-nav-btn .chat-unread-badge{position:absolute;top:-7px;right:-9px;border:2px solid #fff}.chat-row-unread{border-color:#b9d0f5;background:#f5f9ff}.chat-row-unread .chat-inbox-copy b{font-weight:950}.chat-row-unread .chat-inbox-copy small{color:#263b63;font-weight:700}.chat-row-badge{margin-left:auto;flex:0 0 auto}
