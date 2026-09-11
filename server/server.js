@@ -120,6 +120,14 @@ CREATE TABLE IF NOT EXISTS chat_messages(
  created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation ON chat_messages(conversation_id,id);`);
+function cleanupExpiredChatMessages(){
+  try{
+    db.prepare("DELETE FROM chat_messages WHERE datetime(created_at) < datetime('now','-72 hours')").run();
+    db.prepare("DELETE FROM chat_conversations WHERE datetime(updated_at) < datetime('now','-72 hours') AND NOT EXISTS (SELECT 1 FROM chat_messages m WHERE m.conversation_id=chat_conversations.id)").run();
+  }catch(e){console.error('Chat cleanup failed:',e.message)}
+}
+cleanupExpiredChatMessages();
+setInterval(cleanupExpiredChatMessages,60*60*1000);
 try{db.exec(`CREATE TABLE IF NOT EXISTS login_attempts(id INTEGER PRIMARY KEY AUTOINCREMENT,portal TEXT NOT NULL,identifier TEXT NOT NULL,success INTEGER DEFAULT 0,reason TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP); CREATE INDEX IF NOT EXISTS idx_login_attempts_created ON login_attempts(created_at);`)}catch(e){console.error('Login log setup failed:',e.message)}
 try{db.exec("ALTER TABLE products ADD COLUMN images TEXT DEFAULT ''")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_lat REAL")}catch(e){}
@@ -496,6 +504,7 @@ app.post("/api/customers/login",(req,res)=>{
 });
 
 app.post("/api/chat/conversations",(req,res)=>{
+  cleanupExpiredChatMessages();
   const customerId=req.body?.customerId?Number(req.body.customerId):null;
   const customerName=String(req.body?.customerName||"Guest Customer").trim().slice(0,120)||"Guest Customer";
   const customerWhatsapp=String(req.body?.customerWhatsapp||"").replace(/\D/g,"").replace(/^220/,"").slice(0,15);
@@ -517,12 +526,18 @@ app.post("/api/chat/conversations",(req,res)=>{
   } else db.prepare("UPDATE chat_conversations SET customer_id=COALESCE(?,customer_id),customer_name=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(customerId,customerName,c.id);
   res.json({ok:true,conversation:c});
 });
-app.get("/api/chat/messages/:id",(req,res)=>{const c=db.prepare("SELECT * FROM chat_conversations WHERE id=?").get(req.params.id);if(!c)return res.status(404).json({error:"Conversation not found"});const messages=db.prepare("SELECT * FROM chat_messages WHERE conversation_id=? ORDER BY id ASC LIMIT 300").all(c.id);res.json({conversation:c,messages});});
-app.post("/api/chat/messages/:id",(req,res)=>{const c=db.prepare("SELECT * FROM chat_conversations WHERE id=?").get(req.params.id);if(!c)return res.status(404).json({error:"Conversation not found"});const type=String(req.body?.senderType||"");if(!["customer","admin","vendor"].includes(type))return res.status(400).json({error:"Invalid sender."});const message=String(req.body?.message||"").trim().slice(0,2000);if(!message)return res.status(400).json({error:"Message cannot be empty."});if(type==="admin"){const s=getSession(req);if(!s||s.type!=="admin")return res.status(401).json({error:"Admin login required"});}if(type==="vendor"){const s=getSession(req);if(!s||s.type!=="vendor"||Number(c.vendor_id)!==Number(s.vendor_id))return res.status(401).json({error:"Vendor login required"});}const productId=req.body?.productId?Number(req.body.productId):null;const x=db.prepare("INSERT INTO chat_messages(conversation_id,sender_type,sender_id,sender_name,message,product_id) VALUES(?,?,?,?,?,?)").run(c.id,type,type==="vendor"?getSession(req)?.vendor_id:null,String(req.body?.senderName||type).slice(0,120),message,productId);db.prepare("UPDATE chat_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=?").run(c.id);backupShopData("chat-message");res.json({ok:true,message:db.prepare("SELECT * FROM chat_messages WHERE id=?").get(x.lastInsertRowid)});});
-app.get("/api/admin/chat/conversations",guard,(req,res)=>{res.json(db.prepare(`SELECT c.*,v.business_name AS vendor_name,(SELECT COUNT(*) FROM chat_messages m WHERE m.conversation_id=c.id AND m.sender_type='customer' AND m.read_at IS NULL) unread,(SELECT message FROM chat_messages m WHERE m.conversation_id=c.id ORDER BY m.id DESC LIMIT 1) last_message FROM chat_conversations c LEFT JOIN vendors v ON v.id=c.vendor_id ORDER BY datetime(c.updated_at) DESC`).all())});
-app.post("/api/admin/chat/messages/:id/read",guard,(req,res)=>{db.prepare("UPDATE chat_messages SET read_at=CURRENT_TIMESTAMP WHERE conversation_id=? AND sender_type='customer'").run(req.params.id);res.json({ok:true})});
-app.get("/api/vendor/chat/conversations",vendorGuard,(req,res)=>{res.json(db.prepare(`SELECT c.*,v.business_name AS vendor_name,(SELECT COUNT(*) FROM chat_messages m WHERE m.conversation_id=c.id AND m.sender_type='customer' AND m.read_at IS NULL) unread,(SELECT message FROM chat_messages m WHERE m.conversation_id=c.id ORDER BY m.id DESC LIMIT 1) last_message FROM chat_conversations c LEFT JOIN vendors v ON v.id=c.vendor_id WHERE c.vendor_id=? ORDER BY datetime(c.updated_at) DESC`).all(req.vendorId))});
-app.post("/api/vendor/chat/messages/:id/read",vendorGuard,(req,res)=>{const c=db.prepare("SELECT id FROM chat_conversations WHERE id=? AND vendor_id=?").get(req.params.id,req.vendorId);if(!c)return res.status(404).json({error:"Conversation not found"});db.prepare("UPDATE chat_messages SET read_at=CURRENT_TIMESTAMP WHERE conversation_id=? AND sender_type='customer'").run(c.id);res.json({ok:true})});
+app.get("/api/chat/messages/:id",(req,res)=>{
+  cleanupExpiredChatMessages();const c=db.prepare("SELECT * FROM chat_conversations WHERE id=?").get(req.params.id);if(!c)return res.status(404).json({error:"Conversation not found"});const messages=db.prepare("SELECT * FROM chat_messages WHERE conversation_id=? ORDER BY id ASC LIMIT 300").all(c.id);res.json({conversation:c,messages});});
+app.post("/api/chat/messages/:id",(req,res)=>{
+  cleanupExpiredChatMessages();const c=db.prepare("SELECT * FROM chat_conversations WHERE id=?").get(req.params.id);if(!c)return res.status(404).json({error:"Conversation not found"});const type=String(req.body?.senderType||"");if(!["customer","admin","vendor"].includes(type))return res.status(400).json({error:"Invalid sender."});const message=String(req.body?.message||"").trim().slice(0,2000);if(!message)return res.status(400).json({error:"Message cannot be empty."});if(type==="admin"){const s=getSession(req);if(!s||s.type!=="admin")return res.status(401).json({error:"Admin login required"});}if(type==="vendor"){const s=getSession(req);if(!s||s.type!=="vendor"||Number(c.vendor_id)!==Number(s.vendor_id))return res.status(401).json({error:"Vendor login required"});}const productId=req.body?.productId?Number(req.body.productId):null;const x=db.prepare("INSERT INTO chat_messages(conversation_id,sender_type,sender_id,sender_name,message,product_id) VALUES(?,?,?,?,?,?)").run(c.id,type,type==="vendor"?getSession(req)?.vendor_id:null,String(req.body?.senderName||type).slice(0,120),message,productId);db.prepare("UPDATE chat_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=?").run(c.id);backupShopData("chat-message");res.json({ok:true,message:db.prepare("SELECT * FROM chat_messages WHERE id=?").get(x.lastInsertRowid)});});
+app.get("/api/admin/chat/conversations",guard,(req,res)=>{
+  cleanupExpiredChatMessages();res.json(db.prepare(`SELECT c.*,v.business_name AS vendor_name,(SELECT COUNT(*) FROM chat_messages m WHERE m.conversation_id=c.id AND m.sender_type='customer' AND m.read_at IS NULL) unread,(SELECT message FROM chat_messages m WHERE m.conversation_id=c.id ORDER BY m.id DESC LIMIT 1) last_message FROM chat_conversations c LEFT JOIN vendors v ON v.id=c.vendor_id ORDER BY datetime(c.updated_at) DESC`).all())});
+app.post("/api/admin/chat/messages/:id/read",guard,(req,res)=>{
+  cleanupExpiredChatMessages();db.prepare("UPDATE chat_messages SET read_at=CURRENT_TIMESTAMP WHERE conversation_id=? AND sender_type='customer'").run(req.params.id);res.json({ok:true})});
+app.get("/api/vendor/chat/conversations",vendorGuard,(req,res)=>{
+  cleanupExpiredChatMessages();res.json(db.prepare(`SELECT c.*,v.business_name AS vendor_name,(SELECT COUNT(*) FROM chat_messages m WHERE m.conversation_id=c.id AND m.sender_type='customer' AND m.read_at IS NULL) unread,(SELECT message FROM chat_messages m WHERE m.conversation_id=c.id ORDER BY m.id DESC LIMIT 1) last_message FROM chat_conversations c LEFT JOIN vendors v ON v.id=c.vendor_id WHERE c.vendor_id=? ORDER BY datetime(c.updated_at) DESC`).all(req.vendorId))});
+app.post("/api/vendor/chat/messages/:id/read",vendorGuard,(req,res)=>{
+  cleanupExpiredChatMessages();const c=db.prepare("SELECT id FROM chat_conversations WHERE id=? AND vendor_id=?").get(req.params.id,req.vendorId);if(!c)return res.status(404).json({error:"Conversation not found"});db.prepare("UPDATE chat_messages SET read_at=CURRENT_TIMESTAMP WHERE conversation_id=? AND sender_type='customer'").run(c.id);res.json({ok:true})});
 app.post("/api/orders/cart",async(req,res)=>{
   const items=Array.isArray(req.body?.items)?req.body.items:[];
   if(!items.length)return res.status(400).json({error:"Your cart is empty."});
