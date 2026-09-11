@@ -1,0 +1,9 @@
+V34 FINAL CHAT POLISH
+
+- Customer chat: Messenger inbox first, then a dedicated WhatsApp/Alibaba-style conversation card.
+- Dedicated customer conversation contains only header, message history, and composer; quick-action buttons are removed from the conversation screen.
+- Customer composer uses 16px input and a responsive flex layout to prevent mobile auto-zoom and keep SEND visible with the keyboard.
+- Admin and Vendor: inbox + dedicated conversation workspace; on mobile selecting a conversation hides the inbox and shows the chat, with an Inbox back button.
+- Admin/Vendor reply input is always visible in the conversation workspace and uses 16px input sizing.
+- Existing product sharing, polling, unread/read state, automatic welcome message, and 72-hour server cleanup are preserved.
+- Existing bottom navigation and marketplace/cart/payment behavior are unchanged.
