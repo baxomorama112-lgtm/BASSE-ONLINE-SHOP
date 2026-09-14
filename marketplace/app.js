@@ -201,7 +201,7 @@ function openCartCheckout(){
 function captureCheckoutLocationCart(){const state=$("cartGpsState");if(!navigator.geolocation){if(state)state.textContent="GPS is not supported.";return}if(state)state.textContent="Getting your location…";navigator.geolocation.getCurrentPosition(p=>{checkoutGps={lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy};if(state)state.textContent=`GPS location saved (±${Math.round(p.coords.accuracy||0)}m).`},()=>{if(state)state.textContent="GPS permission not granted. You can continue."},{enableHighAccuracy:true,maximumAge:10000,timeout:15000})}
 async function placeCartOrder(){
   const c=getCart();if(!c.length)return openCart();let phone=$("cartPhone").value.replace(/\D/g,"").replace(/^220/,"");if(!$("cartName").value.trim())return toast("Please enter your full name.");if(phone.length<6)return toast("Please enter a valid WhatsApp number.");const btn=document.querySelector('.pay');if(btn){btn.disabled=true;btn.innerHTML=" CONNECTING TO WAYCHIT…"}
-  try{const r=await fetch("/api/orders/cart",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:c.map(x=>({productId:x.productId,quantity:x.quantity,options:x.options||[]})),name:$("cartName").value.trim(),whatsapp:phone,location:$("cartLoc").value,customerLat:checkoutGps.lat,customerLng:checkoutGps.lng,customerAccuracy:checkoutGps.accuracy})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||"Could not create your order.");localStorage.setItem("basseLastOrder",JSON.stringify(d.order));localStorage.setItem("bassePendingPayment",JSON.stringify({orderId:d.order.id,groupId:d.groupId,startedAt:Date.now(),paymentMode:d.paymentMode||"dynamic"}));localStorage.removeItem("basseCart");updateCartCount();if(d.paymentUrl){setTimeout(()=>window.location.href=d.paymentUrl,120);return}throw new Error(d.paymentError||"Waychit payment is not available right now.");}catch(e){if(btn){btn.disabled=false;btn.innerHTML="PAY WITH WAYCHIT <span>→</span>"}toast(e.message)}
+  try{const r=await fetch("/api/orders/cart",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:c.map(x=>({productId:x.productId,quantity:x.quantity,options:x.options||[]})),name:$("cartName").value.trim(),whatsapp:phone,location:$("cartLoc").value,customerLat:checkoutGps.lat,customerLng:checkoutGps.lng,customerAccuracy:checkoutGps.accuracy})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||"Could not create your order.");localStorage.setItem("basseLastOrder",JSON.stringify(d.order));localStorage.setItem("basseOrderPhone",phone);refreshOrderNotifications();localStorage.setItem("bassePendingPayment",JSON.stringify({orderId:d.order.id,groupId:d.groupId,startedAt:Date.now(),paymentMode:d.paymentMode||"dynamic"}));localStorage.removeItem("basseCart");updateCartCount();if(d.paymentUrl){setTimeout(()=>window.location.href=d.paymentUrl,120);return}throw new Error(d.paymentError||"Waychit payment is not available right now.");}catch(e){if(btn){btn.disabled=false;btn.innerHTML="PAY WITH WAYCHIT <span>→</span>"}toast(e.message)}
 }
 
 function openCheckout(){
@@ -843,3 +843,53 @@ window.refreshTracking=refreshTracking;
 window.captureTrackingLocation=captureTrackingLocation;
 
 startChatUnreadPolling();
+
+function getOrderNotificationPhone(){
+  try{
+    const c=JSON.parse(localStorage.getItem("basseCustomer")||"null");
+    if(c?.phone)return String(c.phone).replace(/\D/g,"").replace(/^220/,"");
+    const p=localStorage.getItem("basseOrderPhone"); if(p)return String(p).replace(/\D/g,"").replace(/^220/,"");
+    const o=JSON.parse(localStorage.getItem("basseLastOrder")||"null"); if(o?.whatsapp)return String(o.whatsapp).replace(/\D/g,"").replace(/^220/,"");
+  }catch{}
+  return "";
+}
+async function refreshOrderNotifications(){
+  const phone=getOrderNotificationPhone();
+  if(phone.length<6)return;
+  try{
+    const r=await fetch(`/api/customer/order-notifications?phone=${encodeURIComponent(phone)}`,{cache:"no-store"});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)return;
+    const n=Number(d.unread||0), badge=$("orderNotifyBadge");
+    if(badge){badge.textContent=n>99?"99+":n;badge.classList.toggle("hidden",n===0)}
+  }catch{}
+}
+async function openOrderNotifications(){
+  const phone=getOrderNotificationPhone();
+  if(phone.length<6){
+    toast("Place an order or enter your customer account phone number to receive order notifications.");
+    return;
+  }
+  try{
+    const r=await fetch(`/api/customer/order-notifications?phone=${encodeURIComponent(phone)}`,{cache:"no-store"});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw Error(d.error||"Notifications unavailable.");
+    const rows=d.notifications||[];
+    $("modal").innerHTML=`<div class="sheet notification-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="mini-bag">🔔</span><div><small>BASSE ONLINE SHOP</small><h2>Order Notifications</h2></div></div><p class="muted">Updates about your orders, payment and delivery appear here.</p><div class="order-notification-list">${rows.length?rows.map(x=>`<button type="button" class="order-notification ${x.read_at?"":"unread"}" onclick="openNotificationOrder('${esc(x.order_id||"")}')"><b>${esc(x.title)}</b><span>${esc(x.message)}</span><small>${esc(new Date(x.created_at).toLocaleString())}${x.order_id?` · ${esc(x.order_id)}`:""}</small></button>`).join(""):"<p class='muted'>No order notifications yet.</p>"}</div></div>`;
+    $("modal").classList.add("show");
+    await fetch("/api/customer/order-notifications/read",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})});
+    refreshOrderNotifications();
+  }catch(e){toast(e.message||"Notifications unavailable.")}
+}
+function openNotificationOrder(id){
+  if(!id)return;
+  closeModal();
+  trackOrderPrompt();
+  setTimeout(()=>{const input=$("trackOrderId");if(input){input.value=id;$("trackPhone").value=getOrderNotificationPhone()}},50);
+}
+function startOrderNotificationPolling(){
+  refreshOrderNotifications();
+  clearInterval(window.__orderNotifyPolling);
+  window.__orderNotifyPolling=setInterval(refreshOrderNotifications,5000);
+}
+startOrderNotificationPolling();

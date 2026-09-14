@@ -119,7 +119,19 @@ CREATE TABLE IF NOT EXISTS chat_messages(
  read_at TEXT,
  created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation ON chat_messages(conversation_id,id);`);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation ON chat_messages(conversation_id,id);
+CREATE TABLE IF NOT EXISTS order_notifications(
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ recipient_type TEXT NOT NULL,
+ recipient_phone TEXT DEFAULT '',
+ order_id TEXT,
+ title TEXT NOT NULL,
+ message TEXT NOT NULL,
+ created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+ read_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_order_notifications_recipient ON order_notifications(recipient_type,recipient_phone,read_at,id);
+`);
 function cleanupExpiredChatMessages(){
   try{
     db.prepare("DELETE FROM chat_messages WHERE datetime(created_at) < datetime('now','-72 hours')").run();
@@ -133,7 +145,7 @@ try{db.exec("ALTER TABLE products ADD COLUMN images TEXT DEFAULT ''")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_lat REAL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_lng REAL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_accuracy REAL")}catch(e){}
-const BACKUP_TABLES=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys","delivery_drivers","deliveries","chat_conversations","chat_messages"];
+const BACKUP_TABLES=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys","delivery_drivers","deliveries","chat_conversations","chat_messages","order_notifications"];
 function buildShopSnapshot(){
   const data={version:3,createdAt:new Date().toISOString(),tables:{}};
   for(const table of BACKUP_TABLES)data.tables[table]=db.prepare(`SELECT * FROM ${table}`).all();
@@ -213,6 +225,7 @@ function restoreShopBackupIfEmpty(){
     const schemas={
       products:["id","name","category","price","stock","description","image","active","created_at","images","vendor_id","options_json"],
       orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings","stock_reserved","stock_released","customer_lat","customer_lng","customer_accuracy"],
+      order_notifications:["id","recipient_type","recipient_phone","order_id","title","message","created_at","read_at"],
       vendors:["id","full_name","business_name","whatsapp","email","email_verified","verification_code","verification_expires","location","category","description","password_hash","status","created_at"],
       vendor_products:["id","product_id","vendor_id","status","created_at"],
       customer_accounts:["id","full_name","whatsapp","password_hash","status","created_at"],
@@ -370,6 +383,30 @@ app.post("/api/admin/products",guard,upload.array("images",8),(req,res)=>{let b=
 let x=db.prepare("INSERT INTO products(name,category,price,stock,description,image,images,vendor_id,options_json) VALUES(?,?,?,?,?,?,?,?,?)").run(b.name,b.category,+b.price,+b.stock||0,b.description||"",img,imgs,b.vendorId?+b.vendorId:null,productOptionsFromBody(b));let created=db.prepare("SELECT * FROM products WHERE id=?").get(x.lastInsertRowid);backupCatalog();broadcastLive("catalog",{productId:created.id});res.json(created)});
 app.put("/api/admin/products/:id",guard,upload.array("images",8),(req,res)=>{let p=db.prepare("SELECT * FROM products WHERE id=?").get(req.params.id);if(!p)return res.status(404).json({error:"Product not found"});let b=req.body,files=req.files||[],fileImgs=files.map(f=>"/uploads/"+f.filename),img=fileImgs[0]||b.imageUrl||p.image,oldImgs=p.images||"[]",imgs=fileImgs.length?JSON.stringify(fileImgs):(b.images?JSON.stringify(String(b.images).split(",").map(x=>x.trim()).filter(Boolean)):oldImgs);db.prepare("UPDATE products SET name=?,category=?,price=?,stock=?,description=?,image=?,images=?,vendor_id=?,options_json=? WHERE id=?").run(b.name,b.category,+b.price,+b.stock,b.description||"",img,imgs,b.vendorId?+b.vendorId:p.vendor_id||null,productOptionsFromBody(b,p.options_json)||"{}",p.id);let updated=db.prepare("SELECT * FROM products WHERE id=?").get(p.id);backupCatalog();broadcastLive("catalog",{productId:p.id});res.json(updated)});
 app.delete("/api/admin/products/:id",guard,(req,res)=>{db.prepare("UPDATE products SET active=0 WHERE id=?").run(req.params.id);backupCatalog();broadcastLive("catalog",{productId:Number(req.params.id)});res.json({ok:true})});
+
+app.get("/api/admin/order-notifications",guard,(req,res)=>{
+  const rows=db.prepare("SELECT * FROM order_notifications WHERE recipient_type='admin' ORDER BY id DESC LIMIT 100").all();
+  const unread=db.prepare("SELECT COUNT(*) c FROM order_notifications WHERE recipient_type='admin' AND read_at IS NULL").get().c;
+  res.json({notifications:rows,unread});
+});
+app.post("/api/admin/order-notifications/read",guard,(req,res)=>{
+  db.prepare("UPDATE order_notifications SET read_at=CURRENT_TIMESTAMP WHERE recipient_type='admin' AND read_at IS NULL").run();
+  res.json({ok:true});
+});
+app.get("/api/customer/order-notifications",(req,res)=>{
+  const phone=String(req.query.phone||"").replace(/\D/g,"").replace(/^220/,"");
+  if(phone.length<6)return res.status(400).json({error:"Valid customer phone required."});
+  const full="220"+phone;
+  const rows=db.prepare("SELECT * FROM order_notifications WHERE recipient_type='customer' AND recipient_phone=? ORDER BY id DESC LIMIT 50").all(full);
+  const unread=db.prepare("SELECT COUNT(*) c FROM order_notifications WHERE recipient_type='customer' AND recipient_phone=? AND read_at IS NULL").get(full).c;
+  res.json({notifications:rows,unread});
+});
+app.post("/api/customer/order-notifications/read",(req,res)=>{
+  const phone=String(req.body?.phone||"").replace(/\D/g,"").replace(/^220/,"");
+  if(phone.length<6)return res.status(400).json({error:"Valid customer phone required."});
+  db.prepare("UPDATE order_notifications SET read_at=CURRENT_TIMESTAMP WHERE recipient_type='customer' AND recipient_phone=? AND read_at IS NULL").run("220"+phone);
+  res.json({ok:true});
+});
 app.get("/api/admin/orders",guard,(req,res)=>res.json(db.prepare(`SELECT o.*,p.image AS product_image,p.images AS product_images,v.business_name AS vendor_business_name,v.whatsapp AS vendor_whatsapp FROM orders o LEFT JOIN products p ON p.id=o.product_id LEFT JOIN vendors v ON v.id=o.vendor_id ORDER BY datetime(o.created_at) DESC`).all()));
 app.get("/api/admin/backup",guard,(req,res)=>{
   try{
@@ -421,6 +458,7 @@ app.post("/api/admin/restore",guard,(req,res)=>{
       for(const x of (data.tables.products||[])){const r=normalizeProductBackupRow(x);productIns.run(...productCols.map(k=>r[k]??null));}
       const schemas={
         orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings","stock_reserved","stock_released","customer_lat","customer_lng","customer_accuracy"],
+      order_notifications:["id","recipient_type","recipient_phone","order_id","title","message","created_at","read_at"],
         vendors:["id","full_name","business_name","whatsapp","email","email_verified","verification_code","verification_expires","location","category","description","password_hash","status","created_at"],
         vendor_products:["id","product_id","vendor_id","status","created_at"],
         customer_accounts:["id","full_name","whatsapp","password_hash","status","created_at"],
@@ -581,7 +619,9 @@ app.post("/api/orders/cart",async(req,res)=>{
     tx();
   }catch(e){return res.status(400).json({error:e.message||"Could not create the cart order."})}
   backupShopData("cart-order-created");
-  created.forEach(o=>broadcastLive("catalog",{productId:o.product_id,stockChanged:true}));
+  const customerOrderPhone=phone;
+  created.forEach(o=>{const fullOrder=db.prepare("SELECT * FROM orders WHERE id=?").get(o.id);notifyNewOrder(fullOrder);notifyCustomerOrder(fullOrder,"🛍️ ORDER RECEIVED",`Your order #${o.id} has been received. We will update you when it is confirmed.`);broadcastLive("catalog",{productId:o.product_id,stockChanged:true});});
+  broadcastLive("notifications",{orderGroupId:groupId});
   broadcastLive("orders",{orderGroupId:groupId});
   const grandTotal=created.reduce((a,o)=>a+Number(o.total||0),0);
   let paymentUrl="",paymentError="";
@@ -621,7 +661,11 @@ app.post("/api/orders",async(req,res)=>{
   });
   try{reserveTx()}catch(e){return res.status(400).json({error:"Not enough stock. Please refresh and try again."})}
   backupShopData("order-created");
+  const createdOrder=db.prepare("SELECT * FROM orders WHERE id=?").get(id);
+  notifyNewOrder(createdOrder);
+  notifyCustomerOrder(createdOrder,"🛍️ ORDER RECEIVED",`Your order #${id} has been received. We will update you when it is confirmed.`);
   broadcastLive("catalog",{productId:p.id,stockChanged:true});
+  broadcastLive("notifications",{orderId:id});
   broadcastLive("orders",{orderId:id});
 
   let paymentUrl="";
@@ -729,7 +773,7 @@ app.get("/api/order/:id/tracking",(req,res)=>{
   res.set("Cache-Control","no-store");
   res.json({order:safeOrder,delivery:safeDelivery,trackingActive:String(safeDelivery?.status||o.order_status)!=="DELIVERED"});
 });
-app.post("/api/admin/orders/:id/payment",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});if(o.payment_status==='REFUNDED'||o.payment_status==='CANCELLED')return res.status(400).json({error:'This payment is already closed.'});db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE id=?").run(req.params.id);backupShopData("payment-confirmed");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true})});
+app.post("/api/admin/orders/:id/payment",guard,(req,res)=>{let o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);if(!o)return res.status(404).json({error:'Order not found'});if(o.payment_status==='REFUNDED'||o.payment_status==='CANCELLED')return res.status(400).json({error:'This payment is already closed.'});db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE id=?").run(req.params.id);const updatedOrder=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);notifyCustomerOrder(updatedOrder,"💳 PAYMENT CONFIRMED",`Payment for order #${updatedOrder.id} is confirmed. Your order is now being processed.`);backupShopData("payment-confirmed");broadcastLive("orders",{orderId:req.params.id});broadcastLive("notifications",{orderId:req.params.id});res.json({ok:true})});
 app.post("/api/admin/orders/:id/cancel-payment",guard,(req,res)=>{
   const o=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);
   if(!o)return res.status(404).json({error:"Order not found"});
@@ -785,7 +829,10 @@ app.patch("/api/admin/orders/:id/status",guard,(req,res)=>{
     if(status==='READY')ensureDeliveryForReadyOrder(req.params.id);
   });
   statusTx();
-  backupShopData("order-status");broadcastLive("orders",{orderId:req.params.id});res.json({ok:true,deliveryCreated:status==='READY'});
+  const updatedOrder=db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);
+  const statusLabels={NEW:"Order received",PROCESSING:"Order is being processed",READY:"Order is ready for delivery",DELIVERED:"Order delivered",CANCELLED:"Order cancelled",REFUNDED:"Order refunded"};
+  notifyCustomerOrder(updatedOrder,`📦 ${statusLabels[status]||"Order updated"}`,`Your order #${updatedOrder.id} is now ${String(status).replaceAll("_"," ").toLowerCase()}.`);
+  backupShopData("order-status");broadcastLive("orders",{orderId:req.params.id});broadcastLive("notifications",{orderId:req.params.id});res.json({ok:true,deliveryCreated:status==='READY'});
 });
 app.get("/api/payment-config",(req,res)=>res.json({configured:!!process.env.WAYCHIT_API_KEY,publicBaseUrl:PUBLIC_BASE_URL,staticFallback:true,returnUrl:PUBLIC_BASE_URL+"/payment-return",automaticReturnSupported:!!process.env.WAYCHIT_API_KEY}));
 app.post("/api/waychit/webhook",(req,res)=>{
@@ -799,7 +846,7 @@ app.post("/api/waychit/webhook",(req,res)=>{
     let e=JSON.parse(raw);
     let ref=e.paymentRequest?.clientReference||e.paymentSession?.clientReference||e.data?.clientReference;
     if((e.type==="payment.request.completed"||e.type==="payment.session.completed")&&ref){
-      const group=db.prepare("SELECT payment_group_id FROM orders WHERE id=?").get(ref)?.payment_group_id; if(group) db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE payment_group_id=? AND payment_status!='REFUNDED'").run(group); else db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE id=? AND payment_status!='REFUNDED'").run(ref); backupShopData("webhook-payment");broadcastLive("orders",{orderId:ref,orderGroupId:group||null});
+      const group=db.prepare("SELECT payment_group_id FROM orders WHERE id=?").get(ref)?.payment_group_id; if(group) db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE payment_group_id=? AND payment_status!='REFUNDED'").run(group); else db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE id=? AND payment_status!='REFUNDED'").run(ref); const paidOrders=group?db.prepare("SELECT * FROM orders WHERE payment_group_id=?").all(group):db.prepare("SELECT * FROM orders WHERE id=?").all(ref); for(const po of paidOrders){notifyCustomerOrder(po,"💳 PAYMENT CONFIRMED",`Payment for order #${po.id} is confirmed. Your order is now being processed.`);} backupShopData("webhook-payment");broadcastLive("orders",{orderId:ref,orderGroupId:group||null});broadcastLive("notifications",{orderId:ref,orderGroupId:group||null});
     }
     res.sendStatus(200);
   }catch(e){res.status(400).send("Bad webhook")}
@@ -849,8 +896,12 @@ app.patch("/api/driver/deliveries/:id/status",driverGuard,(req,res)=>{
   const now=new Date().toISOString();
   db.prepare("UPDATE deliveries SET status=?,started_at=CASE WHEN ?='ON_THE_WAY' AND started_at IS NULL THEN ? ELSE started_at END,arrived_at=CASE WHEN ?='ARRIVED' THEN ? ELSE arrived_at END,delivered_at=CASE WHEN ?='DELIVERED' THEN ? ELSE delivered_at END WHERE id=?")
     .run(status,status,now,status,now,status,now,d.id);
-  db.prepare("UPDATE orders SET order_status=? WHERE id=?").run(status==="DELIVERED"?"DELIVERED":status==="PICKED_UP"||status==="ON_THE_WAY"||status==="ARRIVED"?"PROCESSING":"READY",d.order_id);
-  backupShopData("driver-delivery-status");broadcastLive("orders",{orderId:d.order_id});res.json({ok:true});
+  const newOrderStatus=status==="DELIVERED"?"DELIVERED":status==="PICKED_UP"||status==="ON_THE_WAY"||status==="ARRIVED"?"PROCESSING":"READY";
+  db.prepare("UPDATE orders SET order_status=? WHERE id=?").run(newOrderStatus,d.order_id);
+  const driverOrder=db.prepare("SELECT * FROM orders WHERE id=?").get(d.order_id);
+  const deliveryLabels={ASSIGNED:"Driver assigned",PICKED_UP:"Order picked up",ON_THE_WAY:"Driver is on the way",ARRIVED:"Driver has arrived",DELIVERED:"Order delivered"};
+  notifyCustomerOrder(driverOrder,`🚚 ${deliveryLabels[status]||"Delivery updated"}`,`Your order #${driverOrder.id}: ${deliveryLabels[status]||String(status).replaceAll("_"," ")}.`);
+  backupShopData("driver-delivery-status");broadcastLive("orders",{orderId:d.order_id});broadcastLive("notifications",{orderId:d.order_id});res.json({ok:true});
 });
 app.post("/api/order/:id/customer-location",(req,res)=>{
   const rawId=String(req.params.id||"").trim().toUpperCase().replace(/\s+/g,"");
@@ -1047,4 +1098,16 @@ app.patch("/api/admin/deliveries/:id/status",guard,(req,res)=>{
 app.get("/api/admin/vendor-stats",guard,(req,res)=>res.json({vendors:db.prepare("SELECT COUNT(*) c FROM vendors").get().c,pending:db.prepare("SELECT COUNT(*) c FROM vendors WHERE status='PENDING'").get().c,active:db.prepare("SELECT COUNT(*) c FROM vendors WHERE status='APPROVED'").get().c,commission:db.prepare("SELECT COALESCE(SUM(commission),0) s FROM orders WHERE payment_status='PAID'").get().s}));
 
 setInterval(()=>{try{db.prepare("DELETE FROM auth_sessions WHERE expires_at<=?").run(Date.now())}catch{}},60*60*1000);
-app.listen(PORT,"0.0.0.0",()=>console.log("BASSE ONLINE SHOP running on "+PORT));
+app.listen(PORT,"0.0.0.0",()=>console.log("BASSE ONLINE SHOP running on "+PORT))
+function addOrderNotification(recipientType, phone, orderId, title, message){
+  try{db.prepare("INSERT INTO order_notifications(recipient_type,recipient_phone,order_id,title,message) VALUES(?,?,?,?,?)").run(recipientType,String(phone||""),orderId||null,title,message)}
+  catch(e){console.error("Order notification failed:",e.message)}
+}
+function notifyNewOrder(order){
+  if(!order)return;
+  addOrderNotification("admin","",order.id,"🛍️ NEW ORDER",`${order.customer_name||"Customer"} (+${order.whatsapp||""}) placed ${order.product_name} × ${order.quantity} for D${Number(order.total||0).toLocaleString()}.`);
+}
+function notifyCustomerOrder(order,title,message){
+  if(order?.whatsapp)addOrderNotification("customer",order.whatsapp,order.id,title,message);
+}
+;

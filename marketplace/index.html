@@ -5,7 +5,7 @@
 <a class="brand" href="#" aria-label="BASSE Marketplace"><img class="brand-logo" src="/basse-marketplace-logo.jpg" alt="BASSE Marketplace"></a>
 <div class="search-wrap top-search"><div class="search"><input id="search" autocomplete="off" placeholder="Search products, phones, fashion, beauty..." aria-label="Search products"><button id="searchBtn" type="button" aria-label="Search"><span aria-hidden="true">⌕</span></button><button id="clearSearch" class="clear-search" type="button" aria-label="Clear search">×</button></div><div id="searchSuggestions" class="search-suggestions"></div></div>
 <div class="top-actions">
-<button class="notify" type="button" onclick="toast('You are all caught up.')" aria-label="Notifications"><span class="bell-icon" aria-hidden="true"></span><i>0</i></button>
+<button class="notify" type="button" onclick="openOrderNotifications()" aria-label="Notifications"><span class="bell-icon" aria-hidden="true"></span><i id="orderNotifyBadge" class="hidden">0</i></button>
 <button class="cart" onclick="openCart()" aria-label="Cart"><span class="ui-icon cart-icon" aria-hidden="true"></span><i id="cartCount">0</i></button>
 </div>
 </header>

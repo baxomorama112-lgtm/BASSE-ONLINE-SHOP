@@ -3,8 +3,8 @@ function cacheAdminProducts(ps){try{if(Array.isArray(ps)&&ps.length)localStorage
 function cachedAdminProducts(){try{const p=JSON.parse(localStorage.getItem("basseAdminProductsCache")||"[]");return Array.isArray(p)?p:[]}catch{return []}}
 const H=()=>({Authorization:"Bearer "+token}),$=id=>document.getElementById(id),money=n=>"D"+Number(n||0).toLocaleString();
 async function login(){try{let r=await fetch("/api/admin/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:$("email").value,password:$("password").value})}),d=await r.json();if(!r.ok)throw new Error(d.error||"Invalid login");token=d.token;localStorage.setItem("basseAdminToken",token);start()}catch(e){notify(e.message,true)}}
-function start(){$("login").classList.add("hidden");$("app").classList.remove("hidden");refresh();refreshBackupStatus();clearInterval(window.__refresh);window.__refresh=setInterval(refresh,5000);clearInterval(window.__backupRefresh);window.__backupRefresh=setInterval(refreshBackupStatus,10000);clearInterval(window.__liveViewerRefresh);window.__liveViewerRefresh=setInterval(loadLiveViewers,3000);loadLiveViewers();loadLoginAttempts();clearInterval(window.__loginAttemptRefresh);window.__loginAttemptRefresh=setInterval(loadLoginAttempts,5000);connectLive()}
-function connectLive(){try{const es=new EventSource("/api/live");es.addEventListener("refresh",()=>refresh());es.addEventListener("catalog",()=>refresh());es.addEventListener("orders",()=>refresh());es.addEventListener("vendors",()=>refresh());es.onerror=()=>{es.close();setTimeout(connectLive,3000)}}catch{setTimeout(connectLive,3000)}}
+function start(){$("login").classList.add("hidden");$("app").classList.remove("hidden");refresh();loadAdminOrderNotifications();refreshBackupStatus();clearInterval(window.__refresh);window.__refresh=setInterval(refresh,5000);clearInterval(window.__orderNotifyRefresh);window.__orderNotifyRefresh=setInterval(loadAdminOrderNotifications,5000);clearInterval(window.__backupRefresh);window.__backupRefresh=setInterval(refreshBackupStatus,10000);clearInterval(window.__liveViewerRefresh);window.__liveViewerRefresh=setInterval(loadLiveViewers,3000);loadLiveViewers();loadLoginAttempts();clearInterval(window.__loginAttemptRefresh);window.__loginAttemptRefresh=setInterval(loadLoginAttempts,5000);connectLive()}
+function connectLive(){try{const es=new EventSource("/api/live");es.addEventListener("refresh",()=>refresh());es.addEventListener("catalog",()=>refresh());es.addEventListener("orders",()=>{refresh();loadAdminOrderNotifications()});es.addEventListener("notifications",()=>loadAdminOrderNotifications());es.addEventListener("vendors",()=>refresh());es.onerror=()=>{es.close();setTimeout(connectLive,3000)}}catch{setTimeout(connectLive,3000)}}
 async function logout(){try{await fetch("/api/auth/logout",{method:"POST",headers:H()})}catch{} localStorage.removeItem("basseAdminToken");location.reload()}
 function show(id,btn){["dashboard","products","orders","vendors","customers","delivery","backup"].forEach(x=>$(x).classList.add("hidden"));$(id).classList.remove("hidden");$("title").textContent=id[0].toUpperCase()+id.slice(1);document.querySelectorAll(".nav").forEach(x=>x.classList.remove("active"));if(btn)btn.classList.add("active");refresh()}
 async function api(url,opt={}){let r=await fetch(url,{...opt,headers:{...H(),...(opt.headers||{})}});let d=await r.json().catch(()=>({}));if(r.status===401){logout();throw new Error("Admin session expired.")}if(!r.ok)throw new Error(d.error||"Request failed");return d}
@@ -149,3 +149,23 @@ async function assignDelivery(orderId,driverId){if(!driverId)return;try{await ap
 window.addEventListener("resize",()=>{if(liveDeliveryMap)try{liveDeliveryMap.invalidateSize({pan:false})}catch{}});
 
 function enableAdminChatEnter(){const x=$('adminChatText');if(x&&!x.dataset.enterBound){x.dataset.enterBound='1';x.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendAdminChat()}})}}
+
+async function loadAdminOrderNotifications(){
+  try{
+    const d=await api("/api/admin/order-notifications");
+    const n=Number(d.unread||0), badge=$("adminOrderBadge"), text=$("adminAlertText");
+    if(badge){badge.textContent=n>99?"99+":n;badge.classList.toggle("hidden",n===0)}
+    if(text)text.textContent=n?`${n} new order notification${n===1?"":"s"}`:"No new order notifications";
+  }catch{}
+}
+async function openAdminOrderNotifications(){
+  try{
+    const d=await api("/api/admin/order-notifications");
+    const rows=d.notifications||[];
+    const html=rows.length?rows.map(x=>`<div class="admin-notification-row ${x.read_at?"":"unread"}"><b>${esc(x.title)}</b><small>${esc(x.message)}</small><span>${esc(new Date(x.created_at).toLocaleString())}${x.order_id?` · ${esc(x.order_id)}`:""}</span></div>`).join(""):"<p>No order notifications yet.</p>";
+    const wrap=document.createElement("div");wrap.className="admin-notification-overlay";wrap.innerHTML=`<div class="admin-notification-modal"><button class="close" onclick="this.closest('.admin-notification-overlay').remove()">×</button><h2>Order Notifications</h2><p>New orders and important order events appear here.</p><div>${html}</div><button class="wide" onclick="markAdminOrderNotificationsRead();this.closest('.admin-notification-overlay').remove()">MARK ALL AS READ</button></div>`;document.body.appendChild(wrap);
+    if(Number(d.unread||0)) await api("/api/admin/order-notifications/read",{method:"POST"});
+    loadAdminOrderNotifications();
+  }catch(e){notify(e.message||"Notifications unavailable.",true)}
+}
+async function markAdminOrderNotificationsRead(){try{await api("/api/admin/order-notifications/read",{method:"POST"});loadAdminOrderNotifications()}catch{}}
