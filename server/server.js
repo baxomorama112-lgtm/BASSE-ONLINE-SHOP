@@ -24,7 +24,7 @@ function xmlEscape(v){return String(v??"").replace(/&/g,"&amp;").replace(/</g,"&
 function slugPart(v){return encodeURIComponent(String(v||"").trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,""))}
 function seoPage({title,description,canonical,heading,bodyHtml}){
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${xmlEscape(title)}</title><meta name="description" content="${xmlEscape(description)}"><meta name="robots" content="index,follow,max-image-preview:large"><link rel="canonical" href="${xmlEscape(canonical)}"><meta property="og:type" content="website"><meta property="og:title" content="${xmlEscape(title)}"><meta property="og:description" content="${xmlEscape(description)}"><meta property="og:url" content="${xmlEscape(canonical)}"><meta name="theme-color" content="#071a4a"><style>body{margin:0;background:#f6f8fc;color:#101827;font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif}.wrap{max-width:900px;margin:0 auto;padding:28px 18px 80px}.brand{display:inline-flex;align-items:center;gap:10px;text-decoration:none;color:#071a4a;font-weight:950}.brand img{width:48px;height:48px;border-radius:14px;object-fit:cover}.card{margin-top:24px;background:#fff;border:1px solid #e4e9f1;border-radius:24px;padding:28px;box-shadow:0 12px 40px #071a4a12}h1{font-size:32px;margin:0 0 12px;color:#071a4a}h2{color:#071a4a}p{line-height:1.6;color:#5e6878}.price{font-size:26px;font-weight:950;color:#1748a8}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.item{display:block;padding:16px;border:1px solid #e5e9f0;border-radius:16px;text-decoration:none;color:inherit}.item b{display:block;margin-bottom:6px}.back{display:inline-block;margin-top:20px;padding:12px 16px;border-radius:12px;background:#071a4a;color:#fff;text-decoration:none;font-weight:850}@media(max-width:520px){h1{font-size:26px}.card{padding:20px}}</style></head><body><main class="wrap"><a class="brand" href="/"><img src="/basse-marketplace-logo.jpg" alt="BASSE ONLINE SHOP"><span>BASSE ONLINE SHOP</span></a><section class="card"><h1>${heading}</h1>${bodyHtml}<a class="back" href="/">← Shop BASSE ONLINE SHOP</a></section></main></body></html>`
+<title>${xmlEscape(title)}</title><meta name="description" content="${xmlEscape(description)}"><link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"><meta property="og:image" content="https://basseonlineshop.com/basse-marketplace-logo.jpg"><meta name="robots" content="index,follow,max-image-preview:large"><link rel="canonical" href="${xmlEscape(canonical)}"><meta property="og:type" content="website"><meta property="og:title" content="${xmlEscape(title)}"><meta property="og:description" content="${xmlEscape(description)}"><meta property="og:url" content="${xmlEscape(canonical)}"><meta name="theme-color" content="#071a4a"><style>body{margin:0;background:#f6f8fc;color:#101827;font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif}.wrap{max-width:900px;margin:0 auto;padding:28px 18px 80px}.brand{display:inline-flex;align-items:center;gap:10px;text-decoration:none;color:#071a4a;font-weight:950}.brand img{width:48px;height:48px;border-radius:14px;object-fit:cover}.card{margin-top:24px;background:#fff;border:1px solid #e4e9f1;border-radius:24px;padding:28px;box-shadow:0 12px 40px #071a4a12}h1{font-size:32px;margin:0 0 12px;color:#071a4a}h2{color:#071a4a}p{line-height:1.6;color:#5e6878}.price{font-size:26px;font-weight:950;color:#1748a8}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.item{display:block;padding:16px;border:1px solid #e5e9f0;border-radius:16px;text-decoration:none;color:inherit}.item b{display:block;margin-bottom:6px}.back{display:inline-block;margin-top:20px;padding:12px 16px;border-radius:12px;background:#071a4a;color:#fff;text-decoration:none;font-weight:850}@media(max-width:520px){h1{font-size:26px}.card{padding:20px}}</style></head><body><main class="wrap"><a class="brand" href="/"><img src="/basse-marketplace-logo.jpg" alt="BASSE ONLINE SHOP"><span>BASSE ONLINE SHOP</span></a><section class="card"><h1>${heading}</h1>${bodyHtml}<a class="back" href="/">← Shop BASSE ONLINE SHOP</a></section></main></body></html>`
 }
 app.get("/product/:id",(req,res)=>{
   const p=db.prepare("SELECT id,name,category,price,stock,description,image,vendor_id FROM products WHERE id=? AND active=1").get(req.params.id);
@@ -58,6 +58,7 @@ app.get("/sitemap.xml",(req,res)=>{
   res.status(200).set("Content-Type","application/xml; charset=utf-8").set("Cache-Control","public, max-age=3600").send(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.join("")}</urlset>`);
 });
 app.get("/robots.txt",(req,res)=>{res.type("text/plain");res.sendFile(path.join(ROOT,"../marketplace/robots.txt"));});
+app.get("/health",(req,res)=>{const productCount=Number(db.prepare("SELECT COUNT(*) c FROM products").get().c);res.json({ok:true,productCount,dataDir:DATA_DIR,persistentDataDir:DATA_DIR});});
 app.get("/api/health",(req,res)=>{
   const productCount=Number(db.prepare("SELECT COUNT(*) c FROM products").get().c);
   res.json({ok:true,productCount,dataDir:DATA_DIR,persistentDataDir:DATA_DIR});
@@ -445,66 +446,85 @@ app.post("/api/admin/backup/auto-save",guard,(req,res)=>{
   if(!r.ok)return res.status(500).json({error:"Could not initialize automatic backup."});
   res.json({ok:true,enabled:true,message:"Automatic shop save is ON ✓",...r});
 });
-app.post("/api/admin/restore",guard,(req,res)=>{
+let restoreJob=null;
+const RESTORE_BATCH_SIZE=100;
+const RESTORE_SCHEMAS={
+  products:["id","name","category","price","stock","description","image","active","created_at","images","vendor_id","options_json"],
+  orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings","stock_reserved","stock_released","customer_lat","customer_lng","customer_accuracy","payment_group_id"],
+  order_notifications:["id","recipient_type","recipient_phone","order_id","title","message","created_at","read_at"],
+  vendors:["id","full_name","business_name","whatsapp","email","email_verified","verification_code","verification_expires","location","category","description","password_hash","status","created_at"],
+  vendor_products:["id","product_id","vendor_id","status","created_at"],
+  customer_accounts:["id","full_name","whatsapp","password_hash","status","created_at"],
+  payout_requests:["id","vendor_id","amount","status","created_at"],
+  vendor_submission_keys:["idempotency_key","vendor_id","product_id","created_at"],
+  delivery_drivers:["id","full_name","whatsapp","pin_hash","status","created_at"],
+  deliveries:["id","order_id","driver_id","status","lat","lng","accuracy","last_seen","started_at","arrived_at","delivered_at","created_at"],
+  chat_conversations:["id","customer_id","customer_name","customer_whatsapp","vendor_id","created_at","updated_at"],
+  chat_messages:["id","conversation_id","sender_type","sender_id","sender_name","message","product_id","read_at","created_at"]
+};
+const RESTORE_TABLES=Object.keys(RESTORE_SCHEMAS);
+function setRestoreProgress(stage,done,total,message){if(!restoreJob)return;restoreJob.stage=stage;restoreJob.completed=done;restoreJob.total=total;restoreJob.message=message;restoreJob.updatedAt=new Date().toISOString()}
+async function runRestoreJob(data,jobId){
   try{
-    const data=req.body;
-    if(!data||!data.tables||!Array.isArray(data.tables.products))return res.status(400).json({error:"Invalid BASSE backup file."});
-    const tables=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys","delivery_drivers","deliveries"];
-    const tx=db.transaction(()=>{
-      db.pragma("foreign_keys = OFF");
-      for(const table of tables)db.prepare(`DELETE FROM ${table}`).run();
-      const productCols=["id","name","category","price","stock","description","image","active","created_at","images","vendor_id","options_json"];
-      const productIns=db.prepare(`INSERT INTO products (${productCols.join(",")}) VALUES (${productCols.map(()=>"?").join(",")})`);
-      for(const x of (data.tables.products||[])){const r=normalizeProductBackupRow(x);productIns.run(...productCols.map(k=>r[k]??null));}
-      const schemas={
-        orders:["id","product_id","product_name","quantity","customer_name","whatsapp","location","total","payment_status","order_status","waychit_request_id","created_at","vendor_id","commission","vendor_earnings","stock_reserved","stock_released","customer_lat","customer_lng","customer_accuracy"],
-      order_notifications:["id","recipient_type","recipient_phone","order_id","title","message","created_at","read_at"],
-        vendors:["id","full_name","business_name","whatsapp","email","email_verified","verification_code","verification_expires","location","category","description","password_hash","status","created_at"],
-        vendor_products:["id","product_id","vendor_id","status","created_at"],
-        customer_accounts:["id","full_name","whatsapp","password_hash","status","created_at"],
-        payout_requests:["id","vendor_id","amount","status","created_at"],
-        vendor_submission_keys:["idempotency_key","vendor_id","product_id","created_at"],
-        delivery_drivers:["id","full_name","whatsapp","pin_hash","status","created_at"],
-        deliveries:["id","order_id","driver_id","status","lat","lng","accuracy","last_seen","started_at","arrived_at","delivered_at","created_at"]
-      };
-      for(const table of Object.keys(schemas)){const cols=schemas[table],ins=db.prepare(`INSERT INTO ${table} (${cols.join(",")}) VALUES (${cols.map(()=>"?").join(",")})`);for(const x of (data.tables[table]||[]))ins.run(...cols.map(k=>x[k]??null))}
-    });
-    tx();
-    // Never reintroduce stale GPS coordinates from an older backup. Product/order data
-    // stays intact; only invalid live-location fields are cleared.
-    for(const row of (data.tables.orders||[])){
-      if((row.customer_lat!=null||row.customer_lng!=null) && !validGambiaGps(Number(row.customer_lat),Number(row.customer_lng)))
-        db.prepare('UPDATE orders SET customer_lat=NULL,customer_lng=NULL,customer_accuracy=NULL WHERE id=?').run(row.id);
+    const tables=data.tables||{};
+    if(!Array.isArray(tables.products))throw new Error("Invalid BASSE backup file.");
+    setRestoreProgress("Preparing",0,1,"Validating backup…");
+    await new Promise(r=>setImmediate(r));
+    const counts=RESTORE_TABLES.reduce((n,t)=>n+(Array.isArray(tables[t])?tables[t].length:0),0);
+    setRestoreProgress("Preparing",0,counts||1,"Backup loaded. Preparing restore…");
+    db.pragma("foreign_keys = OFF");
+    for(const table of RESTORE_TABLES){db.prepare(`DELETE FROM ${table}`).run();}
+    let restored=0;
+    setRestoreProgress("Restoring",0,counts||1,"Restoring shop records…");
+    for(const table of RESTORE_TABLES){
+      const rows=Array.isArray(tables[table])?tables[table]:[]; if(!rows.length)continue;
+      const cols=RESTORE_SCHEMAS[table];
+      const ins=db.prepare(`INSERT INTO ${table} (${cols.join(",")}) VALUES (${cols.map(()=>"?").join(",")})`);
+      for(let i=0;i<rows.length;i+=RESTORE_BATCH_SIZE){
+        const batch=rows.slice(i,i+RESTORE_BATCH_SIZE);
+        const tx=db.transaction(()=>{for(const row of batch){const r=table==="products"?normalizeProductBackupRow(row):row;ins.run(...cols.map(k=>r[k]??null));}});
+        tx(); restored+=batch.length; setRestoreProgress("Restoring",restored,counts||1,`Restoring ${table.replace(/_/g," ")}… ${restored}/${counts}`); await new Promise(r=>setImmediate(r));
+      }
     }
-    for(const row of (data.tables.deliveries||[])){
-      if((row.lat!=null||row.lng!=null) && !validGambiaGps(Number(row.lat),Number(row.lng)))
-        db.prepare('UPDATE deliveries SET lat=NULL,lng=NULL,accuracy=NULL,last_seen=NULL WHERE id=?').run(row.id);
-    }
-    // Restore uploaded images before exposing the restored catalog. The old background
-    // copy caused the browser to request new product records while their image files were
-    // still missing, which produced the visible image blinking. Files are written atomically.
-    const productCount=(data.tables.products||[]).length, orderCount=(data.tables.orders||[]).length, vendorCount=(data.tables.vendors||[]).length, driverCount=(data.tables.delivery_drivers||[]).length, deliveryCount=(data.tables.deliveries||[]).length;
-    const files=Array.isArray(data.files)?data.files:[];
+    const files=Array.isArray(data.files)?data.files:[]; let restoredFiles=0;
+    setRestoreProgress("Images",0,files.length||1,"Restoring uploaded images…");
     const uploadDir=path.join(DATA_DIR,"uploads");fs.mkdirSync(uploadDir,{recursive:true});
-    let restoredFiles=0;
-    for(const file of files){
-      if(!file?.path||!file.path.startsWith("uploads/")||file.path.includes(".."))continue;
-      const rel=file.path.slice("uploads/".length);if(!rel||rel.includes("/")||rel.includes("\\"))continue;
-      const dest=path.join(uploadDir,rel),tmp=dest+".restore-"+crypto.randomBytes(4).toString("hex");
-      try{
-        const expected=Number(file.size||0),existing=fs.existsSync(dest)?fs.statSync(dest).size:-1;
-        if(existing===expected && expected>=0)continue;
-        fs.writeFileSync(tmp,Buffer.from(file.content||"","base64"));
-        fs.renameSync(tmp,dest);restoredFiles++;
-      }catch(e){try{fs.unlinkSync(tmp)}catch{}}
+    for(let i=0;i<files.length;i+=RESTORE_BATCH_SIZE){
+      const batch=files.slice(i,i+RESTORE_BATCH_SIZE);
+      for(const file of batch){
+        if(!file?.path||!file.path.startsWith("uploads/")||file.path.includes(".."))continue;
+        const rel=file.path.slice("uploads/".length);if(!rel||rel.includes("/")||rel.includes("\\"))continue;
+        const dest=path.join(uploadDir,rel),tmp=dest+".restore-"+crypto.randomBytes(4).toString("hex");
+        try{fs.writeFileSync(tmp,Buffer.from(file.content||"","base64"));fs.renameSync(tmp,dest);restoredFiles++;}catch(e){try{if(fs.existsSync(tmp))fs.unlinkSync(tmp)}catch{};console.warn("Image restore skipped:",e.message)}
+      }
+      setRestoreProgress("Images",Math.min(i+batch.length,files.length),files.length||1,`Restoring images… ${Math.min(i+batch.length,files.length)}/${files.length}`); await new Promise(r=>setImmediate(r));
     }
-    // Do NOT rebuild the full base64 backup here. That duplicates every uploaded image
-    // in memory/JSON and was the main reason manual restore felt slow. The restored
-    // database and files are already in place; the next explicit SAVE SHOP NOW can
-    // create a fresh backup when desired.
-    broadcastLive("refresh",{});
-    res.json({ok:true,message:`Restore complete: ${productCount} products, ${orderCount} orders, ${vendorCount} vendors, ${driverCount} drivers and ${deliveryCount} deliveries. Product options and images are restored and ready.` ,restoredFiles});
-  }catch(e){console.error("Backup restore failed:",e);res.status(500).json({error:"Restore failed. The backup format may not match this shop version."})}
+    setRestoreProgress("Completed",1,1,`Restore complete: ${tables.products.length} products, ${tables.orders?.length||0} orders, ${tables.vendors?.length||0} vendors and ${restoredFiles} images restored.`);
+    restoreJob.result={ok:true,message:`Restore complete: ${tables.products.length} products, ${tables.orders?.length||0} orders, ${tables.vendors?.length||0} vendors, ${tables.delivery_drivers?.length||0} drivers, ${tables.deliveries?.length||0} deliveries and ${restoredFiles} images. Product options and chat data are restored.` ,restoredFiles};
+    restoreJob.done=true; restoreJob.error=null;
+    backupShopData("restore-complete"); broadcastLive("refresh",{});
+  }catch(e){
+    console.error("Backup restore failed:",e); restoreJob.error=e.message||"Restore failed."; restoreJob.done=true; setRestoreProgress("Failed",0,1,restoreJob.error);
+  }
+}
+app.post("/api/admin/restore/start",guard,(req,res)=>{
+  if(restoreJob&&!restoreJob.done)return res.status(409).json({error:"A restore is already running.",jobId:restoreJob.id});
+  const data=req.body;
+  if(!data||!data.tables||!Array.isArray(data.tables.products))return res.status(400).json({error:"Invalid BASSE backup file."});
+  const id="restore-"+crypto.randomBytes(6).toString("hex");
+  restoreJob={id,stage:"Preparing",done:false,total:1,completed:0,message:"Preparing restore…",createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),error:null,result:null};
+  setImmediate(()=>runRestoreJob(data,id));
+  res.json({ok:true,jobId:id});
+});
+app.get("/api/admin/restore/status/:id",guard,(req,res)=>{
+  if(!restoreJob||restoreJob.id!==req.params.id)return res.status(404).json({error:"Restore job not found."});
+  res.json({ok:!restoreJob.error,jobId:restoreJob.id,stage:restoreJob.stage,done:restoreJob.done,total:restoreJob.total,completed:restoreJob.done&&restoreJob.stage==="Completed"?1:restoreJob.completed,message:restoreJob.message,error:restoreJob.error,result:restoreJob.result});
+});
+app.post("/api/admin/restore",guard,(req,res)=>{
+  if(restoreJob&&!restoreJob.done)return res.status(409).json({error:"A restore is already running.",jobId:restoreJob.id});
+  const data=req.body;if(!data||!data.tables||!Array.isArray(data.tables.products))return res.status(400).json({error:"Invalid BASSE backup file."});
+  const id="restore-"+crypto.randomBytes(6).toString("hex");restoreJob={id,stage:"Preparing",done:false,total:1,completed:0,message:"Preparing restore…",createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),error:null,result:null};
+  runRestoreJob(data,id); res.status(202).json({ok:true,jobId:id,message:"Restore started. Follow progress in the dashboard."});
 });
 app.get("/api/admin/stats",guard,(req,res)=>res.json({products:db.prepare("SELECT COUNT(*) c FROM products WHERE active=1").get().c,orders:db.prepare("SELECT COUNT(*) c FROM orders").get().c,customers:db.prepare("SELECT COUNT(*) c FROM (SELECT whatsapp FROM customer_accounts UNION SELECT whatsapp FROM orders WHERE whatsapp IS NOT NULL AND whatsapp!='')").get().c,pending:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PENDING'").get().c,paid:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PAID'").get().c,cancelled:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='CANCELLED' OR order_status='CANCELLED'").get().c,refunded:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='REFUNDED'").get().c,sales:db.prepare("SELECT COALESCE(SUM(total),0) s FROM orders WHERE payment_status='PAID' AND order_status!='CANCELLED' AND date(created_at)=date('now','localtime')").get().s,liveViewers:liveViewerStats()}));
 app.get("/api/admin/live-viewers",guard,(req,res)=>res.json(liveViewerStats()));

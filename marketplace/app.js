@@ -48,6 +48,15 @@ function renderProductGrid(ps, silent=false){
   });
 }
 
+async function fetchWithWakeRetry(url,options={},attempts=4){
+  let lastError=null;
+  for(let i=0;i<attempts;i++){
+    try{const r=await fetch(url,{...options,cache:options.cache||"no-store"});if(r.ok)return r;lastError=new Error("Server unavailable");}
+    catch(e){lastError=e}
+    if(i<attempts-1)await new Promise(r=>setTimeout(r,1500*(i+1)));
+  }
+  throw lastError||new Error("Server unavailable");
+}
 function cachedCatalog(){try{const x=JSON.parse(localStorage.getItem("basseCatalogCache")||"[]");return Array.isArray(x)?x:[]}catch{return []}}
 function saveCatalogCache(ps){try{if(Array.isArray(ps)&&ps.length)localStorage.setItem("basseCatalogCache",JSON.stringify(ps))}catch{}}
 function filterCachedCatalog(){const q=$("search").value.trim().toLowerCase();return cachedCatalog().filter(p=>(category==="All"||p.category===category)&&(!q||(p.name+" "+p.category+" "+(p.description||"")).toLowerCase().includes(q)))}
@@ -58,7 +67,7 @@ async function loadProducts(silent=false){
     renderProductGrid(cached,true);
   }
   try{
-    const r=await fetch(`/api/products?category=${encodeURIComponent(category)}&q=${encodeURIComponent($("search").value.trim())}`,{cache:"default"});
+    const r=await fetchWithWakeRetry(`/api/products?category=${encodeURIComponent(category)}&q=${encodeURIComponent($("search").value.trim())}`,{cache:"no-store"},4);
     if(!r.ok)throw new Error("Catalog unavailable");
     const ps=await r.json();
     if(category==="All"&&!$("search").value.trim())searchIndex=ps;
@@ -72,7 +81,7 @@ async function loadProducts(silent=false){
     else if(!$("grid").querySelector(".product")) $("grid").innerHTML='<div class="empty-search"><div></div><h3>Shop temporarily unavailable</h3><p>Your saved catalog will return when the connection is restored.</p></div>';
   }
 }
-async function loadSearchIndex(){try{let r=await fetch("/api/products?category=All",{cache:"no-store"});if(!r.ok)throw Error();searchIndex=await r.json();saveCatalogCache(searchIndex)}catch{searchIndex=cachedCatalog()}}
+async function loadSearchIndex(){try{let r=await fetchWithWakeRetry("/api/products?category=All",{cache:"no-store"},3);if(!r.ok)throw Error();searchIndex=await r.json();saveCatalogCache(searchIndex)}catch{searchIndex=cachedCatalog()}}
 function showSuggestions(){let term=$("search").value.trim().toLowerCase(),box=$("searchSuggestions");if(!term){box.classList.remove("show");box.innerHTML="";return}let matches=searchIndex.filter(p=>(p.name+" "+p.category+" "+(p.description||"")).toLowerCase().includes(term)).slice(0,7);box.innerHTML=matches.length?matches.map(p=>`<button type="button" class="suggest-item" onclick="pickSuggestion(${p.id})"><span class="suggest-icon"></span><span><b>${esc(p.name)}</b><small>${esc(p.category)} · ${money(p.price)}</small></span></button>`).join(""):"<div class=suggest-empty>No matching products</div>";box.classList.add("show")}
 function pickSuggestion(id){let p=searchIndex.find(x=>x.id===id);if(!p)return;$("search").value=p.name;$("searchSuggestions").classList.remove("show");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"auto",block:"start"})}
 function runSearch(){clearTimeout(searchTimer);searchTimer=setTimeout(loadProducts,160);showSuggestions()}

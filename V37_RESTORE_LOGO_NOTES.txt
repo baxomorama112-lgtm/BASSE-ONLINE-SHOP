@@ -1,0 +1,11 @@
+BASSE ONLINE SHOP V37 — RESTORE + LOGO RELIABILITY
+
+- Uses the exact supplied BASSE logo artwork across website/app web assets.
+- Added favicon, Apple icon and 192x192/512x512 web icons plus web manifest.
+- Added /health alongside /api/health for Render health checks/uptime monitors.
+- Marketplace product loading retries while Render is waking instead of leaving a dead/empty loading state.
+- Restore now runs as a background job with small batches and live stages: Preparing -> Restoring -> Images -> Completed/Failed.
+- Restore progress shows counts and automatically refreshes the dashboard when finished.
+- Restore now includes order notifications and chat conversations/messages.
+- Existing Waychit, WhatsApp, vendor, order, delivery, GPS and chat features are preserved.
+- The APK file is retained as supplied. A signed Android APK should only be rebuilt/re-signed from the original Android project/signing key; replacing bytes inside a production APK would invalidate its signature.

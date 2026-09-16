@@ -67,19 +67,42 @@ async function downloadBackup(){
   }catch(e){notify(e.message,true)}
 }
 async function restoreBackup(input){
-  const file=input?.files?.[0];
-  if(!file)return;
+  const file=input?.files?.[0]; if(!file)return;
   if(!confirm("Restore this full BASSE backup? Current shop data and uploaded images will be replaced by the backup.")){input.value="";return}
+  const showProgress=(stage,text,pct)=>{
+    let box=$("restoreProgress");
+    if(!box){box=document.createElement("div");box.id="restoreProgress";box.className="restore-progress";document.querySelector(".backup-panel")?.prepend(box)}
+    box.innerHTML=`<div class="restore-progress-head"><b>${esc(stage)}</b><span>${esc(text)}</span></div><div class="restore-progress-track"><i style="width:${Math.max(2,Math.min(100,pct||0))}%"></i></div><small>${Math.round(pct||0)}% complete</small>`;
+  };
   try{
-    notify("Restoring products, vendors, orders and images…");
+    showProgress("Preparing","Reading backup…",3);
     const text=await file.text();
     const data=JSON.parse(text);
-    const d=await api("/api/admin/restore",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
-    notify(d.message||"Backup restored successfully ");
+    showProgress("Preparing","Sending backup to server…",8);
+    const started=await api("/api/admin/restore/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
+    const jobId=started.jobId;
     input.value="";
-    await refresh();
-    refreshBackupStatus();
-  }catch(e){notify(e.message||"Restore failed.",true);input.value=""}
+    while(true){
+      await new Promise(r=>setTimeout(r,500));
+      const r=await fetch("/api/admin/restore/status/"+encodeURIComponent(jobId),{headers:H(),cache:"no-store"});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok)throw new Error(d.error||"Could not read restore progress.");
+      let pct=0;
+      if(d.stage==="Preparing")pct=10;
+      else if(d.stage==="Restoring")pct=10+((Number(d.completed||0)/Math.max(1,Number(d.total||1)))*70);
+      else if(d.stage==="Images")pct=80+((Number(d.completed||0)/Math.max(1,Number(d.total||1)))*19);
+      else if(d.stage==="Completed")pct=100;
+      showProgress(d.stage,d.message||"Working…",pct);
+      if(d.done){
+        if(d.error)throw new Error(d.error);
+        notify(d.result?.message||"Backup restored successfully ✓");
+        await refresh();
+        refreshBackupStatus();
+        setTimeout(()=>$("restoreProgress")?.remove(),2500);
+        break;
+      }
+    }
+  }catch(e){notify(e.message||"Restore failed.",true);showProgress("Failed",e.message||"Restore failed.",0)}
 }
 let liveDeliveryStream=null,liveDeliveryTimer=null,liveDeliveryMap=null,liveDeliveryMarker=null,liveCustomerMarker=null,liveDeliveryLine=null,liveDeliveryId=null,liveDeliveryOrderId=null;
 let leafletPromise=null;
