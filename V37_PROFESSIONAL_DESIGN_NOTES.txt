@@ -1,0 +1,17 @@
+BASSE ONLINE SHOP V37 — PROFESSIONAL DESIGN UPDATE
+
+This is a visual-only design update to the existing V36 project. Existing JavaScript and server logic were not replaced.
+
+Design updates:
+- Marketplace: refined navy/blue/gold theme, clearer sticky header and search, more polished banner and cards, improved typography, spacing, borders, shadows, focus states, and touch interactions.
+- Categories: responsive image grid instead of horizontal scrolling.
+- Products: 3-column desktop catalog and 2-column mobile catalog with clearer product names/prices and calmer card styling.
+- Mobile: improved spacing, category layout, navigation bar, safe-area padding, and reduced-motion support.
+- Admin: refreshed dashboard cards, navigation, tables, forms, and mobile layout. The live-viewer count/panel is visually hidden as requested; the underlying data logic is unchanged.
+- Vendor: polished login, dashboard summary cards, tabs, product/order panels, and responsive layouts.
+- Driver: polished login, cards, inputs, buttons, and map containers for mobile use.
+
+Preservation notes:
+- Existing app JavaScript, server code, API routes, payment integrations, order notifications, vendor/customer flows, and delivery tracking logic were left unchanged.
+- This ZIP is source code for you to upload/deploy through your existing hosting workflow. It has not been deployed to your live website from this chat.
+- Please test checkout, Waychit return/redirect, WhatsApp notifications, vendor login/application, admin operations, and driver tracking on a staging copy before replacing production files.
