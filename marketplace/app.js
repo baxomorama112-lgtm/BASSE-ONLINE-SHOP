@@ -422,13 +422,11 @@ function mapMarker(label,type){
   return L.divIcon({className:`basse-map-marker ${type}-marker`,html:`<span></span><b>${label}</b>`,iconSize:[90,34],iconAnchor:[12,30]});
 }
 function mapTiles(map){
-  const providers=[
-    ["https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",'© OpenStreetMap contributors © CARTO'],
-    ["https://tile.openstreetmap.org/{z}/{x}/{y}.png",'© OpenStreetMap contributors']
-  ];
-  let layer=L.tileLayer(providers[0][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[0][1]}).addTo(map);
-  let switched=false;layer.on("tileerror",()=>{if(switched)return;switched=true;try{map.removeLayer(layer)}catch{};layer=L.tileLayer(providers[1][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[1][1]}).addTo(map)});
-  return layer;
+  // OpenStreetMap first: CARTO may show an API-key watermark without firing tileerror.
+  return L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+    maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,
+    attribution:"© OpenStreetMap contributors",crossOrigin:true
+  }).addTo(map);
 }
 function renderTrackingMapContent(customerLat,customerLng,driverLat,driverLng){
   const m=trackingMap;if(!m)return;
