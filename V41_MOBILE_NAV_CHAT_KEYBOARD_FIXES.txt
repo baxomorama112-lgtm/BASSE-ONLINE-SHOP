@@ -1,0 +1,10 @@
+BASSE ONLINE SHOP V41 — MOBILE NAVIGATION AND CHAT FIXES
+
+- Removed the blur filter from the modal backdrop because iOS Safari/WebView can blur the page and make keyboard typing unreadable.
+- Modal panels now use the visual viewport height and occupy the mobile screen. Background page scrolling is locked while a modal is open.
+- Chat composition stays at the bottom of the chat panel; viewport resize and scroll events update the panel size as the iOS keyboard opens.
+- Bottom navigation highlights only the selected bottom navigation item. Category selection no longer uses the gold underline.
+- Messenger inbox now deduplicates Admin chats into a single Admin conversation entry and deduplicates vendor threads by vendor.
+- Enter sends the chat message (Shift+Enter is left available for line breaks if needed).
+- Existing APIs/payment/order/vendor/delivery/server logic not modified.
+- Not deployed; validate on a staging/backed-up copy and test iPhone keyboard, Admin and vendor messages.

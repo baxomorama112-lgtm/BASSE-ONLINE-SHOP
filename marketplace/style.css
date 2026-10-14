@@ -1264,3 +1264,29 @@ main{max-width:1440px;margin:0 auto;padding:0 clamp(12px,2.4vw,34px)}
  .bottom{gap:1px;padding-left:4px;padding-right:4px}
  .bottom small{font-size:8px}
 }
+
+/* V41 mobile polish: keep category selected state on the tile, never an underline */
+.cats button.active{padding-bottom:0!important}
+.cats button.active:after{display:none!important}
+.cats button.active img{outline:3px solid #1748a8;outline-offset:2px}
+.cats button.active b{color:#071a4a}
+.bottom a.active,.bottom button.active{color:#1748a8!important;background:#eef3ff!important;box-shadow:inset 0 -3px 0 #f0b429}
+.bottom a.active::after,.bottom button.active::after{display:none!important}
+.bottom a:hover,.bottom button:hover{background:transparent;color:#7b8598}
+.bottom a.active:hover,.bottom button.active:hover{background:#eef3ff;color:#1748a8}
+
+/* V41 iOS keyboard fix: never filter/blur the page behind a typing surface */
+.modal{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;background:rgba(4,13,35,.52)!important}
+body.basse-modal-open{overflow:hidden;overscroll-behavior:none}
+.modal.show{position:fixed;inset:0;min-height:0;height:100%;height:100dvh;z-index:1000;align-items:stretch;padding:0;display:flex}
+.modal .sheet{box-sizing:border-box}
+@media(max-width:760px){
+  .modal.show{align-items:stretch;padding:0!important;background:rgba(4,13,35,.52)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+  .modal.show .sheet{width:100vw!important;max-width:none!important;height:calc(var(--basse-vv-height,100dvh))!important;max-height:calc(var(--basse-vv-height,100dvh))!important;min-height:0!important;border-radius:0!important;padding:calc(12px + env(safe-area-inset-top)) 14px calc(12px + env(safe-area-inset-bottom))!important;overflow-y:auto;overscroll-behavior:contain}
+  .modal.show .chat-sheet{height:calc(var(--basse-vv-height,100dvh))!important;max-height:calc(var(--basse-vv-height,100dvh))!important;display:flex;flex-direction:column;padding:calc(10px + env(safe-area-inset-top)) 12px calc(8px + env(safe-area-inset-bottom))!important;gap:0}
+  .chat-sheet .chat-messages{flex:1 1 auto;min-height:0;max-height:none;overflow-y:auto;overscroll-behavior:contain}
+  .chat-sheet .chat-compose{position:sticky!important;bottom:0!important;z-index:3;flex:0 0 auto;background:#fff!important;padding:10px 0 max(8px,env(safe-area-inset-bottom))!important;border-top:1px solid #e7ecf3}
+  .chat-sheet .chat-compose input{width:100%;min-width:0;font-size:16px!important;line-height:1.3;outline-offset:2px}
+  .chat-sheet.keyboard-open{height:calc(var(--basse-vv-height,100dvh))!important;max-height:calc(var(--basse-vv-height,100dvh))!important}
+  .messenger-home-sheet{height:calc(var(--basse-vv-height,100dvh))!important;max-height:calc(var(--basse-vv-height,100dvh))!important;border-radius:0!important;width:100vw!important}
+}
