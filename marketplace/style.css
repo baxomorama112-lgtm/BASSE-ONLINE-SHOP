@@ -1168,3 +1168,99 @@ main{max-width:1440px;margin:0 auto;padding:0 clamp(12px,2.4vw,34px)}
 @media(max-width:650px){.market-chat-promo{margin:20px 12px 22px;grid-template-columns:auto minmax(0,1fr);gap:12px;padding:15px;border-radius:18px}.market-chat-promo-icon{width:47px;height:47px;border-radius:14px}.market-chat-promo-icon svg{width:25px;height:25px}.market-chat-promo-copy h2{font-size:16px;line-height:1.25}.market-chat-promo-copy p{font-size:10px}.market-chat-promo-copy>span{font-size:8px}.market-chat-promo-button{grid-column:1/-1;width:100%;min-height:43px}}
 
 .chat-avatar{overflow:hidden}.chat-avatar img{width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit}.chat-vendor-choice .chat-avatar{width:43px;height:43px;flex-basis:43px;font-size:13px}.chat-vendor-choice>span:nth-child(2){min-width:0}
+
+
+/* V40 — Alibaba-inspired marketplace navigation, category tiles, and separate detail windows */
+.top-actions{display:flex;align-items:center;gap:8px}
+.stores-head-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:46px;height:44px;border:1px solid transparent;border-radius:13px;background:transparent;color:#536077;cursor:pointer;padding:4px 7px;transition:background .18s ease,color .18s ease,border-color .18s ease}
+.stores-head-btn svg{width:23px;height:23px;display:block}
+.stores-head-btn span{font-size:9px;font-weight:850;line-height:1}
+.stores-head-btn:hover,.stores-head-btn.active{color:var(--blue);background:#edf3ff;border-color:#d7e4ff}
+.categories .section-title{align-items:flex-start}
+.category-subtitle{display:block!important;font-size:12px!important;color:var(--muted);margin-top:5px}
+.cats{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:12px;overflow:visible;padding:3px 0 6px}
+.cats button{position:relative;white-space:normal;min-width:0;padding:0 0 12px;border:1px solid #e7ebf3;border-radius:18px;background:#fff;overflow:hidden;display:flex;flex-direction:column;align-items:stretch;gap:10px;color:#172443;box-shadow:0 4px 15px rgba(7,26,74,.04);transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
+.cats button:hover{transform:translateY(-2px);box-shadow:0 12px 24px rgba(7,26,74,.09)}
+.cats button.active{background:#fff;color:var(--navy);border:2px solid var(--blue);box-shadow:0 8px 22px rgba(23,72,168,.13);padding:0 0 11px}
+.cats button.active:after{content:'';height:4px;position:absolute;left:0;right:0;bottom:0;background:var(--gold)}
+.cats img{display:block;width:100%;aspect-ratio:1.2/1;height:auto;object-fit:cover;background:#eff3f9}
+.cats b{display:block;padding:0 7px;font-size:12px;line-height:1.25;font-weight:850;text-align:center}
+#grid{gap:clamp(9px,1.2vw,16px)}
+.product{border-radius:20px;box-shadow:0 7px 22px rgba(7,26,74,.055);cursor:pointer}
+.product:focus-visible{outline:3px solid #7da7ff;outline-offset:2px}
+.product .pic{background:linear-gradient(145deg,#f8faff,#edf2f8)}
+.product img{transition:transform .3s ease}
+.product:hover img{transform:scale(1.035)}
+.product .info h3{line-height:1.4}
+.product .buy{border-radius:12px}
+.modal{align-items:center;justify-content:center;padding:clamp(10px,2.5vw,28px);backdrop-filter:blur(8px)}
+.sheet{animation:basseWindowIn .2s cubic-bezier(.2,.75,.25,1) both}
+@keyframes basseWindowIn{from{opacity:.25;transform:translateY(12px) scale(.99)}to{opacity:1;transform:translateY(0) scale(1)}}
+.product-sheet-modern{width:min(980px,100%);max-height:min(92dvh,900px);border:1px solid rgba(255,255,255,.75);box-shadow:0 28px 90px rgba(7,26,74,.28)}
+.account-sheet,.stores-sheet,.messenger-home-sheet{width:min(780px,100%);max-height:min(90dvh,850px);border:1px solid #e8edf6;box-shadow:0 28px 90px rgba(7,26,74,.24)}
+.close{z-index:9;cursor:pointer;transition:transform .16s ease,background .16s ease;color:var(--navy)}
+.close:hover{background:#e2ebff;transform:rotate(4deg)}
+.account-option{transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease}
+.account-option:hover{transform:translateY(-1px);border-color:#b9cdf6;box-shadow:0 8px 20px rgba(7,26,74,.06)}
+.stores-head-btn.active{box-shadow:inset 0 -2px 0 var(--gold)}
+.bottom{display:none}
+.bottom a,.bottom button{position:relative;min-width:0;flex:1;min-height:55px;gap:4px;border:0;background:transparent;color:#687386;border-radius:15px;padding:6px 2px 5px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-decoration:none;font-size:18px;cursor:pointer;transition:background .18s ease,color .18s ease,transform .18s ease}
+.bottom svg{width:24px;height:24px;display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.bottom small{font-size:9px;line-height:1.1;font-weight:800;letter-spacing:.05px;white-space:nowrap}
+.bottom a.active,.bottom button.active{color:var(--blue);background:#eef4ff;box-shadow:inset 0 -3px 0 var(--gold)}
+.bottom a.active svg,.bottom button.active svg{stroke-width:2.2}
+.bottom a:active,.bottom button:active{transform:scale(.96)}
+.bottom-icon-wrap{position:relative;display:grid;place-items:center}
+.chat-unread-badge{position:absolute;right:-12px;top:-6px;min-width:16px;height:16px;padding:0 4px;display:grid;place-items:center;border-radius:999px;background:#e11d48;color:#fff;font:800 9px/1 system-ui;border:2px solid #fff}
+.chat-unread-badge.hidden{display:none!important}
+.chat-window{display:flex;flex-direction:column}
+.chat-window .chat-messages{flex:1;min-height:180px;overflow:auto;overscroll-behavior:contain}
+.chat-window .chat-compose{position:sticky;bottom:0;padding-bottom:max(8px,env(safe-area-inset-bottom));background:#fff;z-index:4}
+.chat-window #chatText,.chat-compose input{font-size:16px!important;line-height:1.35;min-height:46px}
+.chat-window .chat-send-btn{min-height:46px;white-space:nowrap;flex-shrink:0}
+@media(min-width:761px){
+ .bottom{display:none}
+ .cats{grid-template-columns:repeat(7,minmax(0,1fr))}
+}
+@media(max-width:760px){
+ body{padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+ .top{position:sticky;top:0;z-index:30;gap:7px}
+ .brand-logo{max-width:160px}
+ .top-actions{margin-left:auto;gap:3px}
+ .stores-head-btn{min-width:40px;width:40px;height:42px;padding:3px}
+ .stores-head-btn span{font-size:8px}
+ .notify{min-width:38px}
+ .cats{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+ .cats button{border-radius:16px;padding-bottom:10px}
+ .cats img{aspect-ratio:1.17/1}
+ .cats b{font-size:11px;min-height:28px;display:grid;place-items:center;padding:0 4px}
+ #grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+ .product-sheet-modern,.account-sheet,.stores-sheet,.messenger-home-sheet,.chat-sheet,.checkout-sheet,.form-sheet,.support-sheet,.return-sheet{width:100%;max-width:none;height:calc(100dvh - env(safe-area-inset-top) - 6px);max-height:calc(100dvh - env(safe-area-inset-top) - 6px);margin-top:env(safe-area-inset-top);border-radius:26px 26px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom));overflow-y:auto;overscroll-behavior:contain}
+ .modal{align-items:stretch;justify-content:center;padding:0;background:rgba(5,16,40,.62)}
+ .product-sheet-modern{padding:18px 14px calc(24px + env(safe-area-inset-bottom))}
+ .product-detail{grid-template-columns:1fr;align-items:start;gap:16px}
+ .main-photo-wrap{max-height:min(36dvh,330px);aspect-ratio:1.12/1}
+ .detail-info{padding-bottom:12px}
+ .account-sheet,.stores-sheet,.messenger-home-sheet{padding-top:58px}
+ .bottom{display:flex;position:fixed;z-index:50;left:0;right:0;bottom:0;height:auto;min-height:68px;padding:6px 7px calc(6px + env(safe-area-inset-bottom));background:rgba(255,255,255,.97);backdrop-filter:blur(20px);border-top:1px solid #e4e9f2;box-shadow:0 -8px 28px rgba(7,26,74,.07);justify-content:space-around;gap:4px}
+ .bottom a,.bottom button{min-height:53px;border-radius:13px}
+ .bottom small{font-size:9px}
+ .chat-sheet{height:calc(100dvh - env(safe-area-inset-top));max-height:calc(100dvh - env(safe-area-inset-top));padding:52px 13px calc(10px + env(safe-area-inset-bottom));gap:10px;overflow:hidden}
+ .chat-sheet .checkout-head{margin:0;flex-shrink:0}
+ .chat-window .chat-messages{flex:1;min-height:0;padding:8px 3px}
+ .chat-window .chat-compose{position:relative;bottom:auto;display:flex;align-items:center;gap:8px;padding:8px 0 calc(8px + env(safe-area-inset-bottom));border-top:1px solid var(--line)}
+ .chat-window #chatText{width:0;flex:1;min-width:0;border-radius:14px;padding:12px}
+ .chat-window .chat-send-btn{width:auto;margin:0;border-radius:14px;padding:0 15px}
+ .chat-window.keyboard-open{height:var(--chat-viewport-height,70dvh);max-height:var(--chat-viewport-height,70dvh);margin-top:0;border-radius:24px 24px 0 0}
+ .chat-window.keyboard-open .chat-compose{padding-bottom:8px}
+ .chat-window .close{top:8px;right:10px}
+ .market-chat-promo{margin:20px 12px;padding:17px;grid-template-columns:auto minmax(0,1fr);gap:12px;border-radius:20px}
+ .market-chat-promo-icon{width:48px;height:48px}
+ .market-chat-promo-button{grid-column:1/-1;width:100%}
+}
+@media(max-width:380px){
+ .top-actions{gap:1px}
+ .stores-head-btn{width:36px;min-width:36px}
+ .bottom{gap:1px;padding-left:4px;padding-right:4px}
+ .bottom small{font-size:8px}
+}

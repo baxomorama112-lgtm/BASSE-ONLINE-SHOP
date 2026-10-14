@@ -1,4 +1,10 @@
 let category="All",selected=null,searchTimer=null,searchIndex=[];
+function setActiveNav(name){
+  document.querySelectorAll('.bottom [data-nav]').forEach(el=>el.classList.toggle('active',el.dataset.nav===name));
+  const shops=document.querySelector('.stores-head-btn');
+  if(shops)shops.classList.toggle('active',name==='shops');
+}
+function resetStoreNav(){const shops=document.querySelector('.stores-head-btn');if(shops)shops.classList.remove('active')}
 // Anonymous live-viewer heartbeat for the Admin Dashboard.
 const BASSE_VIEWER_ID=(()=>{try{let id=sessionStorage.getItem("basseViewerId");if(!id){id=(crypto.randomUUID?crypto.randomUUID():"v_"+Date.now()+"_"+Math.random().toString(36).slice(2));sessionStorage.setItem("basseViewerId",id)}return id}catch{return "v_"+Date.now()+"_"+Math.random().toString(36).slice(2)}})();
 const BASSE_UA=(navigator.userAgent||"").toLowerCase();
@@ -77,7 +83,7 @@ function showSuggestions(){let term=$("search").value.trim().toLowerCase(),box=$
 function pickSuggestion(id){let p=searchIndex.find(x=>x.id===id);if(!p)return;$("search").value=p.name;$("searchSuggestions").classList.remove("show");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"auto",block:"start"})}
 function runSearch(){clearTimeout(searchTimer);searchTimer=setTimeout(loadProducts,160);showSuggestions()}
 function clearSearch(){$("search").value="";$('searchSuggestions').classList.remove("show");loadProducts();$('search').focus()}
-function setCat(c,b){category=c;document.querySelectorAll(".cats button").forEach(x=>x.classList.remove("active"));b.classList.add("active");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"auto",block:"start"})}
+function setCat(c,b){setActiveNav("categories");category=c;document.querySelectorAll(".cats button").forEach(x=>x.classList.remove("active"));b.classList.add("active");loadProducts();document.querySelector("#products").scrollIntoView({behavior:"auto",block:"start"})}
 
 function normalizeProductImages(product){
   let imgs=[];
@@ -186,6 +192,7 @@ function addSelectedToCart(){
 function removeFromCart(i){const c=getCart();c.splice(i,1);saveCart(c);openCart()}
 function changeCartQty(i,d){const c=getCart(),x=c[i];if(!x)return;x.quantity=Math.max(1,Math.min(Number(x.stock)||1,(Number(x.quantity)||1)+d));saveCart(c);openCart()}
 function openCart(){
+  setActiveNav("cart");
   const c=getCart();
   if(!c.length){$("modal").innerHTML='<div class="sheet return-sheet"><button class="close" onclick="closeModal()">×</button><div class="result-icon" aria-hidden="true">🛒</div><h2>Your cart is empty</h2><p>Add products to your cart and they will appear here.</p><button class="secondary-btn" onclick="closeModal()">CONTINUE SHOPPING</button></div>';$('modal').classList.add('show');return;}
   const total=c.reduce((a,x)=>a+Number(x.price||0)*Math.max(1,Number(x.quantity)||1),0);
@@ -225,6 +232,7 @@ function storeInitials(name){
 }
 function storeCoverClass(id){return "store-cover c"+(Number(id)%6)}
 async function openStores(){
+  setActiveNav("shops");
   const modal=$("modal");
   modal.innerHTML=`<div class="sheet stores-sheet"><button class="close" onclick="closeModal()">×</button>
     <div class="stores-heading"><div><small>BASSE MARKETPLACE</small><h2>All Stores</h2><p>Discover trusted local stores and shop directly from them.</p></div><span class="store-heading-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10h16v10H4zM3 10l2-6h14l2 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 20v-6h8v6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></span></div>
@@ -601,7 +609,7 @@ function resumePendingPayment(){
     waitForPayment(p.orderId,0);
   }catch{}
 }
-function closeModal(){stopTrackingPolling();stopChatPoll();$("modal").classList.remove("show")}
+function closeModal(){stopTrackingPolling();stopChatPoll();$("modal").classList.remove("show");resetStoreNav()}
 async function openOrders(){let raw=localStorage.getItem("basseLastOrder");if(!raw)return toast("No recent order found on this phone.");try{let old=JSON.parse(raw),r=await fetch("/api/order/"+encodeURIComponent(old.id)),o=await r.json();if(!r.ok)throw new Error(o.error||"Order not found");showReturn(o,"",o.payment_status==="PAID",o.whatsappSupport,o.payment_status==="PENDING"?"Your order is waiting for payment confirmation.":"")}catch(e){toast(e.message)}}
 
 
@@ -619,7 +627,7 @@ async function chatApi(u,o={}){const r=await fetch(u,{...o,headers:{"Content-Typ
 async function openChat(vendorId=null,vendorName="Admin",existingId=null){
   stopChatPoll();
   const modal=$("modal"), who=customerIdentity();
-  modal.innerHTML=`<div class="sheet chat-sheet"><button class="close" onclick="openChatInbox()">×</button><div class="chat-head-actions"><button class="chat-inbox-btn" type="button" onclick="openChatInbox()">← Inbox</button></div><div class="checkout-head"><span class="support-modal-icon">💬</span><div><small>BASSE ONLINE SHOP</small><h2>Chat with ${esc(vendorName)} <span class="chat-online">● ONLINE</span></h2></div></div><div id="chatMessages" class="chat-messages"><div class="muted">Loading conversation…</div></div><div class="chat-compose"><input id="chatText" placeholder="Type your message…" autocomplete="off"><button class="pay chat-send-btn" onclick="sendChatMessage()">SEND <span>→</span></button></div></div>`;
+  modal.innerHTML=`<div class="sheet chat-sheet chat-window"><button class="close" onclick="openChatInbox()">×</button><div class="chat-head-actions"><button class="chat-inbox-btn" type="button" onclick="openChatInbox()">← Inbox</button></div><div class="checkout-head"><span class="support-modal-icon">💬</span><div><small>BASSE ONLINE SHOP</small><h2>Chat with ${esc(vendorName)} <span class="chat-online">● ONLINE</span></h2></div></div><div id="chatMessages" class="chat-messages"><div class="muted">Loading conversation…</div></div><div class="chat-compose"><input id="chatText" placeholder="Type your message…" autocomplete="off"><button class="pay chat-send-btn" onclick="sendChatMessage()">SEND <span>→</span></button></div></div>`;
   modal.classList.add('show');
   enableChatKeyboardLayout();
   try{
@@ -630,6 +638,7 @@ async function openChat(vendorId=null,vendorName="Admin",existingId=null){
   }catch(e){$("chatMessages").innerHTML=`<p class="muted">${esc(e.message)}</p>`}
 }
 async function openChatInbox(){
+  setActiveNav("chat");
   stopChatPoll();
   const modal=$("modal");
   modal.innerHTML=`<div class="sheet chat-inbox-sheet messenger-home-sheet"><button class="close" onclick="closeModal()">×</button><div class="chat-messenger-head"><div class="chat-welcome-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H9l-5 4V5.5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M8 8h8M8 11.5h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div><div><div class="chat-welcome-kicker">BASSE ONLINE SHOP</div><h2>Messenger</h2><p>Chat with BASSE Admin or any approved Vendor.</p></div></div><div class="chat-start-grid"><button type="button" class="chat-start-card" onclick="openChat(null,'Admin')"><span class="chat-card-icon admin-chat-card-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4.5 20c.6-4 3-6 7.5-6s6.9 2 7.5 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span><b>Chat with Admin</b><small>Orders, payments, delivery & support</small></button><button type="button" class="chat-start-card" onclick="openVendorChatPicker()"><span class="chat-card-icon vendor-chat-card-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10h16v10H4zM3 10l2-6h14l2 6M8 10v10M16 10v10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></span><b>Chat with a Vendor</b><small>Ask about products, prices & availability</small></button></div><div id="chatVendorPicker" class="chat-vendor-picker hidden"></div><div class="chat-inbox-heading"><div><b>Messages</b><small>Your conversations are saved for up to 72 hours.</small></div></div><div id="chatInboxList" class="chat-inbox-list"></div></div>`;
@@ -657,8 +666,10 @@ function showSupport(){
   modal.classList.add('show');
 }
 function openAccount(){
+  setActiveNav("account");
   const customer=JSON.parse(localStorage.getItem("basseCustomer")||"null");
   $("modal").innerHTML=`<div class="sheet account-sheet"><button class="close" onclick="closeModal()">×</button><div class="account-hero"><div class="account-avatar" aria-hidden="true"><svg viewBox="0 0 48 48"><circle cx="24" cy="16" r="7" fill="none" stroke="currentColor" stroke-width="3"/><path d="M10 41c1.5-9 6-13 14-13s12.5 4 14 13" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div><h2>${customer?`Welcome, ${esc(customer.name)}`:"BASSE MARKET ACCOUNT"}</h2><p>${customer?"Manage your shopping account.":"Shop as a guest or create an account."}</p></div>
+  <button class="account-option track-account-option" type="button" onclick="trackOrderPrompt()"><span><b>Track an Order</b><small>Check your delivery status</small></span><span class="account-option-arrow">→</span></button>
   ${customer?`<button class="account-option" onclick="openOrders()"> <span><b>My Orders</b><small>View your recent purchases</small></span> →</button><button class="account-option" onclick="toast('Account details are saved on this device.')"> <span><b>My Details</b><small>${esc(customer.phone)}</small></span> →</button><button class="secondary-btn" onclick="localStorage.removeItem('basseCustomer');openAccount()">LOG OUT</button>`:
   `<button class="account-option" type="button" onclick="openCustomerSignup()"> <span><b>Create Customer Account</b><small>Optional — save your details and orders</small></span> →</button>
   <button class="account-option" type="button" onclick="openCustomerLogin()"> <span><b>Customer Login</b><small>Already have an account?</small></span> →</button>

@@ -5,6 +5,7 @@
 <a class="brand" href="#" aria-label="BASSE Marketplace"><img class="brand-logo" src="/basse-marketplace-logo.jpg" alt="BASSE Marketplace"></a>
 <div class="search-wrap top-search"><div class="search"><input id="search" autocomplete="off" placeholder="Search products, phones, fashion, beauty..." aria-label="Search products"><button id="searchBtn" type="button" aria-label="Search"><span aria-hidden="true">⌕</span></button><button id="clearSearch" class="clear-search" type="button" aria-label="Clear search">×</button></div><div id="searchSuggestions" class="search-suggestions"></div></div>
 <div class="top-actions">
+<button class="stores-head-btn" type="button" onclick="openStores()" aria-label="Browse stores" title="Browse stores"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 5 4h14l2 6.5M4 11v9h16v-9M9 20v-6h6v6M3 10.5h18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Shops</span></button>
 <button class="notify" type="button" onclick="openOrderNotifications()" aria-label="Notifications"><span class="bell-icon" aria-hidden="true"></span><i id="orderNotifyBadge" class="hidden">0</i></button>
 <button class="cart" onclick="openCart()" aria-label="Cart"><span class="ui-icon cart-icon" aria-hidden="true"></span><i id="cartCount">0</i></button>
 </div>
@@ -16,7 +17,7 @@
   </a>
   <div class="banner-overlay"><button onclick="document.querySelector('#products').scrollIntoView({behavior:'smooth'})">SHOP NOW <b>→</b></button></div>
 </section>
-<section id="categories" class="categories"><div class="section-title"><div><h2>Shop by category</h2></div><a href="#categories" class="section-link">View all <b>→</b></a></div><div class="cats">
+<section id="categories" class="categories"><div class="section-title"><div><h2>Explore Categories</h2><span class="category-subtitle">Find what you need, all in one place</span></div><a href="#categories" class="section-link">View all <b>→</b></a></div><div class="cats">
 <button class="active" onclick="setCat('All',this)" aria-label="All products"><img src="/category-images/all.jpg" alt="All"><b>All</b></button>
 <button onclick="setCat('Fashion',this)" aria-label="Fashion"><img src="/category-images/fashion.jpg" alt="Fashion"><b>Fashion</b></button>
 <button onclick="setCat('Electronics',this)" aria-label="Electronics"><img src="/category-images/electronics.jpg" alt="Electronics"><b>Electronics</b></button>
@@ -45,12 +46,11 @@
 </section>
 </main>
 <nav class="bottom" aria-label="Main navigation">
-<a class="active" href="#" aria-label="Home"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v9h-6v-6H9v6H3z"/></svg><small>Home</small></a>
-<a href="#categories" aria-label="Categories"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg><small>Categories</small></a><button type="button" onclick="openStores()" aria-label="Stores"><svg viewBox="0 0 24 24"><path d="M4 10h16v10H4zM3 10l2-6h14l2 6M8 10v10M16 10v10" fill="none" stroke="currentColor" stroke-width="1.7"/></svg><small>Stores</small></button>
-<button onclick="openCart()" aria-label="Cart"><svg viewBox="0 0 24 24"><path d="M3 4h2l2 11h10l3-8H7" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/></svg><small>Cart</small></button>
-<button onclick="openChatInbox()" aria-label="Messages" class="chat-nav-btn"><span class="chat-nav-icon"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 10h8M8 13h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><i id="chatUnreadBadge" class="chat-unread-badge hidden">0</i></span><small>Chat</small></button>
-<button onclick="trackOrderPrompt()" aria-label="Track order"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2" fill="currentColor"/><path d="M12 4v3M20 12h-3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><small>Track</small></button>
-<button onclick="openAccount()" aria-label="Account"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3"/><path d="M5 21c.5-4 2.8-6 7-6s6.5 2 7 6" fill="none" stroke="currentColor" stroke-width="2"/></svg><small>Account</small></button>
+<a class="active" data-nav="home" href="#" onclick="setActiveNav('home')" aria-label="Home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.8 12 3l9 7.8v9.1h-6v-6H9v6H3z"/></svg><small>Home</small></a>
+<a data-nav="categories" href="#categories" onclick="setActiveNav('categories')" aria-label="Categories"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1.1"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1.1"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1.1"/><rect x="14" y="14" width="6.5" height="6.5" rx="1.1"/></svg><small>Categories</small></a>
+<button type="button" data-nav="chat" onclick="openChatInbox()" aria-label="Messenger"><span class="bottom-icon-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H9l-5 4z"/><path d="M8 8h8M8 11.5h5"/></svg><i id="chatUnreadBadge" class="chat-unread-badge hidden">0</i></span><small>Messenger</small></button>
+<button type="button" data-nav="cart" onclick="openCart()" aria-label="Cart"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2 11h10l3-8H7"/><circle cx="9" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/></svg><small>Cart</small></button>
+<button type="button" data-nav="account" onclick="openAccount()" aria-label="Account"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.3"/><path d="M5 21c.5-4 2.8-6 7-6s6.5 2 7 6"/></svg><small>Account</small></button>
 </nav>
 <div id="modal" class="modal"></div><div id="toast" class="toast"></div><script src="app.js" defer></script>
 </body></html>

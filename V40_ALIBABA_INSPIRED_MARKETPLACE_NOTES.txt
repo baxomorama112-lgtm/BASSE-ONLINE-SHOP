@@ -1,0 +1,18 @@
+BASSE ONLINE SHOP V40 — ALIBABA-INSPIRED MARKETPLACE UI
+
+Changes based on the user's uploaded Alibaba screenshots:
+- Reworked bottom navigation to five clear mobile tabs: Home, Categories, Messenger, Cart, Account.
+- Added a Store/Shop icon in the header which opens the existing All Stores directory.
+- Added active selection state and visual highlight for mobile bottom navigation and shop header button.
+- Reworked category images into responsive visual tiles: 7-column desktop, 3-column mobile.
+- Product detail, Messenger, Account and All Stores views use more app-like full-height panels on mobile and centered modal sheets on desktop.
+- Improved modal animation, close-button interaction, product cards, typography, and category visual hierarchy.
+- Preserved product click behavior, add-to-cart, Buy Now/Waychit checkout, the chat API routes, vendor chat picker, customer login/signup/vendor apply, stores API and uploaded store logos.
+- Removed Track from the crowded bottom nav only; the existing Track an Order flow is now accessible from Account.
+- Made chat compose/input keyboard-aware with 16px input text to prevent iOS auto-zoom and dynamic VisualViewport height adjustments.
+
+Validation performed:
+- Node JavaScript syntax check passed for marketplace/app.js.
+- Existing project structure, images, and backend route files were retained.
+- Not deployed to live AppDeploy: the AppDeploy account tool only exposed a separate BS SERVICES Ticketing project, not BASSE ONLINE SHOP. Do not push these changes to that unrelated project.
+- Live browser, payment, and mobile-device end-to-end checks remain to be performed after applying the ZIP to the user's actual existing hosting project.
