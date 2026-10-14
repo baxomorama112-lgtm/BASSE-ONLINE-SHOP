@@ -14,6 +14,7 @@ function startViewerPresence(){sendViewerHeartbeat();clearInterval(window.__view
 window.addEventListener("pagehide",()=>{try{navigator.sendBeacon("/api/presence/leave",new Blob([JSON.stringify({id:BASSE_VIEWER_ID})],{type:"application/json"}))}catch{}});
 const $=id=>document.getElementById(id),money=n=>"D"+Number(n||0).toLocaleString();
 let checkoutGps={lat:null,lng:null,accuracy:null},selectedChoices=[],trackingMap=null,trackingPoll=null,trackingStream=null,trackingLocationWatch=null,trackingLastLocationSent=0,trackingPhone="",trackingOrderId="",trackingRefreshing=false,trackingLastEvent=0;
+function hasGpsCoordinate(value){return value!==null&&value!==undefined&&value!==""&&Number.isFinite(Number(value));}
 let leafletPromise=null;
 function ensureLeaflet(){
   if(window.L&&window.L.maplibreGL)return Promise.resolve(window.L);
@@ -400,8 +401,8 @@ async function refreshTracking(id,initial){
     const status=d.delivery?.status||d.order.order_status||"NEW";
     const steps=["NEW","READY","ACCEPTED","PICKED_UP","ON_THE_WAY","ARRIVED","DELIVERED"];
     const idx=Math.max(0,steps.indexOf(status));
-    const hasCustomer=Number.isFinite(Number(d.order.customer_lat))&&Number.isFinite(Number(d.order.customer_lng));
-    const hasDriver=Number.isFinite(Number(d.delivery?.lat))&&Number.isFinite(Number(d.delivery?.lng));
+    const hasCustomer=hasGpsCoordinate(d.order.customer_lat)&&hasGpsCoordinate(d.order.customer_lng);
+    const hasDriver=hasGpsCoordinate(d.delivery?.lat)&&hasGpsCoordinate(d.delivery?.lng);
     if(initial){
       const map=`<div class="live-map-wrap"><div id="customerMap" class="customer-map"><div class="map-placeholder"><br><b>Live delivery map</b><small>Loading map…</small></div></div></div>`;
       $("trackingBody").innerHTML=`<div class="tracking-card"><div class="track-top"><b>#${esc(d.order.id)}</b><span id="trackingStatus" class="badge"></span></div><h3 id="trackingProduct"></h3><p id="trackingLocation"></p>${map}<div class="tracking-location-actions"><button type="button" class="live-location-btn" onclick="captureTrackingLocation()"><span aria-hidden="true">⌖</span> UPDATE MY LOCATION</button><button type="button" class="live-location-refresh" onclick="viewLiveDriverLocation()"><span aria-hidden="true">◉</span> VIEW LIVE DRIVER LOCATION</button></div><div class="timeline" id="trackingTimeline"></div><p class="muted" id="trackingNote"></p></div>`;
@@ -421,10 +422,6 @@ function mapMarker(label,type){
   return L.divIcon({className:`basse-map-marker ${type}-marker`,html:`<span></span><b>${label}</b>`,iconSize:[90,34],iconAnchor:[12,30]});
 }
 function mapTiles(map){
-  const style="https://tiles.openfreemap.org/styles/liberty";
-  if(window.L?.maplibreGL&&window.maplibregl){
-    try{return L.maplibreGL({style}).addTo(map)}catch(e){}
-  }
   const providers=[
     ["https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",'© OpenStreetMap contributors © CARTO'],
     ["https://tile.openstreetmap.org/{z}/{x}/{y}.png",'© OpenStreetMap contributors']
@@ -475,8 +472,8 @@ function showLiveDriverLocation(){
 
 function loadTrackingMap(customerLat,customerLng,driverLat,driverLng){
   const el=$("customerMap");if(!el)return;
-  const hasCustomer=Number.isFinite(Number(customerLat))&&Number.isFinite(Number(customerLng));
-  const hasDriver=Number.isFinite(Number(driverLat))&&Number.isFinite(Number(driverLng));
+  const hasCustomer=hasGpsCoordinate(customerLat)&&hasGpsCoordinate(customerLng);
+  const hasDriver=hasGpsCoordinate(driverLat)&&hasGpsCoordinate(driverLng);
   if(!window.L){
     el.innerHTML='<div class="map-placeholder"><br><b>Map service is loading</b><small>Please wait a moment and tap Track Order again.</small></div>';
     return;

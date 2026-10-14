@@ -1290,3 +1290,11 @@ body.basse-modal-open{overflow:hidden;overscroll-behavior:none}
   .chat-sheet.keyboard-open{height:calc(var(--basse-vv-height,100dvh))!important;max-height:calc(var(--basse-vv-height,100dvh))!important}
   .messenger-home-sheet{height:calc(var(--basse-vv-height,100dvh))!important;max-height:calc(var(--basse-vv-height,100dvh))!important;border-radius:0!important;width:100vw!important}
 }
+
+/* V42 professional delivery map polish */
+.customer-map,.driver-map,.admin-live-map{background:#eaf0f6;isolation:isolate}
+.customer-map .leaflet-container,.driver-map .leaflet-container,.admin-live-map .leaflet-container{background:#eaf0f6;outline:none}
+.leaflet-control-zoom{border:0!important;box-shadow:0 4px 16px rgba(7,26,74,.14)!important;overflow:hidden;border-radius:12px!important}
+.leaflet-control-zoom a{color:#0a2b7a!important;background:#fff!important;border-color:#e3e8f0!important}
+.leaflet-control-attribution{background:rgba(255,255,255,.9)!important;border-radius:5px 0 0 0;padding:2px 5px!important;font-size:9px!important}
+.basse-map-marker{filter:drop-shadow(0 3px 5px rgba(7,26,74,.12))}

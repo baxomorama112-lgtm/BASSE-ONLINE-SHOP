@@ -1,7 +1,8 @@
+function hasGpsCoordinate(value){return value!==null&&value!==undefined&&value!==""&&Number.isFinite(Number(value));}
 let token=localStorage.getItem("basseDriverToken")||"";const $=x=>document.getElementById(x);const H=()=>token?{Authorization:"Bearer "+token}:{};let activeGps=null,maps={};
 let leafletPromise=null;
 function ensureLeaflet(){
-  if(window.L&&window.L.maplibreGL)return Promise.resolve(window.L);
+  if(window.L)return Promise.resolve(window.L);
   if(leafletPromise)return leafletPromise;
   leafletPromise=new Promise(resolve=>{
     if(!document.querySelector('link[data-basse-leaflet]')){const css=document.createElement("link");css.rel="stylesheet";css.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";css.dataset.basseLeaflet="1";document.head.appendChild(css)}
@@ -11,7 +12,7 @@ function ensureLeaflet(){
     const loadPlugin=()=>load("https://unpkg.com/@maplibre/maplibre-gl-leaflet/leaflet-maplibre-gl.js",finish,finish);
     const loadMapLibre=()=>load("https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js",loadPlugin,finish);
     const loadLeaflet=()=>load("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",loadMapLibre,()=>load("https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js",loadMapLibre,finish));
-    if(window.L){if(window.maplibregl)loadPlugin();else loadMapLibre()}else loadLeaflet();
+    if(window.L){finish()}else loadLeaflet();
   });return leafletPromise
 }function mapMarker(label,type){return L.divIcon({className:`basse-map-marker ${type}-marker`,html:`<span></span><b>${label}</b>`,iconSize:[90,34],iconAnchor:[12,30]})}
 function mapTiles(map){
@@ -36,7 +37,7 @@ async function login(){const phone=$("phone").value.trim(),pin=$("pin").value.tr
 function start(){$("login").classList.add("hidden");$("app").classList.remove("hidden");ensureLeaflet().then(()=>{load();ensureDriverMaps()});clearInterval(window.__driverTimer);window.__driverTimer=setInterval(load,12000)}
 function structureSignature(ds){return ds.map(d=>[d.id,d.order_id,d.status,d.customer_lat,d.customer_lng,d.customer_name,d.location,d.product_name,d.quantity].join("|")).join(";;")}
 async function load(){try{const me=await api("/api/driver/me");$("driverName").textContent=me.full_name;const ds=await api("/api/driver/deliveries");deliveries=ds;const sig=structureSignature(ds);if(sig!==lastStructure){Object.keys(maps).forEach(k=>{try{maps[k].map.remove()}catch{}delete maps[k]});$("list").innerHTML=ds.map(render).join("")||'<div class="card"><b>No deliveries assigned yet.</b><p class="muted">Admin will assign your deliveries here.</p></div>';lastStructure=sig;requestAnimationFrame(()=>setTimeout(ensureDriverMaps,80));setTimeout(ensureDriverMaps,350)}else{syncAllMaps(ds)}}catch(e){if(/login|driver/i.test(e.message))logout()}}
-function render(d){const live=d.status==="ON_THE_WAY"||d.status==="ARRIVED";const hasCustomer=Number.isFinite(Number(d.customer_lat))&&Number.isFinite(Number(d.customer_lng));return `<div class="order-card"><div class="order-head"><b>#${esc(d.order_id)}</b><span class="status">${d.status.replaceAll("_"," ")}</span></div><h3>${esc(d.product_name)} × ${d.quantity}</h3><p class="muted">Customer: ${esc(d.customer_name||"Customer")}<br>WhatsApp: +${esc(d.whatsapp||"")}<br>Location: ${esc(d.location||"")}</p><div class="driver-map-head"><b> Delivery Map</b><small>${hasCustomer?(d.lat&&d.lng?"Live driver position":"Customer location saved"):"Customer GPS location not captured"}</small></div><div id="map-${d.id}" class="driver-map">${hasCustomer?"":"<div class=\"map-empty\"> Customer GPS was not captured for this order.<br><small>The written delivery location is shown above.</small></div>"}</div><div class="map-legend"><span> Customer</span><span> Driver</span><span>━━ Live distance line</span></div><div class="actions">${d.status==="ASSIGNED"?`<button onclick="setStatus(${d.id},'ACCEPTED')"> ACCEPT DELIVERY</button>`:""}${d.status==="ACCEPTED"?`<button onclick="setStatus(${d.id},'PICKED_UP')"> PICKED UP</button>`:""}${d.status==="PICKED_UP"?`<button onclick="setStatus(${d.id},'ON_THE_WAY')"> START DELIVERY & GPS</button>`:""}${live?`<button class="secondary" onclick="startGps(${d.id})"> SHARE LIVE LOCATION</button><button class="secondary" onclick="setStatus(${d.id},'ARRIVED')"> ARRIVED</button>`:""}${d.status==="ARRIVED"?`<button onclick="setStatus(${d.id},'DELIVERED');stopGps()"> MARK DELIVERED</button>`:""}</div></div>`}
+function render(d){const live=d.status==="ON_THE_WAY"||d.status==="ARRIVED";const hasCustomer=hasGpsCoordinate(d.customer_lat)&&hasGpsCoordinate(d.customer_lng);return `<div class="order-card"><div class="order-head"><b>#${esc(d.order_id)}</b><span class="status">${d.status.replaceAll("_"," ")}</span></div><h3>${esc(d.product_name)} × ${d.quantity}</h3><p class="muted">Customer: ${esc(d.customer_name||"Customer")}<br>WhatsApp: +${esc(d.whatsapp||"")}<br>Location: ${esc(d.location||"")}</p><div class="driver-map-head"><b> Delivery Map</b><small>${hasCustomer?(d.lat&&d.lng?"Live driver position":"Customer location saved"):"Customer GPS location not captured"}</small></div><div id="map-${d.id}" class="driver-map">${hasCustomer?"":"<div class=\"map-empty\"> Customer GPS was not captured for this order.<br><small>The written delivery location is shown above.</small></div>"}</div><div class="map-legend"><span> Customer</span><span> Driver</span><span>━━ Live distance line</span></div><div class="actions">${d.status==="ASSIGNED"?`<button onclick="setStatus(${d.id},'ACCEPTED')"> ACCEPT DELIVERY</button>`:""}${d.status==="ACCEPTED"?`<button onclick="setStatus(${d.id},'PICKED_UP')"> PICKED UP</button>`:""}${d.status==="PICKED_UP"?`<button onclick="setStatus(${d.id},'ON_THE_WAY')"> START DELIVERY & GPS</button>`:""}${live?`<button class="secondary" onclick="startGps(${d.id})"> SHARE LIVE LOCATION</button><button class="secondary" onclick="setStatus(${d.id},'ARRIVED')"> ARRIVED</button>`:""}${d.status==="ARRIVED"?`<button onclick="setStatus(${d.id},'DELIVERED');stopGps()"> MARK DELIVERED</button>`:""}</div></div>`}
 function initMap(d){
   if(!window.L){initFallbackMap(d);return}
   const el=$("map-"+d.id);if(!el||!Number.isFinite(Number(d.customer_lat))||!Number.isFinite(Number(d.customer_lng)))return;
@@ -47,23 +48,23 @@ function initMap(d){
     mapTileLayer(map);
     const customer=L.marker([clat,clng],{icon:L.divIcon({className:"basse-map-marker customer-marker",html:"<span></span><b>Customer</b>",iconSize:[82,30],iconAnchor:[12,28],zIndexOffset:500})}).addTo(map).bindPopup(" Customer delivery location");
     let driver=null,line=null;let initialFit=true;
-    if(Number.isFinite(Number(d.lat))&&Number.isFinite(Number(d.lng))){driver=L.marker([Number(d.lat),Number(d.lng)],{icon:L.divIcon({className:"basse-map-marker driver-marker",html:"<span></span><b>Driver</b>",iconSize:[70,30],iconAnchor:[12,28],zIndexOffset:1000})}).addTo(map).bindPopup(" Driver");line=L.polyline([[Number(d.lat),Number(d.lng)],[clat,clng]],{weight:4,dashArray:"8 8"}).addTo(map);map.fitBounds(L.latLngBounds([[Number(d.lat),Number(d.lng)],[clat,clng]]),{padding:[25,25],maxZoom:16});initialFit=false}
+    if(hasGpsCoordinate(d.lat)&&hasGpsCoordinate(d.lng)){driver=L.marker([Number(d.lat),Number(d.lng)],{icon:L.divIcon({className:"basse-map-marker driver-marker",html:"<span></span><b>Driver</b>",iconSize:[70,30],iconAnchor:[12,28],zIndexOffset:1000})}).addTo(map).bindPopup(" Driver");line=L.polyline([[Number(d.lat),Number(d.lng)],[clat,clng]],{weight:4,dashArray:"8 8"}).addTo(map);map.fitBounds(L.latLngBounds([[Number(d.lat),Number(d.lng)],[clat,clng]]),{padding:[25,25],maxZoom:16});initialFit=false}
     maps[d.id]={map,customer,driver,line,clat,clng,initialFit};
     const resize=()=>{try{map.invalidateSize({pan:false})}catch{}};
     map.whenReady(()=>{resize();setTimeout(resize,150);setTimeout(resize,500)});requestAnimationFrame(resize);
   }catch(e){console.warn("Driver Leaflet map init failed",e);delete maps[d.id];initFallbackMap(d)}
 }
 function syncMapData(d){const m=maps[d.id];if(!m||!window.L)return;requestAnimationFrame(()=>{try{m.map.invalidateSize({pan:false})}catch{}});const lat=Number(d.lat),lng=Number(d.lng);if(Number.isFinite(lat)&&Number.isFinite(lng)){if(!m.driver)m.driver=L.marker([lat,lng],{icon:L.divIcon({className:"basse-map-marker driver-marker",html:"<span></span><b>Driver</b>",iconSize:[70,30],iconAnchor:[12,28]})}).addTo(m.map).bindPopup(" Driver");else m.driver.setLatLng([lat,lng]);if(!m.line)m.line=L.polyline([[lat,lng],[m.clat,m.clng]],{weight:4,dashArray:"8 8"}).addTo(m.map);else m.line.setLatLngs([[lat,lng],[m.clat,m.clng]]);if(m.initialFit){m.map.fitBounds(L.latLngBounds([[lat,lng],[m.clat,m.clng]]),{padding:[25,25],maxZoom:16});m.initialFit=false}}}
-function syncAllMaps(ds){const ids=new Set(ds.map(d=>String(d.id)));Object.keys(maps).forEach(k=>{if(!ids.has(String(k))){try{maps[k].map.remove()}catch{}delete maps[k]}});ds.forEach(d=>{if(Number.isFinite(Number(d.customer_lat))&&Number.isFinite(Number(d.customer_lng))){if(maps[d.id])syncMapData(d);else initMap(d)}})}
+function syncAllMaps(ds){const ids=new Set(ds.map(d=>String(d.id)));Object.keys(maps).forEach(k=>{if(!ids.has(String(k))){try{maps[k].map.remove()}catch{}delete maps[k]}});ds.forEach(d=>{if(hasGpsCoordinate(d.customer_lat)&&hasGpsCoordinate(d.customer_lng)){if(maps[d.id])syncMapData(d);else initMap(d)}})}
 function ensureDriverMaps(){if(!window.L)return;syncAllMaps(deliveries);Object.values(maps).forEach(m=>{try{m.map.invalidateSize({pan:false})}catch{}})}
 function mapTileLayer(map){
-  if(window.L?.maplibreGL&&window.maplibregl){try{return L.maplibreGL({style:"https://tiles.openfreemap.org/styles/liberty"}).addTo(map)}catch(e){}}
+  // Professional high-contrast Voyager basemap; no API key required.
   const providers=[
     ["https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",'© OpenStreetMap contributors © CARTO'],
     ["https://tile.openstreetmap.org/{z}/{x}/{y}.png",'© OpenStreetMap contributors']
   ];
-  let layer=L.tileLayer(providers[0][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[0][1]}).addTo(map);
-  let switched=false;layer.on("tileerror",()=>{if(switched)return;switched=true;try{map.removeLayer(layer)}catch{}layer=L.tileLayer(providers[1][0],{maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[1][1]}).addTo(map)});
+  let layer=L.tileLayer(providers[0][0],{maxZoom:19,keepBuffer:3,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[0][1],crossOrigin:true}).addTo(map);
+  let switched=false;layer.on("tileerror",()=>{if(switched)return;switched=true;try{map.removeLayer(layer)}catch{}layer=L.tileLayer(providers[1][0],{maxZoom:19,keepBuffer:3,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[1][1],crossOrigin:true}).addTo(map)});
   return layer;
 }
 

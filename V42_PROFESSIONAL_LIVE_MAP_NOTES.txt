@@ -1,0 +1,10 @@
+BASSE ONLINE SHOP V42 — PROFESSIONAL LIVE MAP
+
+Built from V41 source. Improvements:
+- Uses CARTO Voyager basemap tiles for a cleaner, more legible road map, with OpenStreetMap tiles as a fallback; no paid map API key is required.
+- Fixed a GPS validity bug: JavaScript Number(null) equals 0, so null coordinates could be misread as valid coordinates near (0,0). Marketplace customer tracking, driver maps and admin live map now explicitly reject null/empty coordinates.
+- Keeps existing Gambia GPS validation, order tracking endpoints, driver GPS sharing and live delivery refresh.
+- Polished map container, zoom controls, attribution and marker styling.
+- Existing dashed line between driver and customer is a straight-line visual indicator, not turn-by-turn road routing. A live road route requires an available routing service and should be tested before production use.
+
+Validation: JavaScript syntax checks and ZIP archive integrity should be run before deployment. Not deployed to the live website.
