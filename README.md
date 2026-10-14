@@ -118,3 +118,13 @@ Full backups now include the actual uploaded files from `server/data/uploads` as
 - Product edits preserve existing options unless the admin explicitly changes/removes them.
 - Full backups normalize product option data and include file sizes.
 - Full restore restores the database/options immediately; uploaded images are rebuilt in the background to reduce perceived restore time.
+
+
+## V44 — Digital Services / Netflix launch (additive)
+- Adds a separate Digital Services page at `/digital-services.html`; physical products and stock are untouched.
+- Adds admin navigation for Digital Services, plan prices/costs, and digital order statuses.
+- Customers submit their name, WhatsApp number, and their own Netflix account email. The form never asks for Netflix passwords or card details.
+- Digital orders are separate from physical marketplace orders and are included in full backups.
+- Admin must configure a real Netflix plan and price before it appears publicly.
+- Important payment limitation: this first slice does NOT create a Waychit dynamic checkout session for digital orders. Orders remain PENDING until admin verifies the payment independently. Do not mark PAID until verified. Integrate a signed Waychit payment request/webhook for digital orders as a separate tested step before advertising automated checkout.
+- Existing Waychit physical-product checkout, WhatsApp notifications, logo, product inventory, vendor features, delivery, map, and existing order flow are not intentionally changed.

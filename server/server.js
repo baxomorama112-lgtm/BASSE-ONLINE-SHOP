@@ -98,6 +98,9 @@ CREATE TABLE IF NOT EXISTS deliveries(
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(driver_id) REFERENCES delivery_drivers(id)
 );`);
+
+try{db.exec(`CREATE TABLE IF NOT EXISTS digital_services(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT DEFAULT '', plan_name TEXT NOT NULL, duration TEXT DEFAULT '', price INTEGER NOT NULL DEFAULT 0, supplier_cost INTEGER NOT NULL DEFAULT 0, active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS digital_orders(id TEXT PRIMARY KEY, service_id INTEGER, service_name TEXT NOT NULL, plan_name TEXT NOT NULL, duration TEXT DEFAULT '', customer_name TEXT NOT NULL, customer_whatsapp TEXT NOT NULL, customer_email TEXT DEFAULT '', customer_account_email TEXT DEFAULT '', total INTEGER NOT NULL DEFAULT 0, supplier_cost INTEGER NOT NULL DEFAULT 0, payment_status TEXT DEFAULT 'PENDING', order_status TEXT DEFAULT 'NEW', fulfillment_notes TEXT DEFAULT '', created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);`)}catch(e){console.error('Digital services schema:',e.message)}
 try{db.prepare("ALTER TABLE vendors ADD COLUMN logo_url TEXT DEFAULT ''").run()}catch{}
 db.exec(`CREATE TABLE IF NOT EXISTS chat_conversations(
  id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -147,7 +150,7 @@ try{db.exec("ALTER TABLE products ADD COLUMN images TEXT DEFAULT ''")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_lat REAL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_lng REAL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_accuracy REAL")}catch(e){}
-const BACKUP_TABLES=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys","delivery_drivers","deliveries","chat_conversations","chat_messages","order_notifications"];
+const BACKUP_TABLES=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys","delivery_drivers","deliveries","chat_conversations","chat_messages","order_notifications","digital_services","digital_orders"];
 function buildShopSnapshot(){
   const data={version:3,createdAt:new Date().toISOString(),tables:{}};
   for(const table of BACKUP_TABLES)data.tables[table]=db.prepare(`SELECT * FROM ${table}`).all();
@@ -363,6 +366,18 @@ app.get("/api/stores/:id",(req,res)=>{
   res.json({...v,products});
 });
 
+
+// Digital services are separate from physical inventory and never alter product stock.
+app.get("/api/digital-services",(req,res)=>res.json(db.prepare("SELECT id,name,description,plan_name,duration,price FROM digital_services WHERE active=1 ORDER BY id").all()));
+app.post("/api/digital-orders",(req,res)=>{
+  const b=req.body||{},service=db.prepare("SELECT * FROM digital_services WHERE id=? AND active=1").get(Number(b.service_id));
+  if(!service)return res.status(400).json({error:"This digital plan is unavailable."});
+  const customer_name=String(b.customer_name||"").trim(),customer_whatsapp=String(b.customer_whatsapp||"").replace(/[^0-9+]/g,""),customer_account_email=String(b.customer_account_email||"").trim();
+  if(customer_name.length<2||customer_whatsapp.replace(/\D/g,"").length<7||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer_account_email))return res.status(400).json({error:"Enter your name, WhatsApp number and the email for your own Netflix account."});
+  const id="DIG-"+Date.now().toString(36).toUpperCase()+"-"+crypto.randomBytes(2).toString("hex").toUpperCase();
+  db.prepare("INSERT INTO digital_orders(id,service_id,service_name,plan_name,duration,customer_name,customer_whatsapp,customer_email,customer_account_email,total,supplier_cost) VALUES(?,?,?,?,?,?,?,?,?,?,?)").run(id,service.id,service.name,service.plan_name,service.duration,customer_name,customer_whatsapp,String(b.customer_email||"").trim(),customer_account_email,service.price,service.supplier_cost);
+  res.status(201).json({ok:true,id,total:service.price,payment_status:"PENDING",message:"Order created. Complete payment using the shop's displayed payment instructions, then wait for BASSE to verify it. Do not send your Netflix password."});
+});
 app.get("/api/products",(req,res)=>{
   const c=String(req.query.category||"All"),q=String(req.query.q||"").trim().toLowerCase();
   let p=db.prepare("SELECT id,name,category,price,stock,description,image,active,vendor_id,options_json FROM products WHERE active=1 ORDER BY id DESC").all();
@@ -408,6 +423,31 @@ app.post("/api/customer/order-notifications/read",(req,res)=>{
   if(phone.length<6)return res.status(400).json({error:"Valid customer phone required."});
   db.prepare("UPDATE order_notifications SET read_at=CURRENT_TIMESTAMP WHERE recipient_type='customer' AND recipient_phone=? AND read_at IS NULL").run("220"+phone);
   res.json({ok:true});
+});
+
+app.get("/api/admin/digital-services",guard,(req,res)=>res.json(db.prepare("SELECT * FROM digital_services ORDER BY id DESC").all()));
+app.post("/api/admin/digital-services",guard,(req,res)=>{
+ const b=req.body||{},name=String(b.name||"").trim(),plan=String(b.plan_name||"").trim(),price=Number(b.price),cost=Number(b.supplier_cost||0);
+ if(!name||!plan||!Number.isFinite(price)||price<1||!Number.isFinite(cost)||cost<0)return res.status(400).json({error:"Enter a service, plan and valid prices."});
+ const info=db.prepare("INSERT INTO digital_services(name,description,plan_name,duration,price,supplier_cost) VALUES(?,?,?,?,?,?)").run(name,String(b.description||""),plan,String(b.duration||""),Math.round(price),Math.round(cost));
+ res.status(201).json(db.prepare("SELECT * FROM digital_services WHERE id=?").get(info.lastInsertRowid));
+});
+app.put("/api/admin/digital-services/:id",guard,(req,res)=>{
+ const old=db.prepare("SELECT * FROM digital_services WHERE id=?").get(Number(req.params.id));if(!old)return res.status(404).json({error:"Plan not found"});
+ const b=req.body||{},price=b.price===undefined?old.price:Number(b.price),cost=b.supplier_cost===undefined?old.supplier_cost:Number(b.supplier_cost);
+ if(price<1||cost<0||!Number.isFinite(price)||!Number.isFinite(cost))return res.status(400).json({error:"Invalid price or supplier cost."});
+ db.prepare("UPDATE digital_services SET name=?,description=?,plan_name=?,duration=?,price=?,supplier_cost=?,active=? WHERE id=?").run(String(b.name??old.name),String(b.description??old.description),String(b.plan_name??old.plan_name),String(b.duration??old.duration),Math.round(price),Math.round(cost),b.active===undefined?old.active:(b.active?1:0),old.id);
+ res.json({ok:true});
+});
+app.get("/api/admin/digital-orders",guard,(req,res)=>res.json(db.prepare("SELECT * FROM digital_orders ORDER BY datetime(created_at) DESC").all()));
+app.patch("/api/admin/digital-orders/:id",guard,(req,res)=>{
+ const row=db.prepare("SELECT * FROM digital_orders WHERE id=?").get(req.params.id);if(!row)return res.status(404).json({error:"Digital order not found"});
+ const action=String((req.body||{}).action||"");
+ if(action==="paid")db.prepare("UPDATE digital_orders SET payment_status='PAID',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id);
+ else if(action==="processing")db.prepare("UPDATE digital_orders SET order_status='PROCESSING',updated_at=CURRENT_TIMESTAMP WHERE id=? AND payment_status='PAID'").run(row.id);
+ else if(action==="completed")db.prepare("UPDATE digital_orders SET order_status='COMPLETED',updated_at=CURRENT_TIMESTAMP WHERE id=? AND payment_status='PAID'").run(row.id);
+ else return res.status(400).json({error:"Unsupported action."});
+ res.json({ok:true});
 });
 app.get("/api/admin/orders",guard,(req,res)=>res.json(db.prepare(`SELECT o.*,p.image AS product_image,p.images AS product_images,v.business_name AS vendor_business_name,v.whatsapp AS vendor_whatsapp FROM orders o LEFT JOIN products p ON p.id=o.product_id LEFT JOIN vendors v ON v.id=o.vendor_id ORDER BY datetime(o.created_at) DESC`).all()));
 app.get("/api/admin/backup",guard,(req,res)=>{
