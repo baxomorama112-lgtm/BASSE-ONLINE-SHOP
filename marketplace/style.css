@@ -1133,3 +1133,38 @@ main{max-width:1440px;margin:0 auto;padding:0 clamp(12px,2.4vw,34px)}
 @media(max-width:760px){.top{height:auto;min-height:70px;flex-wrap:wrap;padding:9px 12px 11px;gap:8px}.brand{min-width:0}.brand-logo{width:132px;height:42px}.top-actions{margin-left:auto}.notify,.cart{width:40px;height:40px;border-radius:12px}.search-wrap{order:3;flex-basis:100%;max-width:none}.search{height:45px;border-radius:13px}.search input{font-size:16px}.hero{margin:12px 0 24px;border-radius:17px}.market-banner .banner-link img{min-height:130px;object-fit:cover}.banner-overlay button{padding:10px 13px;font-size:10px;border-radius:10px}.categories,#products{margin:24px auto 30px;padding:0}.section-title{margin-bottom:14px}.section-title h2{font-size:19px}.section-title span{font-size:11px}.cats{grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}.cats button{min-height:98px;padding:9px 5px;gap:7px;border-radius:14px}.cats button img{width:49px;height:49px;border-radius:13px}.cats button b{font-size:10px}.cats button.active{transform:none}#grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.product{border-radius:14px}.product .pic{aspect-ratio:1;background:#f4f6fa;padding:5px}.product .info{padding:10px 10px 12px}.product .info h3{font-size:12px;line-height:1.35;min-height:32px}.product .price{font-size:16px;margin-top:6px}.app-download-card{margin:30px 0 24px;border-radius:19px;padding:24px 20px}.app-download-copy h2{font-size:26px}.app-download-copy p{font-size:12px}.app-download-logo-wrap img{max-width:88px;max-height:88px}.trust{grid-template-columns:1fr;gap:9px;margin:24px 0 30px}.trust-card{padding:13px 14px;border-radius:15px}.trust-icon{width:40px;height:40px;flex-basis:40px}.bottom{height:auto;min-height:68px}.bottom a,.bottom button{min-width:0;flex:1;padding:5px 1px;min-height:48px}.bottom small{font-size:9px}}
 @media(max-width:380px){.cats{grid-template-columns:repeat(3,minmax(0,1fr))}.cats button{min-height:94px}#grid{gap:8px}.product .info{padding:9px}.product .price{font-size:15px}.brand-logo{width:118px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{transition:none!important;animation:none!important}}
+
+
+/* V39 — marketplace chat ergonomics, professional shop logos and visual polish */
+.store-logo,.store-logo.big{overflow:hidden;flex-shrink:0}.store-logo img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
+.store-cover{isolation:isolate}.store-card-pro{display:block;width:100%;box-sizing:border-box}.store-card-body{min-width:0}.store-title-row h3{overflow-wrap:anywhere}
+.chat-start-card{min-height:138px;position:relative}.chat-start-card span{width:48px;height:48px;border-radius:15px;background:#edf3ff;color:#1748a8;display:grid;place-items:center;font-size:24px}.chat-start-card b{font-size:14px}.chat-start-card small{font-size:11px;line-height:1.5}.chat-start-card:focus-visible{outline:3px solid #f5b400;outline-offset:2px}
+.chat-sheet{height:min(760px,calc(var(--chat-viewport-height, 100dvh) - 24px));max-height:calc(var(--chat-viewport-height, 100dvh) - 24px);}
+.chat-sheet .chat-compose input{font-size:16px!important;min-width:0;flex:1 1 auto;}
+.chat-sheet .chat-compose{padding-bottom:env(safe-area-inset-bottom,0px)}
+.chat-messages{scrollbar-width:thin;scrollbar-color:#c8d4e7 transparent}
+@media(max-width:760px){
+ .chat-sheet{height:calc(var(--chat-viewport-height, 100dvh) - 12px);max-height:calc(var(--chat-viewport-height, 100dvh) - 12px);width:calc(100vw - 12px);}
+ .chat-sheet.keyboard-open{border-bottom-left-radius:15px;border-bottom-right-radius:15px}
+ .chat-sheet.keyboard-open .checkout-head{padding-top:2px}
+ .chat-sheet.keyboard-open .chat-messages{min-height:60px!important;margin:5px 0;padding:8px}
+ .chat-sheet .chat-compose{padding-top:7px;gap:6px}
+ .chat-sheet .chat-compose input{height:50px;font-size:16px!important;padding:11px 12px;}
+ .chat-sheet .chat-send-btn{flex:0 0 78px;min-width:78px;padding:9px}
+ .store-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+ .store-card-pro{min-width:0}.store-cover{height:80px}.store-logo{width:43px;height:43px;border-radius:13px}
+ .store-card-body{padding:10px}.store-title-row h3{font-size:12px}.store-title-row span{font-size:9px}.store-card-body p{font-size:10px;min-height:32px}.store-meta{font-size:9px;gap:6px}.view-store-btn{font-size:9px;padding:9px}
+}
+@media(max-width:380px){.store-grid{grid-template-columns:1fr}.store-cover{height:92px}}
+
+.chat-welcome-icon svg{width:29px;height:29px;display:block}.chat-card-icon svg{width:27px;height:27px;display:block}.admin-chat-card-icon{background:#edf3ff!important;color:#1748a8!important}.vendor-chat-card-icon{background:#eaf8f0!important;color:#16834a!important}.store-heading-icon svg{width:27px;height:27px;display:block}
+
+
+/* V39 marketplace support card: a visible route into the existing Messenger inbox */
+.market-chat-promo{margin:30px auto 24px;padding:clamp(18px,3vw,28px);max-width:1370px;border:1px solid #dfe7f5;border-radius:23px;background:linear-gradient(115deg,#fff 0%,#f5f8ff 58%,#edf4ff 100%);display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:18px;align-items:center;box-shadow:0 10px 28px rgba(7,26,74,.055)}
+.market-chat-promo-icon{width:60px;height:60px;border-radius:19px;background:#071a4a;color:#fff;display:grid;place-items:center;box-shadow:0 9px 20px rgba(7,26,74,.16)}.market-chat-promo-icon svg{width:31px;height:31px;display:block}
+.market-chat-promo-copy>span{font-size:9px;letter-spacing:1.5px;font-weight:950;color:#1748a8}.market-chat-promo-copy h2{font-size:clamp(17px,2vw,23px);letter-spacing:-.45px;margin:5px 0;color:#071a4a}.market-chat-promo-copy p{margin:0;color:#68758c;font-size:12px;line-height:1.5;max-width:680px}
+.market-chat-promo-button{display:flex;align-items:center;justify-content:center;gap:10px;min-height:46px;padding:0 18px;border:0;border-radius:13px;background:#f5b400;color:#071a4a;font-size:11px;font-weight:950;letter-spacing:.45px;cursor:pointer;box-shadow:0 7px 17px rgba(245,180,0,.18);white-space:nowrap}.market-chat-promo-button svg{width:19px;height:19px}.market-chat-promo-button:hover{transform:translateY(-1px);box-shadow:0 11px 23px rgba(245,180,0,.24)}
+@media(max-width:650px){.market-chat-promo{margin:20px 12px 22px;grid-template-columns:auto minmax(0,1fr);gap:12px;padding:15px;border-radius:18px}.market-chat-promo-icon{width:47px;height:47px;border-radius:14px}.market-chat-promo-icon svg{width:25px;height:25px}.market-chat-promo-copy h2{font-size:16px;line-height:1.25}.market-chat-promo-copy p{font-size:10px}.market-chat-promo-copy>span{font-size:8px}.market-chat-promo-button{grid-column:1/-1;width:100%;min-height:43px}}
+
+.chat-avatar{overflow:hidden}.chat-avatar img{width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit}.chat-vendor-choice .chat-avatar{width:43px;height:43px;flex-basis:43px;font-size:13px}.chat-vendor-choice>span:nth-child(2){min-width:0}

@@ -36,14 +36,15 @@ app.get("/product/:id",(req,res)=>{
   res.status(200).set("Cache-Control","public, max-age=300").send(seoPage({title:`${p.name} | BASSE ONLINE SHOP`,description:desc,canonical,heading:xmlEscape(p.name),bodyHtml:body}));
 });
 app.get("/store/:id",(req,res)=>{
-  const v=db.prepare("SELECT id,business_name,full_name,category,description,location FROM vendors WHERE id=? AND status='APPROVED'").get(req.params.id);
+  const v=db.prepare("SELECT id,business_name,full_name,category,description,location,logo_url FROM vendors WHERE id=? AND status='APPROVED'").get(req.params.id);
   if(!v)return res.status(404).send("<!doctype html><title>Store not found | BASSE ONLINE SHOP</title><h1>Store not found</h1><p><a href="/">Return to BASSE ONLINE SHOP</a></p>");
   const products=db.prepare("SELECT id,name,category,price,description,image FROM products WHERE vendor_id=? AND active=1 ORDER BY id DESC").all(v.id);
   const canonical=`${PUBLIC_BASE_URL}/store/${v.id}`;
   const title=`${v.business_name} | BASSE ONLINE SHOP`;
   const description=String(v.description||`Shop products from ${v.business_name} on BASSE ONLINE SHOP in ${v.location||"The Gambia"}.`).slice(0,155);
   const cards=products.map(x=>`<a class="item" href="/product/${x.id}"><b>${xmlEscape(x.name)}</b><span>${xmlEscape(x.category||"")}</span><div class="price" style="font-size:19px;margin-top:8px">D${Number(x.price||0).toLocaleString()}</div></a>`).join("");
-  const body=`<p><strong>Store:</strong> ${xmlEscape(v.business_name)}</p><p><strong>Category:</strong> ${xmlEscape(v.category||"Marketplace seller")}</p><p><strong>Location:</strong> ${xmlEscape(v.location||"The Gambia")}</p><p>${xmlEscape(v.description||`Shop ${v.business_name} products through BASSE ONLINE SHOP.`)}</p><h2>Products from this store</h2><div class="grid">${cards||"<p>No products are currently listed.</p>"}</div>`;
+  const logo=v.logo_url?`<p><img src="${xmlEscape(v.logo_url)}" alt="${xmlEscape(v.business_name)} logo" style="width:100px;height:100px;object-fit:contain;background:#fff;border:1px solid #e5e9f0;border-radius:18px;padding:8px"></p>`:"";
+  const body=`${logo}<p><strong>Store:</strong> ${xmlEscape(v.business_name)}</p><p><strong>Category:</strong> ${xmlEscape(v.category||"Marketplace seller")}</p><p><strong>Location:</strong> ${xmlEscape(v.location||"The Gambia")}</p><p>${xmlEscape(v.description||`Shop ${v.business_name} products through BASSE ONLINE SHOP.`)}</p><h2>Products from this store</h2><div class="grid">${cards||"<p>No products are currently listed.</p>"}</div>`;
   res.status(200).set("Cache-Control","public, max-age=300").send(seoPage({title,description,canonical,heading:xmlEscape(v.business_name),bodyHtml:body}));
 });
 app.get("/sitemap.xml",(req,res)=>{
@@ -97,6 +98,7 @@ CREATE TABLE IF NOT EXISTS deliveries(
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(driver_id) REFERENCES delivery_drivers(id)
 );`);
+try{db.prepare("ALTER TABLE vendors ADD COLUMN logo_url TEXT DEFAULT ''").run()}catch{}
 db.exec(`CREATE TABLE IF NOT EXISTS chat_conversations(
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  customer_id INTEGER,
@@ -344,7 +346,7 @@ app.post("/api/auth/logout",(req,res)=>{const token=(req.headers.authorization||
 
 app.get("/api/stores",(req,res)=>{
   const stores=db.prepare(`
-    SELECT v.id,v.business_name,v.full_name,v.category,v.description,v.location,v.created_at,
+    SELECT v.id,v.business_name,v.full_name,v.category,v.description,v.location,v.logo_url,v.created_at,
            COUNT(p.id) AS product_count
     FROM vendors v
     LEFT JOIN products p ON p.vendor_id=v.id AND p.active=1
@@ -355,7 +357,7 @@ app.get("/api/stores",(req,res)=>{
   res.json(stores);
 });
 app.get("/api/stores/:id",(req,res)=>{
-  const v=db.prepare("SELECT id,business_name,full_name,category,description,location,created_at FROM vendors WHERE id=? AND status='APPROVED'").get(req.params.id);
+  const v=db.prepare("SELECT id,business_name,full_name,category,description,location,logo_url,created_at FROM vendors WHERE id=? AND status='APPROVED'").get(req.params.id);
   if(!v)return res.status(404).json({error:"Store not found"});
   const products=db.prepare("SELECT * FROM products WHERE vendor_id=? AND active=1 ORDER BY id DESC").all(req.params.id);
   res.json({...v,products});
@@ -943,7 +945,15 @@ app.post("/api/vendor/login",(req,res)=>{
  recordLoginAttempt('Vendor',v.whatsapp,true,'Login successful');
  res.json({token:t,expiresAt:exp,vendor:{id:v.id,business_name:v.business_name,full_name:v.full_name,email:v.email||""}});
 });
-app.get("/api/vendor/me",vendorGuard,(req,res)=>{let v=db.prepare("SELECT id,full_name,business_name,whatsapp,location,category,status FROM vendors WHERE id=?").get(req.vendorId);res.json(v)});
+app.get("/api/vendor/me",vendorGuard,(req,res)=>{let v=db.prepare("SELECT id,full_name,business_name,whatsapp,location,category,status,logo_url FROM vendors WHERE id=?").get(req.vendorId);res.json(v)});
+app.post("/api/vendor/store-logo",vendorGuard,upload.single("logo"),(req,res)=>{
+  if(!req.file)return res.status(400).json({error:"Choose a store logo image first."});
+  const logoUrl="/uploads/"+req.file.filename;
+  db.prepare("UPDATE vendors SET logo_url=? WHERE id=?").run(logoUrl,req.vendorId);
+  backupShopData("vendor-store-logo");
+  broadcastLive("vendors",{vendorId:req.vendorId,logoUpdated:true});
+  res.json({ok:true,logo_url:logoUrl,message:"Store logo saved and published."});
+});
 app.get("/api/vendor/orders",vendorGuard,(req,res)=>res.json(db.prepare(`SELECT o.*,p.image AS product_image,p.images AS product_images FROM orders o LEFT JOIN products p ON p.id=o.product_id WHERE o.vendor_id=? ORDER BY datetime(o.created_at) DESC`).all(req.vendorId)));
 app.get("/api/vendor/transactions",vendorGuard,(req,res)=>res.json(db.prepare("SELECT id,product_name,quantity,total,commission,vendor_earnings,payment_status,order_status,created_at FROM orders WHERE vendor_id=? ORDER BY datetime(created_at) DESC").all(req.vendorId)));
 app.get("/api/vendor/stats",vendorGuard,(req,res)=>res.json({

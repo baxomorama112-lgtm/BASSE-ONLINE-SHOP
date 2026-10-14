@@ -42,6 +42,20 @@ function showVendorTab(id,btn){
   if(btn) btn.classList.add("active");
   if(id==="overview") renderVendorOverview();
 }
+
+async function saveStoreLogo(event){
+  event.preventDefault();
+  const file=$("storeLogoFile")?.files?.[0],status=$("storeLogoStatus"),button=document.querySelector("#storeLogoForm button");
+  if(!file){if(status)status.textContent="Choose a logo image first.";return}
+  if(file.size>6*1024*1024){if(status)status.textContent="Image must be 6 MB or smaller.";return}
+  if(!/^image\/(png|jpeg|webp|gif)$/.test(file.type)){if(status)status.textContent="Use a PNG, JPG, WebP or GIF image.";return}
+  const form=new FormData();form.append("logo",file);
+  if(button){button.disabled=true;button.textContent="UPLOADING LOGO…"}if(status)status.textContent="Uploading your logo…";
+  try{const response=await fetch("/api/vendor/store-logo",{method:"POST",headers:H(),body:form,cache:"no-store"});const data=await response.json().catch(()=>({}));if(!response.ok)throw Error(data.error||"Logo upload failed.");if($("storeLogoPreview"))$("storeLogoPreview").src=data.logo_url+"?v="+Date.now();if($("storeMark")){$("storeMark").innerHTML=`<img src="${data.logo_url}?v=${Date.now()}" alt="Store logo" class="store-mark-image">`;}if(status)status.textContent=data.message||"Logo saved.";showToast(data.message||"Store logo saved.","success");
+  }catch(error){if(status)status.textContent=error.message||"Upload failed. Please retry.";showToast(error.message||"Upload failed.","error")}
+  finally{if(button){button.disabled=false;button.innerHTML="SAVE STORE LOGO <b>→</b>"}}
+}
+
 function renderVendorOverview(){
   const p=[...document.querySelectorAll("#productsList .product-row")].slice(0,4);
   const o=[...document.querySelectorAll("#orders .order-row")].slice(0,4);
@@ -64,7 +78,7 @@ async function refresh(){
     let [me,st,ps,os,ts]=await Promise.all([
       api("/api/vendor/me"),api("/api/vendor/stats"),api("/api/vendor/products"),api("/api/vendor/orders"),api("/api/vendor/transactions")
     ]);
-    $("shop").textContent=me.business_name; if($("storeProfileName"))$("storeProfileName").textContent=me.business_name||"My Shop"; if($("storeProfileMeta"))$("storeProfileMeta").textContent=[me.category,me.location].filter(Boolean).join(" · ")||"BASSE marketplace store"; if($("storeMark"))$("storeMark").textContent=String(me.business_name||"B").trim().slice(0,1).toUpperCase();
+    $("shop").textContent=me.business_name; if($("storeProfileName"))$("storeProfileName").textContent=me.business_name||"My Shop"; if($("storeProfileMeta"))$("storeProfileMeta").textContent=[me.category,me.location].filter(Boolean).join(" · ")||"BASSE marketplace store"; if($("storeMark"))$("storeMark").textContent=String(me.business_name||"B").trim().slice(0,1).toUpperCase(); if($("storeLogoPreview"))$("storeLogoPreview").src=me.logo_url||"/basse-marketplace-logo.jpg";
     $("products").textContent=st.products;
     $("pending").textContent=st.pendingProducts;
     $("sales").textContent=money(st.sales);
@@ -181,4 +195,6 @@ document.addEventListener("DOMContentLoaded",()=>{
   boot();
 });
 
-function enableVendorChatEnter(){const x=$('vendorChatText');if(x&&!x.dataset.enterBound){x.dataset.enterBound='1';x.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendVendorChat()}})}}
+function enableVendorChatEnter(){const x=$('vendorChatText');if(x&&!x.dataset.enterBound){x.dataset.enterBound='1';x.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendVendorChat()}});x.addEventListener('focus',()=>{document.getElementById('chat-tab')?.classList.add('vendor-chat-keyboard-open');setTimeout(()=>{const b=$('vendorChatMessages');if(b)b.scrollTop=b.scrollHeight;x.scrollIntoView({block:'nearest',behavior:'smooth'})},120)});x.addEventListener('blur',()=>document.getElementById('chat-tab')?.classList.remove('vendor-chat-keyboard-open'));if(window.visualViewport&&!window.__vendorChatViewportBound){window.__vendorChatViewportBound=true;const resize=()=>{const page=document.getElementById('chat-tab');if(page)page.style.setProperty('--vendor-chat-vh',Math.round(window.visualViewport.height)+'px')};window.visualViewport.addEventListener('resize',resize);window.visualViewport.addEventListener('scroll',resize);resize()}}}
+
+document.getElementById("storeLogoForm")?.addEventListener("submit",saveStoreLogo);
