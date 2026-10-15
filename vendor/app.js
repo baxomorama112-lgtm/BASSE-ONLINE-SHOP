@@ -78,7 +78,7 @@ async function refresh(){
     let [me,st,ps,os,ts]=await Promise.all([
       api("/api/vendor/me"),api("/api/vendor/stats"),api("/api/vendor/products"),api("/api/vendor/orders"),api("/api/vendor/transactions")
     ]);
-    $("shop").textContent=me.business_name; if($("storeProfileName"))$("storeProfileName").textContent=me.business_name||"My Shop"; if($("storeProfileMeta"))$("storeProfileMeta").textContent=[me.category,me.location].filter(Boolean).join(" · ")||"BASSE marketplace store"; if($("storeMark"))$("storeMark").textContent=String(me.business_name||"B").trim().slice(0,1).toUpperCase(); if($("storeLogoPreview"))$("storeLogoPreview").src=me.logo_url||"/basse-marketplace-logo.jpg";
+    $("shop").textContent=me.business_name; if($("storeProfileName"))$("storeProfileName").textContent=me.business_name||"My Shop"; if($("storeProfileMeta"))$("storeProfileMeta").textContent=[me.category,me.location].filter(Boolean).join(" · ")||"BASSE marketplace store"; if($("storeMark"))$("storeMark").textContent=String(me.business_name||"B").trim().slice(0,1).toUpperCase(); if($("storeLogoPreview"))$("storeLogoPreview").src=me.logo_url||"/basse-official-logo.png";
     $("products").textContent=st.products;
     $("pending").textContent=st.pendingProducts;
     $("sales").textContent=money(st.sales);

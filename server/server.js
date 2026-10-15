@@ -150,7 +150,7 @@ try{db.exec("ALTER TABLE products ADD COLUMN images TEXT DEFAULT ''")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_lat REAL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_lng REAL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_accuracy REAL")}catch(e){}
-const BACKUP_TABLES=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys","delivery_drivers","deliveries","chat_conversations","chat_messages","order_notifications","digital_services","digital_orders"];
+const BACKUP_TABLES=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys","delivery_drivers","deliveries","chat_conversations","chat_messages","order_notifications","digital_services","digital_orders","business_partners","service_bookings","events","event_ticket_types","event_tickets","event_scanners"];
 function buildShopSnapshot(){
   const data={version:3,createdAt:new Date().toISOString(),tables:{}};
   for(const table of BACKUP_TABLES)data.tables[table]=db.prepare(`SELECT * FROM ${table}`).all();
@@ -1146,6 +1146,190 @@ app.patch("/api/admin/deliveries/:id/status",guard,(req,res)=>{
   backupShopData("delivery-status");broadcastLive("orders",{orderId:d.order_id});res.json({ok:true});
 });
 app.get("/api/admin/vendor-stats",guard,(req,res)=>res.json({vendors:db.prepare("SELECT COUNT(*) c FROM vendors").get().c,pending:db.prepare("SELECT COUNT(*) c FROM vendors WHERE status='PENDING'").get().c,active:db.prepare("SELECT COUNT(*) c FROM vendors WHERE status='APPROVED'").get().c,commission:db.prepare("SELECT COALESCE(SUM(commission),0) s FROM orders WHERE payment_status='PAID'").get().s}));
+
+
+// BASSE services, partner applications, bookings and event ticketing.
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS business_partners(
+      id INTEGER PRIMARY KEY AUTOINCREMENT, user_name TEXT NOT NULL, business_name TEXT NOT NULL,
+      whatsapp TEXT NOT NULL, email TEXT DEFAULT '', business_type TEXT NOT NULL,
+      location TEXT DEFAULT '', description TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'PENDING',
+      admin_note TEXT DEFAULT '', created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS service_bookings(
+      id TEXT PRIMARY KEY, partner_id INTEGER, service_type TEXT NOT NULL, customer_name TEXT NOT NULL,
+      customer_whatsapp TEXT NOT NULL, requested_date TEXT DEFAULT '', requested_time TEXT DEFAULT '',
+      details TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'PENDING', quoted_price INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS events(
+      id TEXT PRIMARY KEY, organizer_partner_id INTEGER, title TEXT NOT NULL, description TEXT DEFAULT '',
+      venue TEXT NOT NULL, event_date TEXT NOT NULL, event_time TEXT DEFAULT '', flyer_url TEXT DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'PENDING', created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS event_ticket_types(
+      id INTEGER PRIMARY KEY AUTOINCREMENT, event_id TEXT NOT NULL, name TEXT NOT NULL,
+      price INTEGER NOT NULL DEFAULT 0, quantity INTEGER NOT NULL DEFAULT 0, sold INTEGER NOT NULL DEFAULT 0,
+      active INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS event_tickets(
+      id TEXT PRIMARY KEY, event_id TEXT NOT NULL, ticket_type_id INTEGER NOT NULL, ticket_code TEXT NOT NULL UNIQUE,
+      customer_name TEXT NOT NULL, customer_whatsapp TEXT NOT NULL, payment_status TEXT NOT NULL DEFAULT 'PENDING',
+      ticket_status TEXT NOT NULL DEFAULT 'PENDING_PAYMENT', checked_in_at TEXT DEFAULT NULL,
+      checked_in_by TEXT DEFAULT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS event_scanners(
+      id INTEGER PRIMARY KEY AUTOINCREMENT, event_id TEXT NOT NULL, staff_name TEXT NOT NULL,
+      scanner_token_hash TEXT NOT NULL UNIQUE, active INTEGER NOT NULL DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_event_tickets_event ON event_tickets(event_id);
+    CREATE INDEX IF NOT EXISTS idx_bookings_status ON service_bookings(status);
+  `);
+} catch(e) { console.error('BASSE services schema setup failed:', e.message); }
+
+function serviceId(prefix) { return prefix + '_' + crypto.randomBytes(12).toString('hex'); }
+function cleanText(v, max=300) { return String(v ?? '').trim().slice(0,max); }
+app.post('/api/partners/apply', (req,res) => {
+  const b=req.body||{}, name=cleanText(b.userName,100), business=cleanText(b.businessName,120),
+    phone=cleanText(b.whatsapp,30), type=cleanText(b.businessType,40);
+  if(!name||!business||phone.replace(/\D/g,'').length<6||!['PRODUCT_VENDOR','SALON_BARBER','TAILOR','EVENT_ORGANIZER','OTHER_SERVICE'].includes(type))
+    return res.status(400).json({error:'Enter your name, business name, valid WhatsApp number and a supported business type.'});
+  const r=db.prepare(`INSERT INTO business_partners(user_name,business_name,whatsapp,email,business_type,location,description)
+    VALUES(?,?,?,?,?,?,?)`).run(name,business,phone,cleanText(b.email,150),type,cleanText(b.location,120),cleanText(b.description,1000));
+  backupShopData('partner-application');
+  res.status(201).json({ok:true,id:r.lastInsertRowid,status:'PENDING',message:'Application submitted for admin review.'});
+});
+app.get('/api/partners/status', (req,res) => {
+  const phone=cleanText(req.query.whatsapp,30);
+  if(!phone)return res.status(400).json({error:'WhatsApp number is required.'});
+  res.json(db.prepare('SELECT id,business_name,business_type,status,admin_note,created_at FROM business_partners WHERE whatsapp=? ORDER BY id DESC').all(phone));
+});
+app.get('/api/admin/partners', guard, (req,res) => res.json(db.prepare('SELECT * FROM business_partners ORDER BY id DESC').all()));
+app.patch('/api/admin/partners/:id', guard, (req,res) => {
+  const status=cleanText(req.body.status,20).toUpperCase();
+  if(!['APPROVED','REJECTED','NEEDS_INFO','SUSPENDED'].includes(status))return res.status(400).json({error:'Invalid partner status.'});
+  const r=db.prepare('UPDATE business_partners SET status=?,admin_note=? WHERE id=?').run(status,cleanText(req.body.adminNote,1000),req.params.id);
+  if(!r.changes)return res.status(404).json({error:'Partner application not found.'});
+  backupShopData('partner-status');res.json({ok:true,status});
+});
+app.get('/api/services/events', (req,res) => {
+  const rows=db.prepare(`SELECT e.*,p.business_name AS organizer FROM events e LEFT JOIN business_partners p ON p.id=e.organizer_partner_id
+    WHERE e.status='APPROVED' ORDER BY e.event_date,e.event_time`).all();
+  res.json(rows.map(e=>({...e,ticketTypes:db.prepare('SELECT id,name,price,quantity,sold FROM event_ticket_types WHERE event_id=? AND active=1').all(e.id)})));
+});
+app.post('/api/services/bookings', (req,res) => {
+  const b=req.body||{}, type=cleanText(b.serviceType,40), name=cleanText(b.customerName,100), phone=cleanText(b.customerWhatsapp,30);
+  if(!['SALON_BARBER','TAILOR','OTHER_SERVICE'].includes(type)||!name||phone.replace(/\D/g,'').length<6)
+    return res.status(400).json({error:'Complete your name, WhatsApp number and service type.'});
+  const partnerId=Number(b.partnerId)||null;
+  if(partnerId&&!db.prepare("SELECT id FROM business_partners WHERE id=? AND status='APPROVED'").get(partnerId))return res.status(400).json({error:'That business is not approved.'});
+  const id=serviceId('BOOK');
+  db.prepare(`INSERT INTO service_bookings(id,partner_id,service_type,customer_name,customer_whatsapp,requested_date,requested_time,details)
+    VALUES(?,?,?,?,?,?,?,?)`).run(id,partnerId,type,name,phone,cleanText(b.date,20),cleanText(b.time,20),cleanText(b.details,2000));
+  backupShopData('service-booking');
+  res.status(201).json({ok:true,id,status:'PENDING',message:'Booking/request submitted. The business will confirm availability and price.'});
+});
+app.get('/api/admin/service-bookings', guard, (req,res)=>res.json(db.prepare(`SELECT b.*,p.business_name FROM service_bookings b LEFT JOIN business_partners p ON p.id=b.partner_id ORDER BY b.created_at DESC`).all()));
+app.patch('/api/admin/service-bookings/:id', guard, (req,res)=>{
+  const status=cleanText(req.body.status,20).toUpperCase(), price=Number(req.body.quotedPrice)||0;
+  if(!['CONFIRMED','IN_PROGRESS','COMPLETED','CANCELLED','PENDING'].includes(status)||price<0)return res.status(400).json({error:'Invalid booking status or quote.'});
+  const r=db.prepare("UPDATE service_bookings SET status=?,quoted_price=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(status,Math.round(price),req.params.id);
+  if(!r.changes)return res.status(404).json({error:'Booking not found.'});
+  backupShopData('booking-status');res.json({ok:true,status});
+});
+app.post('/api/organizer/events', (req,res)=>{
+  const b=req.body||{}, partnerId=Number(b.partnerId), title=cleanText(b.title,160), venue=cleanText(b.venue,200), date=cleanText(b.date,20);
+  const partner=db.prepare("SELECT id FROM business_partners WHERE id=? AND business_type='EVENT_ORGANIZER' AND status='APPROVED'").get(partnerId);
+  if(!partner)return res.status(403).json({error:'An approved event-organizer partner account is required.'});
+  if(!title||!venue||!/^\d{4}-\d{2}-\d{2}$/.test(date))return res.status(400).json({error:'Event title, venue and valid date are required.'});
+  if(!Array.isArray(b.ticketTypes)||!b.ticketTypes.length||b.ticketTypes.length>10)return res.status(400).json({error:'Add between 1 and 10 ticket types.'});
+  for(const t of b.ticketTypes)if(!cleanText(t.name,60)||!Number.isInteger(Number(t.price))||Number(t.price)<0||!Number.isInteger(Number(t.quantity))||Number(t.quantity)<1)return res.status(400).json({error:'Each ticket type needs a name, non-negative Dalasi price and positive quantity.'});
+  const id=serviceId('EVT'), tx=db.transaction(()=>{
+    db.prepare('INSERT INTO events(id,organizer_partner_id,title,description,venue,event_date,event_time,flyer_url) VALUES(?,?,?,?,?,?,?,?)')
+      .run(id,partnerId,title,cleanText(b.description,2000),venue,date,cleanText(b.time,20),cleanText(b.flyerUrl,500));
+    const ins=db.prepare('INSERT INTO event_ticket_types(event_id,name,price,quantity) VALUES(?,?,?,?)');
+    for(const t of b.ticketTypes)ins.run(id,cleanText(t.name,60),Number(t.price),Number(t.quantity));
+  });tx();
+  backupShopData('event-created');res.status(201).json({ok:true,id,status:'PENDING',message:'Event submitted for admin approval before ticket sales open.'});
+});
+app.get('/api/admin/events', guard, (req,res)=>res.json(db.prepare(`SELECT e.*,p.business_name AS organizer FROM events e LEFT JOIN business_partners p ON p.id=e.organizer_partner_id ORDER BY e.created_at DESC`).all()));
+app.patch('/api/admin/events/:id/status', guard, (req,res)=>{
+  const status=cleanText(req.body.status,20).toUpperCase();
+  if(!['APPROVED','REJECTED','CANCELLED'].includes(status))return res.status(400).json({error:'Invalid event status.'});
+  const r=db.prepare('UPDATE events SET status=? WHERE id=?').run(status,req.params.id);
+  if(!r.changes)return res.status(404).json({error:'Event not found.'});
+  backupShopData('event-status');res.json({ok:true,status});
+});
+app.post('/api/events/:eventId/tickets', (req,res)=>{
+  const b=req.body||{}, event=db.prepare("SELECT id FROM events WHERE id=? AND status='APPROVED'").get(req.params.eventId),
+    type=db.prepare('SELECT * FROM event_ticket_types WHERE id=? AND event_id=? AND active=1').get(Number(b.ticketTypeId),req.params.eventId),
+    name=cleanText(b.customerName,100), phone=cleanText(b.customerWhatsapp,30), qty=Number(b.quantity||1);
+  if(!event||!type)return res.status(404).json({error:'Approved event or ticket type not found.'});
+  if(!name||phone.replace(/\D/g,'').length<6||!Number.isInteger(qty)||qty<1||qty>10)return res.status(400).json({error:'Enter customer details and a quantity from 1 to 10.'});
+  const reserve=db.transaction(()=>{
+    const fresh=db.prepare('SELECT * FROM event_ticket_types WHERE id=? AND event_id=? AND active=1').get(type.id,req.params.eventId);
+    if(!fresh||fresh.quantity-fresh.sold<qty)throw new Error('Not enough tickets remain for this ticket type.');
+    const ids=[], ins=db.prepare(`INSERT INTO event_tickets(id,event_id,ticket_type_id,ticket_code,customer_name,customer_whatsapp)
+      VALUES(?,?,?,?,?,?)`);
+    for(let i=0;i<qty;i++){const id=serviceId('TKT'), code=crypto.randomBytes(24).toString('hex');ins.run(id,event.id,type.id,code,name,phone);ids.push({id,code});}
+    db.prepare('UPDATE event_ticket_types SET sold=sold+? WHERE id=?').run(qty,type.id);
+    return ids;
+  });
+  try{const tickets=reserve();backupShopData('ticket-reserved');res.status(201).json({ok:true,tickets,status:'PENDING_PAYMENT',message:'Tickets are reserved, not valid for entry until payment is verified.'})}
+  catch(e){res.status(409).json({error:e.message||'Could not reserve tickets.'})}
+});
+app.get('/api/admin/tickets', guard, (req,res)=>{
+  const eventId=cleanText(req.query.eventId,100);
+  const rows=eventId
+    ? db.prepare(`SELECT t.*,e.title AS event_title,tt.name AS ticket_type,tt.price FROM event_tickets t JOIN events e ON e.id=t.event_id JOIN event_ticket_types tt ON tt.id=t.ticket_type_id WHERE t.event_id=? ORDER BY t.created_at DESC`).all(eventId)
+    : db.prepare(`SELECT t.*,e.title AS event_title,tt.name AS ticket_type,tt.price FROM event_tickets t JOIN events e ON e.id=t.event_id JOIN event_ticket_types tt ON tt.id=t.ticket_type_id ORDER BY t.created_at DESC LIMIT 500`).all();
+  res.json(rows);
+});
+app.post('/api/admin/tickets/:id/verify-payment', guard, (req,res)=>{
+  const tx=db.transaction(()=>{
+    const t=db.prepare('SELECT * FROM event_tickets WHERE id=?').get(req.params.id);
+    if(!t)throw new Error('Ticket not found.');
+    if(t.payment_status==='PAID')return t;
+    if(t.ticket_status!=='PENDING_PAYMENT')throw new Error('Ticket is not awaiting payment verification.');
+    db.prepare("UPDATE event_tickets SET payment_status='PAID',ticket_status='VALID' WHERE id=?").run(t.id);
+    return db.prepare('SELECT * FROM event_tickets WHERE id=?').get(t.id);
+  });
+  try{const t=tx();backupShopData('ticket-payment-verified');res.json({ok:true,ticket:t})}catch(e){res.status(400).json({error:e.message})}
+});
+app.post('/api/events/:eventId/scanner-access', guard, (req,res)=>{
+  const event=db.prepare('SELECT id FROM events WHERE id=?').get(req.params.eventId);
+  const name=cleanText(req.body.staffName,100);
+  if(!event||!name)return res.status(400).json({error:'Choose an event and enter scanner staff name.'});
+  const token=crypto.randomBytes(32).toString('hex'), hash=crypto.createHash('sha256').update(token).digest('hex');
+  db.prepare('INSERT INTO event_scanners(event_id,staff_name,scanner_token_hash) VALUES(?,?,?)').run(event.id,name,hash);
+  backupShopData('scanner-created');res.status(201).json({ok:true,staffName:name,token,eventId:event.id,message:'Copy this scanner token to the staff device securely. It is shown only once.'});
+});
+app.post('/api/events/scan', (req,res)=>{
+  const token=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'').trim();
+  if(token.length<32)return res.status(401).json({error:'Scanner sign-in required.'});
+  const hash=crypto.createHash('sha256').update(token).digest('hex');
+  const scanner=db.prepare('SELECT * FROM event_scanners WHERE scanner_token_hash=? AND active=1').get(hash);
+  if(!scanner)return res.status(401).json({error:'Scanner access is invalid or disabled.'});
+  const code=cleanText(req.body.ticketCode,100);
+  if(!code)return res.status(400).json({error:'Ticket QR code is missing.'});
+  const tx=db.transaction(()=>{
+    const t=db.prepare('SELECT * FROM event_tickets WHERE ticket_code=? AND event_id=?').get(code,scanner.event_id);
+    if(!t)return {ok:false,reason:'INVALID',message:'Invalid ticket for this event.'};
+    if(t.payment_status!=='PAID'||t.ticket_status!=='VALID')return {ok:false,reason:t.ticket_status==='USED'?'ALREADY_USED':'NOT_PAID',message:t.ticket_status==='USED'?'This ticket has already been used.':'Payment is not verified; do not allow entry.'};
+    const changed=db.prepare("UPDATE event_tickets SET ticket_status='USED',checked_in_at=CURRENT_TIMESTAMP,checked_in_by=? WHERE id=? AND ticket_status='VALID' AND payment_status='PAID'").run(scanner.staff_name,t.id);
+    if(!changed.changes)return {ok:false,reason:'ALREADY_USED',message:'This ticket has already been scanned.'};
+    return {ok:true,reason:'VALID',message:'VALID TICKET — ENTRY ALLOWED',ticketId:t.id,eventId:t.event_id};
+  });
+  const result=tx();if(result.ok)backupShopData('ticket-check-in');res.status(result.ok?200:409).json(result);
+});
+app.get('/api/events/:eventId/attendance', guard, (req,res)=>{
+  const event=db.prepare('SELECT id,title FROM events WHERE id=?').get(req.params.eventId);
+  if(!event)return res.status(404).json({error:'Event not found.'});
+  const totals=db.prepare(`SELECT COUNT(*) total,SUM(CASE WHEN payment_status='PAID' THEN 1 ELSE 0 END) paid,
+    SUM(CASE WHEN ticket_status='USED' THEN 1 ELSE 0 END) checkedIn FROM event_tickets WHERE event_id=?`).get(event.id);
+  res.json({event,totals,ticketTypes:db.prepare('SELECT id,name,price,quantity,sold FROM event_ticket_types WHERE event_id=?').all(event.id)});
+});
 
 setInterval(()=>{try{db.prepare("DELETE FROM auth_sessions WHERE expires_at<=?").run(Date.now())}catch{}},60*60*1000);
 app.listen(PORT,"0.0.0.0",()=>console.log("BASSE ONLINE SHOP running on "+PORT))
