@@ -1298,3 +1298,8 @@ body.basse-modal-open{overflow:hidden;overscroll-behavior:none}
 .leaflet-control-zoom a{color:#0a2b7a!important;background:#fff!important;border-color:#e3e8f0!important}
 .leaflet-control-attribution{background:rgba(255,255,255,.9)!important;border-radius:5px 0 0 0;padding:2px 5px!important;font-size:9px!important}
 .basse-map-marker{filter:drop-shadow(0 3px 5px rgba(7,26,74,.12))}
+
+/* V46: ticket category card and navigation refinements */
+.cats button.ticket-category img{object-fit:cover;background:#e8efff}
+.cats button.ticket-category:hover img{border-color:#1748a8;transform:translateY(-2px)}
+.cats button.ticket-category:focus-visible{outline:3px solid #f5b400;outline-offset:4px}

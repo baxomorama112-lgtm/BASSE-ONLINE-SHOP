@@ -670,7 +670,8 @@ function openAccount(){
   ${customer?`<button class="account-option" onclick="openOrders()"> <span><b>My Orders</b><small>View your recent purchases</small></span> →</button><button class="account-option" onclick="toast('Account details are saved on this device.')"> <span><b>My Details</b><small>${esc(customer.phone)}</small></span> →</button><button class="secondary-btn" onclick="localStorage.removeItem('basseCustomer');openAccount()">LOG OUT</button>`:
   `<button class="account-option" type="button" onclick="openCustomerSignup()"> <span><b>Create Customer Account</b><small>Optional — save your details and orders</small></span> →</button>
   <button class="account-option" type="button" onclick="openCustomerLogin()"> <span><b>Customer Login</b><small>Already have an account?</small></span> →</button>
-  <button class="account-option vendor-option" type="button" onclick="openVendorApply()"> <span><b>Become a Vendor</b><small>Apply to sell on BASSE MARKET</small></span> →</button>
+  <button class="account-option vendor-option" type="button" onclick="openVendorApply()"> <span><b>Become a Vendor</b><small>Apply to open your own BASSE shop or service page</small></span> →</button>
+  <button class="account-option" type="button" onclick="window.location.href='services.html#scanner'"> <span><b>Become a Scanner</b><small>For people who want to scan and validate event tickets</small></span> →</button>
   <button class="account-option vendor-login-option" type="button" onclick="openVendorLogin()"> <span><b>Vendor Login</b><small>Approved vendors: enter your phone and PIN</small></span> →</button>
   <div class="guest-note"> <b>Continue as Guest</b><br><span>No customer login is required to browse or place an order.</span></div>`}</div>`;
   $("modal").classList.add("show")
