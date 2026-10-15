@@ -1,0 +1,10 @@
+BASSE ONLINE SHOP V48 — TICKETS / ADMIN SEPARATION POLISH
+
+- Ticket & Events page now focuses on ticket categories, upcoming events, My Tickets, and authorized scanner access.
+- Removed the business partner application and service booking forms from the ticket page so registration/service requests are not mixed into ticket browsing.
+- Kept the existing event reservation, QR generation, ticket download, and admin-verified payment flow.
+- Fixed duplicate DOM IDs in the ticket page that could cause the event list to overwrite its parent section or scanner UI.
+- Applied mobile-safe input sizing and flexible form rows to reduce iPhone keyboard zoom and horizontal overflow.
+- Added Services & Events as an in-dashboard Admin Control Center section instead of opening a separate browser tab. It reuses the existing admin token and existing services admin page.
+
+Important limitation: organizer-specific authentication and event-management dashboard are not fully implemented by this UI-only pass. The current backend stores business partner applications separately from marketplace vendors, so a proper organizer portal needs a dedicated partner login/session and organizer-only event CRUD endpoints; this must not be faked by treating an organizer as a product vendor. Existing marketplace/vendor/payment/delivery/backups were otherwise left unchanged.
