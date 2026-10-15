@@ -7,6 +7,7 @@ const SHOP_WHATSAPP=String(process.env.BASSE_MARKET_WHATSAPP||"2206963349").repl
 app.use(express.json({limit:"100mb",verify:(req,res,buf)=>{if(req.originalUrl==="/api/waychit/webhook")req.rawBody=buf.toString("utf8")}}));
 app.use("/uploads",express.static(path.join(DATA_DIR,"uploads"),{maxAge:"7d",immutable:false}));
 app.use("/downloads",express.static(path.join(ROOT,"../downloads"),{fallthrough:true,maxAge:"1d"}));
+app.get("/scanner",(req,res)=>res.sendFile(path.join(ROOT,"../marketplace/scanner.html")));
 app.get("/download",(req,res)=>{
   res.sendFile(path.join(ROOT,"../marketplace/download.html"));
 });
@@ -1188,6 +1189,8 @@ try {
   `);
 } catch(e) { console.error('BASSE services schema setup failed:', e.message); }
 
+// Backward-compatible event category migration for existing SQLite databases.
+try { db.exec("ALTER TABLE events ADD COLUMN category TEXT NOT NULL DEFAULT 'Music'"); } catch(e) { if(!/duplicate column/i.test(String(e.message))) console.warn('Event category migration:',e.message); }
 function serviceId(prefix) { return prefix + '_' + crypto.randomBytes(12).toString('hex'); }
 function cleanText(v, max=300) { return String(v ?? '').trim().slice(0,max); }
 app.post('/api/partners/apply', (req,res) => {
@@ -1252,6 +1255,22 @@ app.post('/api/organizer/events', (req,res)=>{
     for(const t of b.ticketTypes)ins.run(id,cleanText(t.name,60),Number(t.price),Number(t.quantity));
   });tx();
   backupShopData('event-created');res.status(201).json({ok:true,id,status:'PENDING',message:'Event submitted for admin approval before ticket sales open.'});
+});
+app.post('/api/admin/events/create', guard, (req,res)=>{
+  const b=req.body||{}, title=cleanText(b.title,160), venue=cleanText(b.venue,200), date=cleanText(b.date,20);
+  const category=cleanText(b.category,40);
+  const allowed=['Music','Football','Community Event','Gym','Trade','Other'];
+  if(!title||!venue||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!allowed.includes(category))return res.status(400).json({error:'Enter event title, category, venue and a valid date.'});
+  if(!Array.isArray(b.ticketTypes)||!b.ticketTypes.length||b.ticketTypes.length>12)return res.status(400).json({error:'Add between 1 and 12 ticket types.'});
+  for(const t of b.ticketTypes)if(!cleanText(t.name,60)||!Number.isInteger(Number(t.price))||Number(t.price)<0||!Number.isInteger(Number(t.quantity))||Number(t.quantity)<1)return res.status(400).json({error:'Each ticket type needs a name, non-negative Dalasi price and positive quantity.'});
+  const id=serviceId('EVT'), status=b.publish===false?'PENDING':'APPROVED';
+  const tx=db.transaction(()=>{
+    db.prepare('INSERT INTO events(id,organizer_partner_id,title,description,venue,event_date,event_time,flyer_url,status,category) VALUES(?,NULL,?,?,?,?,?,?,?,?)')
+      .run(id,title,cleanText(b.description,2000),venue,date,cleanText(b.time,20),cleanText(b.flyerUrl,500),status,category);
+    const ins=db.prepare('INSERT INTO event_ticket_types(event_id,name,price,quantity) VALUES(?,?,?,?)');
+    for(const t of b.ticketTypes)ins.run(id,cleanText(t.name,60),Number(t.price),Number(t.quantity));
+  });tx();backupShopData('admin-event-created');
+  res.status(201).json({ok:true,id,status,message:status==='APPROVED'?'Event published and visible to customers.':'Event saved as pending approval.'});
 });
 app.get('/api/admin/events', guard, (req,res)=>res.json(db.prepare(`SELECT e.*,p.business_name AS organizer FROM events e LEFT JOIN business_partners p ON p.id=e.organizer_partner_id ORDER BY e.created_at DESC`).all()));
 app.patch('/api/admin/events/:id/status', guard, (req,res)=>{
