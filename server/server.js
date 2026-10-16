@@ -151,7 +151,7 @@ try{db.exec("ALTER TABLE products ADD COLUMN images TEXT DEFAULT ''")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_lat REAL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_lng REAL")}catch(e){}
 try{db.exec("ALTER TABLE orders ADD COLUMN customer_accuracy REAL")}catch(e){}
-const BACKUP_TABLES=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys","delivery_drivers","deliveries","chat_conversations","chat_messages","order_notifications","digital_services","digital_orders","business_partners","service_bookings","events","event_ticket_types","event_tickets","event_scanners"];
+const BACKUP_TABLES=["products","orders","vendors","vendor_products","customer_accounts","payout_requests","vendor_submission_keys","delivery_drivers","deliveries","chat_conversations","chat_messages","order_notifications","digital_services","digital_orders","business_partners","service_bookings","events","event_ticket_types","event_tickets","event_scanners","event_organizer_access"];
 function buildShopSnapshot(){
   const data={version:3,createdAt:new Date().toISOString(),tables:{}};
   for(const table of BACKUP_TABLES)data.tables[table]=db.prepare(`SELECT * FROM ${table}`).all();
@@ -1184,6 +1184,10 @@ try {
       id INTEGER PRIMARY KEY AUTOINCREMENT, event_id TEXT NOT NULL, staff_name TEXT NOT NULL,
       scanner_token_hash TEXT NOT NULL UNIQUE, active INTEGER NOT NULL DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS event_organizer_access(
+      id INTEGER PRIMARY KEY AUTOINCREMENT, event_id TEXT NOT NULL, organizer_name TEXT NOT NULL,
+      access_token_hash TEXT NOT NULL UNIQUE, active INTEGER NOT NULL DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
     CREATE INDEX IF NOT EXISTS idx_event_tickets_event ON event_tickets(event_id);
     CREATE INDEX IF NOT EXISTS idx_bookings_status ON service_bookings(status);
   `);
@@ -1272,13 +1276,37 @@ app.post('/api/admin/events/create', guard, (req,res)=>{
   });tx();backupShopData('admin-event-created');
   res.status(201).json({ok:true,id,status,message:status==='APPROVED'?'Event published and visible to customers.':'Event saved as pending approval.'});
 });
-app.get('/api/admin/events', guard, (req,res)=>res.json(db.prepare(`SELECT e.*,p.business_name AS organizer FROM events e LEFT JOIN business_partners p ON p.id=e.organizer_partner_id ORDER BY e.created_at DESC`).all()));
+app.get('/api/admin/events', guard, (req,res)=>{const rows=db.prepare(`SELECT e.*,p.business_name AS organizer FROM events e LEFT JOIN business_partners p ON p.id=e.organizer_partner_id ORDER BY e.created_at DESC`).all();res.json(rows.map(e=>({...e,ticketTypes:db.prepare('SELECT id,name,price,quantity,sold FROM event_ticket_types WHERE event_id=? ORDER BY id').all(e.id)})));});
 app.patch('/api/admin/events/:id/status', guard, (req,res)=>{
   const status=cleanText(req.body.status,20).toUpperCase();
   if(!['APPROVED','REJECTED','CANCELLED'].includes(status))return res.status(400).json({error:'Invalid event status.'});
   const r=db.prepare('UPDATE events SET status=? WHERE id=?').run(status,req.params.id);
   if(!r.changes)return res.status(404).json({error:'Event not found.'});
   backupShopData('event-status');res.json({ok:true,status});
+});
+app.post('/api/events/:eventId/organizer-access', guard, (req,res)=>{
+  const event=db.prepare('SELECT id,title FROM events WHERE id=?').get(req.params.eventId);
+  const name=cleanText(req.body.organizerName,100);
+  if(!event||!name)return res.status(400).json({error:'Choose an event and enter the organizer name.'});
+  const token=crypto.randomBytes(32).toString('hex'),hash=crypto.createHash('sha256').update(token).digest('hex');
+  db.prepare('INSERT INTO event_organizer_access(event_id,organizer_name,access_token_hash) VALUES(?,?,?)').run(event.id,name,hash);
+  backupShopData('organizer-access-created');res.status(201).json({ok:true,eventId:event.id,eventTitle:event.title,organizerName:name,token,url:'/organizer.html',message:'Share this private organizer access token securely. It is shown only once.'});
+});
+app.get('/api/organizer/dashboard',(req,res)=>{
+  const token=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'').trim();
+  if(token.length<32)return res.status(401).json({error:'Organizer access token required.'});
+  const hash=crypto.createHash('sha256').update(token).digest('hex');
+  const access=db.prepare('SELECT * FROM event_organizer_access WHERE access_token_hash=? AND active=1').get(hash);
+  if(!access)return res.status(401).json({error:'Organizer access token is invalid or disabled.'});
+  const event=db.prepare('SELECT id,title,category,venue,event_date,event_time,status FROM events WHERE id=?').get(access.event_id);
+  const totals=db.prepare(`SELECT COUNT(*) generated,SUM(CASE WHEN payment_status='PAID' THEN 1 ELSE 0 END) paid,
+    SUM(CASE WHEN ticket_status='USED' THEN 1 ELSE 0 END) checkedIn,SUM(CASE WHEN payment_status='PENDING' THEN 1 ELSE 0 END) pending
+    FROM event_tickets WHERE event_id=?`).get(access.event_id);
+  const ticketTypes=db.prepare(`SELECT tt.id,tt.name,tt.price,tt.quantity,tt.sold,
+    SUM(CASE WHEN t.payment_status='PAID' THEN 1 ELSE 0 END) paid,
+    SUM(CASE WHEN t.ticket_status='USED' THEN 1 ELSE 0 END) checkedIn
+    FROM event_ticket_types tt LEFT JOIN event_tickets t ON t.ticket_type_id=tt.id WHERE tt.event_id=? GROUP BY tt.id`).all(access.event_id);
+  res.json({event,totals,ticketTypes,organizerName:access.organizer_name});
 });
 app.post('/api/events/:eventId/tickets', (req,res)=>{
   const b=req.body||{}, event=db.prepare("SELECT id FROM events WHERE id=? AND status='APPROVED'").get(req.params.eventId),
@@ -1297,6 +1325,26 @@ app.post('/api/events/:eventId/tickets', (req,res)=>{
   });
   try{const tickets=reserve();backupShopData('ticket-reserved');res.status(201).json({ok:true,tickets,status:'PENDING_PAYMENT',message:'Tickets are reserved, not valid for entry until payment is verified.'})}
   catch(e){res.status(409).json({error:e.message||'Could not reserve tickets.'})}
+});
+app.get('/api/admin/events/summary', guard, (req,res)=>{
+  const events=db.prepare(`SELECT e.id,e.title,e.category,e.status,e.event_date,e.venue,
+    COUNT(t.id) AS tickets_generated,
+    SUM(CASE WHEN t.payment_status='PAID' THEN 1 ELSE 0 END) AS tickets_paid,
+    SUM(CASE WHEN t.ticket_status='USED' THEN 1 ELSE 0 END) AS tickets_checked_in,
+    SUM(CASE WHEN t.payment_status='PENDING' THEN 1 ELSE 0 END) AS tickets_pending
+    FROM events e LEFT JOIN event_tickets t ON t.event_id=e.id
+    GROUP BY e.id ORDER BY e.event_date DESC`).all();
+  res.json({totals:{events:events.length,published:events.filter(e=>e.status==='APPROVED').length,generated:events.reduce((n,e)=>n+Number(e.tickets_generated||0),0),paid:events.reduce((n,e)=>n+Number(e.tickets_paid||0),0),checkedIn:events.reduce((n,e)=>n+Number(e.tickets_checked_in||0),0)},events});
+});
+app.post('/api/admin/events/:eventId/physical-tickets', guard, (req,res)=>{
+  const event=db.prepare('SELECT id,title,status FROM events WHERE id=?').get(req.params.eventId);
+  const typeId=Number(req.body.ticketTypeId), qty=Number(req.body.quantity);
+  if(!event)return res.status(404).json({error:'Event not found.'});
+  if(!Number.isInteger(qty)||qty<1||qty>300)return res.status(400).json({error:'Generate between 1 and 300 tickets per print batch.'});
+  const type=db.prepare('SELECT * FROM event_ticket_types WHERE id=? AND event_id=? AND active=1').get(typeId,event.id);
+  if(!type)return res.status(404).json({error:'Choose a valid ticket type for this event.'});
+  const tx=db.transaction(()=>{const fresh=db.prepare('SELECT * FROM event_ticket_types WHERE id=?').get(type.id);if(!fresh||fresh.quantity-fresh.sold<qty)throw new Error('Not enough ticket inventory remains for this ticket type. Increase the ticket quantity first.');const ins=db.prepare(`INSERT INTO event_tickets(id,event_id,ticket_type_id,ticket_code,customer_name,customer_whatsapp) VALUES(?,?,?,?,?,?)`);const tickets=[];for(let i=0;i<qty;i++){const id=serviceId('TKT'),code=crypto.randomBytes(24).toString('hex');ins.run(id,event.id,type.id,code,'Physical ticket batch','');tickets.push({id,code,eventTitle:event.title,ticketType:type.name,price:type.price,status:'PENDING_PAYMENT'});}db.prepare('UPDATE event_ticket_types SET sold=sold+? WHERE id=?').run(qty,type.id);return tickets;});
+  try{const tickets=tx();backupShopData('physical-ticket-batch');res.status(201).json({ok:true,event:event.title,ticketType:type.name,tickets,message:'Physical ticket batch generated. Tickets remain invalid for entry until payment is verified.'});}catch(e){res.status(409).json({error:e.message||'Could not generate physical tickets.'});}
 });
 app.get('/api/admin/tickets', guard, (req,res)=>{
   const eventId=cleanText(req.query.eventId,100);

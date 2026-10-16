@@ -1,0 +1,31 @@
+BASSE ONLINE SHOP V50 — PROFESSIONAL EVENT TICKETING & ADMINISTRATION
+
+Customer ticket marketplace
+- Category tiles filter the event list, scroll to results, and show a category-specific empty state when no event has been published in that category.
+- Refresh explicitly reloads event data; filtering operates on cached data for faster interaction.
+- Clear separation remains between Upcoming Events and My Tickets.
+- Account's Become a Scanner shortcut now opens the dedicated scanner page instead of the ticket marketplace.
+
+Admin Services & Events control center
+- Professional responsive layout with summary cards for events, published events, generated tickets, paid tickets, and check-ins.
+- Event cards show category, venue, date, status, ticket types, prices, ticket inventory, and ticket-type IDs rather than dumping raw JSON.
+- Admin can create/publish events, change event status, generate unique QR-coded physical ticket batches, and print the batch.
+- Physical ticket batches reserve from configured inventory and are PENDING payment by default. They cannot be admitted until payment is verified.
+- Admin can create event-specific scanner credentials and event-specific organizer dashboard credentials.
+
+Organizer dashboard
+- Added /organizer.html. Organizer access token is created by admin and is shown only once.
+- Dashboard displays event-specific generated, paid, pending, and checked-in totals plus ticket type breakdown.
+- Organizer token is stored only in the current browser session; dashboard is read-only.
+
+Backend
+- Added event_organizer_access table and backup table registration.
+- Added authenticated /api/admin/events/summary endpoint.
+- Added authenticated POST /api/admin/events/:eventId/physical-tickets endpoint (1–300 per batch; inventory enforced).
+- Added authenticated POST /api/events/:eventId/organizer-access and token-authenticated GET /api/organizer/dashboard.
+- Existing marketplace orders, vendor, payment, delivery, chat and backup behavior was not intentionally changed.
+
+Validation
+- Node syntax check passed for server.js and inline scripts in customer ticket page, admin services page, organizer dashboard and scanner page.
+- ZIP integrity check performed.
+- Live deployment, camera permission, payment verification, and live database migration still need testing on the hosting environment.
