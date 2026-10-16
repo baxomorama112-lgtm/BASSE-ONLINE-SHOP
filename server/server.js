@@ -1442,10 +1442,10 @@ app.post('/api/admin/events/:eventId/physical-tickets', guard, async (req,res)=>
   if(!type)return res.status(404).json({error:'Choose a valid ticket type for this event.'});
   try{
     // Build unique codes and QR images first; do not reserve inventory unless every QR succeeds.
-    const prepared=await Promise.all(Array.from({length:qty},async()=>{const id=serviceId('TKT'),code=crypto.randomBytes(24).toString('hex');return {id,code,eventTitle:event.title,ticketType:type.name,price:type.price,status:'VALID',paymentStatus:'PAID',qrDataUrl:await QRCode.toDataURL(code,{width:320,margin:2,errorCorrectionLevel:'M',type:'image/png'})}}));
+    const prepared=await Promise.all(Array.from({length:qty},async()=>{const id=serviceId('TKT'),code=crypto.randomBytes(24).toString('hex');return {id,code,eventTitle:event.title,ticketType:type.name,price:type.price,status:'VALID',paymentStatus:'PAID',ticketSource:'PHYSICAL',qrDataUrl:await QRCode.toDataURL(code,{width:320,margin:2,errorCorrectionLevel:'M',type:'image/png'})}}));
     const tx=db.transaction(()=>{const fresh=db.prepare('SELECT * FROM event_ticket_types WHERE id=? AND event_id=? AND active=1').get(type.id,event.id);if(!fresh||fresh.quantity-fresh.sold<qty)throw new Error('Not enough ticket inventory remains for this ticket type. Increase the ticket quantity first.');const ins=db.prepare(`INSERT INTO event_tickets(id,event_id,ticket_type_id,ticket_code,customer_name,customer_whatsapp,payment_status,ticket_status) VALUES(?,?,?,?,?,?,?,?)`);for(const t of prepared)ins.run(t.id,event.id,type.id,t.code,'Physical ticket batch','','PAID','VALID');db.prepare('UPDATE event_ticket_types SET sold=sold+? WHERE id=?').run(qty,type.id);});
     tx();backupShopData('physical-ticket-batch');
-    res.status(201).json({ok:true,event:event.title,ticketType:type.name,tickets:prepared,message:'Physical ticket batch generated. All physical tickets are marked PAID and VALID immediately.'});
+    res.status(201).json({ok:true,event:event.title,ticketType:type.name,tickets:prepared,message:'Physical ticket batch generated. All physical tickets are marked SOLD/PAID and VALID automatically.'});
   }catch(e){console.error('Physical ticket batch generation failed:',e.message);res.status(409).json({error:e.message||'Could not generate physical tickets.'});}
 });
 app.get('/api/admin/tickets', guard, (req,res)=>{
@@ -1484,14 +1484,14 @@ app.post('/api/events/scan', (req,res)=>{
   if(!code)return res.status(400).json({error:'Ticket QR code is missing.'});
   const tx=db.transaction(()=>{
     const t=db.prepare('SELECT * FROM event_tickets WHERE ticket_code=? AND event_id=?').get(code,scanner.event_id);
-    if(!t)return {ok:false,reason:'INVALID',message:'Invalid ticket for this event.'};
-    if(t.ticket_status==='USED')return {ok:false,reason:'ALREADY_SCANNED',message:'ALREADY SCANNED — this ticket has already been used.',ticketId:t.id,eventId:t.event_id};
-    if(t.payment_status!=='PAID'||t.ticket_status!=='VALID')return {ok:false,reason:'NOT_PAID',message:'Payment is not verified; do not allow entry.'};
+    if(!t)return {ok:false,reason:'INVALID',message:'INVALID TICKET — this QR is not for this event.',eventTitle:null,ticketType:null};
+    if(t.ticket_status==='USED'){const info=db.prepare('SELECT e.title AS eventTitle,tt.name AS ticketType,tt.price FROM events e JOIN event_ticket_types tt ON tt.event_id=e.id JOIN event_tickets t ON t.ticket_type_id=tt.id WHERE t.id=?').get(t.id);return {ok:false,reason:'ALREADY_SCANNED',message:'ALREADY SCANNED — this ticket has already been used.',ticketId:t.id,eventId:t.event_id,...info,paymentStatus:t.payment_status,entryStatus:t.ticket_status};}
+    if(t.payment_status!=='PAID'||t.ticket_status!=='VALID'){const info=db.prepare('SELECT e.title AS eventTitle,tt.name AS ticketType,tt.price FROM events e JOIN event_ticket_types tt ON tt.event_id=e.id JOIN event_tickets t ON t.ticket_type_id=tt.id WHERE t.id=?').get(t.id);return {ok:false,reason:'NOT_PAID',message:'PAYMENT NOT APPROVED — do not allow entry.',ticketId:t.id,eventId:t.event_id,...info,paymentStatus:t.payment_status,entryStatus:t.ticket_status};}
     const changed=db.prepare("UPDATE event_tickets SET ticket_status='USED',checked_in_at=CURRENT_TIMESTAMP,checked_in_by=? WHERE id=? AND ticket_status='VALID' AND payment_status='PAID'").run(scanner.staff_name,t.id);
-    if(!changed.changes)return {ok:false,reason:'ALREADY_USED',message:'This ticket has already been scanned.'};
-    return {ok:true,reason:'VALID',message:'VALID TICKET — ENTRY ALLOWED',ticketId:t.id,eventId:t.event_id};
+    if(!changed.changes)return {ok:false,reason:'ALREADY_USED',message:'ALREADY SCANNED — this ticket has already been used.',ticketId:t.id,eventId:t.event_id};
+    const info=db.prepare('SELECT e.title AS eventTitle,tt.name AS ticketType,tt.price FROM events e JOIN event_ticket_types tt ON tt.event_id=e.id JOIN event_tickets t ON t.ticket_type_id=tt.id WHERE t.id=?').get(t.id);return {ok:true,reason:'VALID',message:'VALID TICKET — ENTRY ALLOWED',ticketId:t.id,eventId:t.event_id,...info,paymentStatus:'PAID',entryStatus:'USED',checkedInAt:new Date().toISOString(),checkedInBy:scanner.staff_name};
   });
-  const result=tx();if(result.ok)backupShopData('ticket-check-in');res.status(result.ok?200:409).json(result);
+  const result=tx();if(result.ok){backupShopData('ticket-check-in');broadcastLive('tickets',{type:'ticket-check-in',ticketId:result.ticketId,eventId:result.eventId,ticketType:result.ticketType,eventTitle:result.eventTitle});broadcastLive('notifications',{type:'ticket-check-in',ticketId:result.ticketId,eventId:result.eventId});}res.status(result.ok?200:409).json(result);
 });
 app.get('/api/events/:eventId/attendance', guard, (req,res)=>{
   const event=db.prepare('SELECT id,title FROM events WHERE id=?').get(req.params.eventId);

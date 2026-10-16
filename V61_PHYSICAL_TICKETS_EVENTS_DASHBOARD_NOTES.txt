@@ -1,0 +1,11 @@
+BASSE ONLINE SHOP V61 — PHYSICAL TICKET + EVENTS DASHBOARD FIX
+
+Changes in this patch:
+- Physical ticket batch generation now creates tickets with payment_status=PAID and ticket_status=VALID, and increments ticket type sold inventory in the same database transaction.
+- Scanner continues to require PAID + VALID and marks the ticket USED on the first successful scan, rejecting repeat scans.
+- PDF wording now labels pre-generated physical tickets SOLD / PAID rather than saying payment approval is required.
+- Ticket records distinguish physical batches from online purchases and show physical tickets as already sold.
+- Services & Events admin cards and ticket records have a cleaner responsive Products-style layout. Existing edit-event form, event status controls, ticket type editor, scanner access, and three print designs are retained.
+- Scanner access page remains access-code-only; manual ticket-entry controls are not present on the scanner page. Camera scanning and scan-result display remain in scanner-live.html.
+
+Important: physical tickets are treated as sold when generated, as requested. Do not generate a batch unless you intend those tickets to be issued/sold. Test in staging before production.

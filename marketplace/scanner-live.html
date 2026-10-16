@@ -15,7 +15,7 @@ button{background:#1748a8;color:white;border:0;border-radius:13px;padding:15px 1
 .secondary{background:#edf2fa;color:#14213d}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 label{display:block;font-weight:800;margin:18px 0 7px}input{width:100%;padding:15px;border:1px solid #cbd5e1;border-radius:12px;font:inherit}
 .result{margin-top:14px;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:13px;padding:14px;font-weight:850}
-.result-good{background:#e8f8ee;color:#116329;border:1px solid #9ad8ad}.result-bad{background:#fff0f0;color:#9f1239;border:1px solid #f0b3bf}
+.result-good{background:#e8f8ee;color:#116329;border:1px solid #9ad8ad}.result-bad{background:#fff0f0;color:#9f1239;border:1px solid #f0b3bf}.ticket-detail{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}.ticket-detail div{background:#ffffff12;border:1px solid #ffffff20;border-radius:10px;padding:10px}.ticket-detail small{display:block;opacity:.72;font-size:11px;text-transform:uppercase;font-weight:800}.ticket-detail strong{display:block;margin-top:4px;overflow-wrap:anywhere}@media(max-width:520px){.ticket-detail{grid-template-columns:1fr 1fr}}
 @media(max-width:520px){main{margin:12px auto}.card{padding:15px}.row{grid-template-columns:1fr}video{height:50dvh;min-height:250px}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
@@ -26,15 +26,13 @@ label{display:block;font-weight:800;margin:18px 0 7px}input{width:100%;padding:1
 <h1>Scan a ticket</h1><p id="eventHint" class="muted">Authorized check-in · Each ticket can be used once.</p>
 <video id="video" playsinline muted></video>
 <div class="row"><button id="start" type="button">Start camera</button><button id="stop" type="button" class="secondary">Stop camera</button></div>
-<label for="code">Or enter ticket code manually</label><input id="code" autocomplete="off" placeholder="Scan or enter ticket code">
-<button id="verify" type="button">Verify ticket</button><p id="result" class="result" aria-live="polite"></p>
+<div id="result" class="result" aria-live="polite"></div>
 </section></main>
 <script>
 const $=id=>document.getElementById(id);let stream=null,loop=null,token=sessionStorage.getItem('basseScannerToken')||'',busy=false;
-function showResult(ok,message){$('result').className='result '+(ok?'result-good':'result-bad');$('result').textContent=(ok?'✅ ':'⛔ ')+message}
+function showResult(ok,message,data={}){$('result').className='result '+(ok?'result-good':'result-bad');$('result').replaceChildren();const heading=document.createElement('div');heading.textContent=(ok?'✅ ':'⛔ ')+message;heading.style.fontSize='18px';$('result').append(heading);if(data.eventTitle||data.ticketType||data.paymentStatus||data.entryStatus){const grid=document.createElement('div');grid.className='ticket-detail';[['Event',data.eventTitle||'Not matched'],['Ticket type',data.ticketType||'Unknown'],['Price',data.price==null?'—':'D'+Number(data.price).toLocaleString()],['Payment',data.paymentStatus||'—'],['Entry',data.entryStatus|| (ok?'USED':'NOT ADMITTED')],['Scanned by',data.checkedInBy||'—']].forEach(([label,value])=>{const cell=document.createElement('div'),small=document.createElement('small'),strong=document.createElement('strong');small.textContent=label;strong.textContent=value;cell.append(small,strong);grid.append(cell)});$('result').append(grid)}}
 function stopCamera(){if(loop)clearInterval(loop);loop=null;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null}
-async function verify(code){if(busy)return;code=String(code||'').trim();if(!/^.{8,100}$/.test(code)){showResult(false,'Enter or scan a valid ticket code.');return}if(!/^\d{8}$/.test(token)){showResult(false,'Scanner access expired. Exit and reopen the scanner using your 8-digit access code.');return}busy=true;$('verify').disabled=true;$('result').className='result';$('result').textContent='Checking ticket…';try{const r=await fetch('/api/events/scan',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({ticketCode:code})});let j={};try{j=await r.json()}catch{}const msg=j.message||j.error||'Ticket check failed.';showResult(r.ok&&j.ok,msg);if(r.ok&&j.ok){$('code').value='';$('code').focus()}}catch(e){showResult(false,'Connection error. Check internet and retry.')}finally{busy=false;$('verify').disabled=false}}
-$('verify').onclick=()=>verify($('code').value);$('code').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();verify($('code').value)}});
+async function verify(code){if(busy)return;code=String(code||'').trim();if(!/^.{8,100}$/.test(code)){showResult(false,'Enter or scan a valid ticket code.');return}if(!/^\d{8}$/.test(token)){showResult(false,'Scanner access expired. Exit and reopen the scanner using your 8-digit access code.');return}busy=true;$('result').className='result';$('result').textContent='Checking ticket…';try{const r=await fetch('/api/events/scan',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({ticketCode:code})});let j={};try{j=await r.json()}catch{}const msg=j.message||j.error||'Ticket check failed.';showResult(r.ok&&j.ok,msg,j);if(r.ok&&j.ok){$('result').setAttribute('data-last-scan','success')}}catch(e){showResult(false,'Connection error. Check internet and retry.')}finally{busy=false}}
 $('stop').onclick=stopCamera;
 async function startScanLoop(){
  const v=$('video');if(!stream||!v.videoWidth)return;

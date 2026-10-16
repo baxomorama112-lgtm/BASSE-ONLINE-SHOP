@@ -1,0 +1,12 @@
+BASSE ONLINE SHOP V59 — Ticket scanner, print designs & event dashboard polish
+
+Changes in this update:
+- Scanner access page now contains only the 8-digit access code and opens the dedicated camera scanner. Removed the separate manual ticket check experience from the access page.
+- Scanner result now includes event name, ticket type (for example Advance, VIP, or Gate), ticket price, payment status, entry status, and staff name when available. Green success / red decline remains clear.
+- A successful scan broadcasts ticket-check-in and notification events. Admin ticket records refresh more frequently without manual refresh.
+- Physical ticket batch generation creates unique QR tickets as PENDING until the sale is approved. This avoids treating an unsold printed ticket as paid.
+- Added three printable PDF designs: Clean Navy, Event Flyer, and Premium Gold. Flyer design includes the event flyer when available. Each batch downloads as one PDF.
+- Ticket records have a compact Approve payment action. Approval should only be used after confirming payment.
+- Improved event card styling and mobile layout in Services & Events admin.
+
+Checks performed: Node syntax check passed for server/server.js; inline JavaScript parse checks passed for scanner.html, scanner-live.html and admin/services.html. Live Waychit payment, real camera scans, and production database behavior still require testing on the deployed site.
