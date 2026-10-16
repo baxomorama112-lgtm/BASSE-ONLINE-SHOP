@@ -174,21 +174,3 @@ input,select,textarea{border-radius:11px!important;border-color:#dfe5ef!importan
 .leaflet-control-zoom a{color:#0a2b7a!important;background:#fff!important;border-color:#e3e8f0!important}
 .leaflet-control-attribution{background:rgba(255,255,255,.9)!important;border-radius:5px 0 0 0;padding:2px 5px!important;font-size:9px!important}
 .basse-map-marker{filter:drop-shadow(0 3px 5px rgba(7,26,74,.12))}
-
-/* V58 event/ticket admin clarity and mobile layout */
-#events{display:grid;grid-template-columns:1fr;gap:14px}
-#events .eventrow{background:#fff;border:1px solid #dfe6f2;border-radius:16px;padding:18px;box-shadow:0 5px 18px rgba(7,26,74,.045);min-width:0}
-#events .eventhead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
-#events .eventhead strong{font-size:1.05rem;color:#071a4a}
-#events .event-admin-flyer{display:block;width:min(100%,380px);max-height:220px;object-fit:cover;border-radius:12px;margin:12px 0}
-#events details{margin-top:14px;border-top:1px solid #e8edf5;padding-top:12px}
-#events details>summary{font-weight:800;color:#1748a8;cursor:pointer;padding:10px 0}
-#events .manage-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-#events .manage-form .wide{grid-column:1/-1}
-#events .manage-form input,#events .manage-form select,#events .manage-form textarea{width:100%;min-width:0}
-#events .ticket-inventory{display:grid;gap:8px;margin:12px 0}
-#events .tickettype{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#f6f8fc;border-radius:10px;padding:10px}
-#events .tickettype button,#events details>button{width:auto}
-.scanner-open-link{display:inline-flex;align-items:center;justify-content:center;background:#1748a8;color:#fff;text-decoration:none;font-weight:850;border-radius:12px;padding:13px 16px;margin:10px 0}
-#scannerResult{overflow-wrap:anywhere;white-space:pre-wrap}
-@media(max-width:640px){#events .manage-form{grid-template-columns:1fr}#events .manage-form .wide{grid-column:auto}#events .eventrow{padding:13px}#events .tickettype>*{max-width:100%}}

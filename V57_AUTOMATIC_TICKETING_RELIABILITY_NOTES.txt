@@ -1,18 +1,22 @@
-BASSE ONLINE SHOP V57 — Ticketing reliability and event admin fixes
+BASSE ONLINE SHOP V57 — Automatic ticket payment and reliability patch
 
-Implemented in source:
-- Physical/offline ticket batches are automatically marked payment_status=PAID and ticket_status=VALID at generation. QR check-in still changes VALID to USED exactly once.
-- Online checkout accepts 1–10 tickets, computes the full Waychit payment amount, associates every ticket in the purchase with the same Waychit payment-request ID, and activates the whole purchase only after a valid signed completion webhook.
-- Event deletion removes associated ticket records, ticket types, scanner access and organizer access in a single database transaction after an explicit admin confirmation.
-- Admin event management has clearer event cards and a dedicated delete action; removed the redundant empty ticket-verification section.
-- Scanner access now transitions directly to the dedicated scanner view and requests the camera; successful/failed scans have distinct visual states.
-- Customer ticket purchase has a quantity selector and live Dalasi total, and avoids duplicate local ticket entries.
-- Physical print labels now say PAID / PHYSICAL SALE / VALID FOR ENTRY, and the compact PDF layout keeps the flyer clear of the ticket code.
+Source-level changes in this package:
+- Kept the existing event form and API flow; Add Ticket Type and Create Event handlers are registered explicitly and validated with Node syntax checks.
+- Waychit webhook handling still requires the configured recent signature and secret. It now reads common signed event/payload wrappers, recognizes completion/success event names, and can match a ticket by its saved Waychit payment-request ID when a client reference is omitted.
+- Ticket activation is idempotent: a verified completed payment changes a pending ticket to PAID/VALID once, broadcasts the ticket update and notification, and does not reset a used ticket.
+- Ticket QR generation remains server-side. Physical batch generation now creates every QR image before reserving ticket inventory, so QR generation failures do not consume inventory or leave orphaned tickets.
+- Admin ticket records refresh separately from the full event cards to reduce the Services & Events blinking; customer ticket status checks run more frequently than event-list refresh.
+- Scanner continues to reject pending/unpaid tickets and only checks in PAID + VALID tickets once.
 
-Production requirements:
-- Render must have WAYCHIT_API_KEY and WAYCHIT_WEBHOOK_SECRET set.
-- Waychit webhook destination: https://basseonlineshop.com/api/waychit/webhook
-- PUBLIC_BASE_URL=https://basseonlineshop.com
-- A signed Waychit completion webhook is the source of truth for online payment. A browser redirect alone does not prove payment.
+Important payment configuration:
+- Render must have WAYCHIT_API_KEY and WAYCHIT_WEBHOOK_SECRET configured.
+- Configure the Waychit webhook destination as https://basseonlineshop.com/api/waychit/webhook.
+- Keep PUBLIC_BASE_URL=https://basseonlineshop.com.
+- Online ticket payment verification is automatic only after Waychit sends a valid signed completion webhook. A success/return page alone is not proof of payment.
+- Physical tickets sold for cash/offline payment still require an administrator to confirm that real payment was received. Generating/printing a ticket must not automatically mark it paid.
 
-Checks performed: ZIP integrity; Node syntax check for server; extracted inline JavaScript syntax checks for admin/services, marketplace/services and marketplace/scanner. Live Render database, real Waychit checkout/webhook, and device camera cannot be exercised in this local workspace.
+Validation performed:
+- ZIP integrity check.
+- `node --check server/server.js`.
+- JavaScript syntax checks for the inline scripts in admin/services.html, marketplace/services.html and marketplace/scanner.html.
+- Live Render database, Waychit credentials/webhook delivery, device camera and production checkout were not accessible from this local workspace and therefore are not claimed as live-tested.

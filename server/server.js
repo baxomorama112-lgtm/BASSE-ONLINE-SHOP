@@ -905,11 +905,10 @@ app.post("/api/waychit/webhook",(req,res)=>{
       const requestId=pr.id||ps.id||data.paymentRequestId||data.payment_request_id||'';
       let ticket=null;
       if(String(ref).startsWith('TICKET:')) ticket=db.prepare("SELECT * FROM event_tickets WHERE id=?").get(String(ref).slice(7));
-      if(!ticket&&requestId)ticket=db.prepare("SELECT * FROM event_tickets WHERE waychit_request_id=? LIMIT 1").get(String(requestId));
+      if(!ticket&&requestId)ticket=db.prepare("SELECT * FROM event_tickets WHERE waychit_request_id=?").get(String(requestId));
       if(ticket){
-        const ids=requestId ? db.prepare("SELECT id,event_id FROM event_tickets WHERE waychit_request_id=?").all(String(requestId)) : [ticket];
-        const tx=db.transaction(()=>{for(const item of ids)db.prepare("UPDATE event_tickets SET payment_status='PAID',ticket_status=CASE WHEN ticket_status='PENDING_PAYMENT' THEN 'VALID' ELSE ticket_status END WHERE id=? AND payment_status!='PAID'").run(item.id)});
-        tx();backupShopData("ticket-waychit-payment");broadcastLive("tickets",{ticketIds:ids.map(x=>x.id),eventId:ticket.event_id,paymentStatus:'PAID'});broadcastLive("notifications",{type:'ticket-payment',ticketIds:ids.map(x=>x.id),eventId:ticket.event_id});
+        const changed=db.prepare("UPDATE event_tickets SET payment_status='PAID',ticket_status=CASE WHEN ticket_status='PENDING_PAYMENT' THEN 'VALID' ELSE ticket_status END WHERE (id=? OR waychit_request_id=?) AND payment_status!='PAID'").run(ticket.id, ticket.waychit_request_id || '');
+        if(changed.changes){backupShopData("ticket-waychit-payment");broadcastLive("tickets",{ticketId:ticket.id,eventId:ticket.event_id,paymentStatus:'PAID'});broadcastLive("notifications",{type:'ticket-payment',ticketId:ticket.id,eventId:ticket.event_id});}
       }else if(ref&&!String(ref).startsWith('TICKET:')){
         const group=db.prepare("SELECT payment_group_id FROM orders WHERE id=?").get(ref)?.payment_group_id;
         if(group)db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE payment_group_id=? AND payment_status!='REFUNDED'").run(group);
@@ -1331,27 +1330,26 @@ app.post('/api/admin/events/:id/ticket-types', guard, (req,res)=>{
   if(!name||!Number.isInteger(price)||price<0||!Number.isInteger(quantity)||quantity<1)return res.status(400).json({error:'Enter a ticket name, price in Dalasi and quantity.'});
   const info=db.prepare('INSERT INTO event_ticket_types(event_id,name,price,quantity) VALUES(?,?,?,?)').run(req.params.id,name,price,quantity);backupShopData('event-ticket-type-added');res.status(201).json({ok:true,id:info.lastInsertRowid,message:'Ticket type added.'});
 });
+app.delete('/api/admin/events/:id', guard, (req,res)=>{
+  const event=db.prepare('SELECT id FROM events WHERE id=?').get(req.params.id);
+  if(!event)return res.status(404).json({error:'Event not found.'});
+  try{
+    const tx=db.transaction(()=>{
+      db.prepare('DELETE FROM event_scanners WHERE event_id=?').run(event.id);
+      db.prepare('DELETE FROM event_tickets WHERE event_id=?').run(event.id);
+      db.prepare('DELETE FROM event_ticket_types WHERE event_id=?').run(event.id);
+      db.prepare('DELETE FROM events WHERE id=?').run(event.id);
+    });
+    tx();backupShopData('event-deleted');broadcastLive('events',{eventId:event.id,deleted:true});
+    res.json({ok:true,message:'Event and its ticket records deleted.'});
+  }catch(e){console.error('Event deletion failed:',e);res.status(500).json({error:'Could not delete event. Check whether related records prevent deletion.'});}
+});
 app.patch('/api/admin/events/:id/status', guard, (req,res)=>{
   const status=cleanText(req.body.status,20).toUpperCase();
   if(!['APPROVED','REJECTED','CANCELLED'].includes(status))return res.status(400).json({error:'Invalid event status.'});
   const r=db.prepare('UPDATE events SET status=? WHERE id=?').run(status,req.params.id);
   if(!r.changes)return res.status(404).json({error:'Event not found.'});
   backupShopData('event-status');res.json({ok:true,status});
-});
-app.delete('/api/admin/events/:id', guard, (req,res)=>{
-  const event=db.prepare('SELECT id,title FROM events WHERE id=?').get(req.params.id);
-  if(!event)return res.status(404).json({error:'Event not found.'});
-  try{
-    const tx=db.transaction(()=>{
-      db.prepare('DELETE FROM event_tickets WHERE event_id=?').run(event.id);
-      db.prepare('DELETE FROM event_ticket_types WHERE event_id=?').run(event.id);
-      db.prepare('DELETE FROM event_scanners WHERE event_id=?').run(event.id);
-      db.prepare('DELETE FROM event_organizer_access WHERE event_id=?').run(event.id);
-      db.prepare('DELETE FROM events WHERE id=?').run(event.id);
-    });
-    tx();backupShopData('event-deleted');broadcastLive('events',{eventId:event.id,deleted:true});broadcastLive('notifications',{type:'event-deleted',eventId:event.id,title:event.title});
-    res.json({ok:true,message:'Event and its ticket records were deleted.'});
-  }catch(err){console.error('[event-delete] failed:',err.message);res.status(500).json({error:'Could not delete this event. Check server logs and retry.'})}
 });
 app.post('/api/events/:eventId/organizer-access', guard, (req,res)=>{
   const event=db.prepare('SELECT id,title FROM events WHERE id=?').get(req.params.eventId);
@@ -1383,51 +1381,29 @@ app.post('/api/events/:eventId/tickets', async (req,res)=>{
     name=cleanText(b.customerName,100), phone=cleanText(b.customerWhatsapp,30), qty=Number(b.quantity||1);
   if(!event||!type)return res.status(404).json({error:'Approved event or ticket type not found.'});
   if(!name||phone.replace(/\D/g,'').length<6||!Number.isInteger(qty)||qty<1||qty>10)return res.status(400).json({error:'Enter customer details and a quantity from 1 to 10.'});
-  const isFree=Number(type.price)===0;
   const reserve=db.transaction(()=>{
     const fresh=db.prepare('SELECT * FROM event_ticket_types WHERE id=? AND event_id=? AND active=1').get(type.id,req.params.eventId);
     if(!fresh||fresh.quantity-fresh.sold<qty)throw new Error('Not enough tickets remain for this ticket type.');
-    const ids=[], ins=db.prepare(`INSERT INTO event_tickets(id,event_id,ticket_type_id,ticket_code,customer_name,customer_whatsapp,payment_status,ticket_status)
-      VALUES(?,?,?,?,?,?,?,?)`);
-    for(let i=0;i<qty;i++){
-      const id=serviceId('TKT'), code=crypto.randomBytes(24).toString('hex');
-      ins.run(id,event.id,type.id,code,name,phone,isFree?'PAID':'PENDING',isFree?'VALID':'PENDING_PAYMENT');
-      ids.push({id,code,paymentStatus:isFree?'PAID':'PENDING',status:isFree?'VALID':'PENDING_PAYMENT'});
-    }
+    const ids=[], ins=db.prepare(`INSERT INTO event_tickets(id,event_id,ticket_type_id,ticket_code,customer_name,customer_whatsapp)
+      VALUES(?,?,?,?,?,?)`);
+    for(let i=0;i<qty;i++){const id=serviceId('TKT'), code=crypto.randomBytes(24).toString('hex');ins.run(id,event.id,type.id,code,name,phone);ids.push({id,code});}
     db.prepare('UPDATE event_ticket_types SET sold=sold+? WHERE id=?').run(qty,type.id);
     return ids;
   });
-  const releaseReservation=db.transaction((tickets)=>{
-    for(const t of tickets)db.prepare('DELETE FROM event_tickets WHERE id=? AND payment_status=? AND ticket_status=?').run(t.id,'PENDING','PENDING_PAYMENT');
-    db.prepare('UPDATE event_ticket_types SET sold=MAX(0,sold-?) WHERE id=?').run(tickets.length,type.id);
-  });
-  let paymentUrl='',paymentError='';
   try{
-    const tickets=reserve();
-    if(!isFree){
-      if(process.env.WAYCHIT_API_KEY){
-        try{
-          const r=await fetch('https://api.waychit.com/v1/payment-requests',{method:'POST',headers:{Authorization:'Bearer '+process.env.WAYCHIT_API_KEY,'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({amount:Number(type.price)*qty,description:`${qty} × ${type.name} ticket(s) — ${req.params.eventId}`,clientReference:'TICKET:'+tickets[0].id,successRedirectUrl:PUBLIC_BASE_URL+'/services.html?payment=success&ticket='+encodeURIComponent(tickets[0].code),failureRedirectUrl:PUBLIC_BASE_URL+'/services.html?payment=failed&ticket='+encodeURIComponent(tickets[0].code)})});
-          const body=await r.text();let d={};try{d=JSON.parse(body)}catch{}
-          if(r.ok&&d.paymentRequest?.waychitLaunchUrl){
-            paymentUrl=d.paymentRequest.waychitLaunchUrl;
-            db.prepare('UPDATE event_tickets SET waychit_request_id=? WHERE id IN ('+tickets.map(()=>'?').join(',')+')').run(d.paymentRequest.id,...tickets.map(t=>t.id));
-          }else paymentError=d.error?.message||d.message||'Waychit could not create a ticket payment.';
-        }catch(e){paymentUrl='';paymentError='Waychit is temporarily unavailable. Please retry; no tickets have been charged.'}
-      }else paymentError='Waychit is not configured for ticket checkout. Please contact the shop administrator.';
-      if(!paymentUrl){
-        releaseReservation(tickets);
-        backupShopData('ticket-payment-request-failed');
-        return res.status(503).json({error:paymentError});
-      }
-    }
-    backupShopData(isFree?'free-ticket-issued':'ticket-payment-request');
-    broadcastLive('tickets',{eventId:event.id,ticketIds:tickets.map(t=>t.id)});
-    broadcastLive('notifications',{type:'ticket-reservation',eventId:event.id,ticketIds:tickets.map(t=>t.id)});
-    if(isFree)return res.status(201).json({ok:true,tickets,status:'VALID',paymentUrl:'',paymentError:'',total:0,message:'Free ticket issued. It is valid for entry.'});
-    res.status(201).json({ok:true,tickets,status:'PENDING_PAYMENT',paymentUrl:paymentUrl, paymentError:'',total:Number(type.price)*qty,message:'Reservation created. Continue to Waychit to pay; tickets activate only after payment confirmation.'});
+    const tickets=reserve();backupShopData('ticket-reserved');
+    let paymentUrl='',paymentError='';
+    if(Number(type.price)>0 && process.env.WAYCHIT_API_KEY){
+      try{
+        const r=await fetch('https://api.waychit.com/v1/payment-requests',{method:'POST',headers:{Authorization:'Bearer '+process.env.WAYCHIT_API_KEY,'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({amount:Number(type.price)*qty,description:`${qty} × ${type.name} ticket — ${req.params.eventId}`,clientReference:'TICKET:'+tickets[0].id,successRedirectUrl:PUBLIC_BASE_URL+'/services.html?payment=success&ticket='+encodeURIComponent(tickets[0].code),failureRedirectUrl:PUBLIC_BASE_URL+'/services.html?payment=failed&ticket='+encodeURIComponent(tickets[0].code)})});
+        const body=await r.text();let d={};try{d=JSON.parse(body)}catch{}
+        if(r.ok&&d.paymentRequest?.waychitLaunchUrl){paymentUrl=d.paymentRequest.waychitLaunchUrl;db.prepare('UPDATE event_tickets SET waychit_request_id=? WHERE id IN ('+tickets.map(()=>'?').join(',')+')').run(d.paymentRequest.id,...tickets.map(t=>t.id))}else paymentError=d.error?.message||d.message||'Waychit could not create a ticket payment.';
+      }catch(e){paymentError='Waychit is temporarily unavailable.'}
+    }else if(Number(type.price)>0)paymentError='Waychit API is not configured for direct ticket payments.';
+    backupShopData('ticket-payment-request');broadcastLive('tickets',{eventId:event.id,ticketIds:tickets.map(t=>t.id)});broadcastLive('notifications',{type:'ticket-reservation',eventId:event.id,ticketIds:tickets.map(t=>t.id)});
+    res.status(201).json({ok:true,tickets,status:'PENDING_PAYMENT',paymentUrl,paymentError,total:Number(type.price)*qty,message:paymentUrl?'Reservation created. Continue to Waychit to pay; your ticket activates after payment confirmation.':'Reservation created, but direct online payment is not available until Waychit is configured. The ticket is not valid for entry until payment is verified.'});
   }
-  catch(e){console.error('[ticket-purchase] Reservation failed:',e);res.status(409).json({error:e.message||'Could not reserve tickets. Please refresh and retry.'})}
+  catch(e){res.status(409).json({error:e.message||'Could not reserve tickets.'})}
 });
 // Server-side QR generation avoids reliance on browser CDNs or third-party QR image services.
 app.post('/api/tickets/qr', async (req,res)=>{
@@ -1467,16 +1443,16 @@ app.post('/api/admin/events/:eventId/physical-tickets', guard, async (req,res)=>
   try{
     // Build unique codes and QR images first; do not reserve inventory unless every QR succeeds.
     const prepared=await Promise.all(Array.from({length:qty},async()=>{const id=serviceId('TKT'),code=crypto.randomBytes(24).toString('hex');return {id,code,eventTitle:event.title,ticketType:type.name,price:type.price,status:'VALID',paymentStatus:'PAID',qrDataUrl:await QRCode.toDataURL(code,{width:320,margin:2,errorCorrectionLevel:'M',type:'image/png'})}}));
-    const tx=db.transaction(()=>{const fresh=db.prepare('SELECT * FROM event_ticket_types WHERE id=? AND event_id=? AND active=1').get(type.id,event.id);if(!fresh||fresh.quantity-fresh.sold<qty)throw new Error('Not enough ticket inventory remains for this ticket type. Increase the ticket quantity first.');const ins=db.prepare(`INSERT INTO event_tickets(id,event_id,ticket_type_id,ticket_code,customer_name,customer_whatsapp,payment_status,ticket_status) VALUES(?,?,?,?,?,?,?,?)`);for(const t of prepared)ins.run(t.id,event.id,type.id,t.code,'Physical ticket batch','', 'PAID','VALID');db.prepare('UPDATE event_ticket_types SET sold=sold+? WHERE id=?').run(qty,type.id);});
+    const tx=db.transaction(()=>{const fresh=db.prepare('SELECT * FROM event_ticket_types WHERE id=? AND event_id=? AND active=1').get(type.id,event.id);if(!fresh||fresh.quantity-fresh.sold<qty)throw new Error('Not enough ticket inventory remains for this ticket type. Increase the ticket quantity first.');const ins=db.prepare(`INSERT INTO event_tickets(id,event_id,ticket_type_id,ticket_code,customer_name,customer_whatsapp,payment_status,ticket_status) VALUES(?,?,?,?,?,?,?,?)`);for(const t of prepared)ins.run(t.id,event.id,type.id,t.code,'Physical ticket batch','','PAID','VALID');db.prepare('UPDATE event_ticket_types SET sold=sold+? WHERE id=?').run(qty,type.id);});
     tx();backupShopData('physical-ticket-batch');
-    res.status(201).json({ok:true,event:event.title,ticketType:type.name,tickets:prepared,message:'Physical ticket batch generated. Tickets are marked PAID and VALID for entry; each QR code can be checked in once.'});
+    res.status(201).json({ok:true,event:event.title,ticketType:type.name,tickets:prepared,message:'Physical ticket batch generated. All physical tickets are marked PAID and VALID immediately.'});
   }catch(e){console.error('Physical ticket batch generation failed:',e.message);res.status(409).json({error:e.message||'Could not generate physical tickets.'});}
 });
 app.get('/api/admin/tickets', guard, (req,res)=>{
   const eventId=cleanText(req.query.eventId,100);
   const rows=eventId
-    ? db.prepare(`SELECT t.*,e.title AS event_title,tt.name AS ticket_type,tt.price FROM event_tickets t JOIN events e ON e.id=t.event_id JOIN event_ticket_types tt ON tt.id=t.ticket_type_id WHERE t.event_id=? AND t.customer_name<>'Physical ticket batch' ORDER BY t.created_at DESC`).all(eventId)
-    : db.prepare(`SELECT t.*,e.title AS event_title,tt.name AS ticket_type,tt.price FROM event_tickets t JOIN events e ON e.id=t.event_id JOIN event_ticket_types tt ON tt.id=t.ticket_type_id WHERE t.customer_name<>'Physical ticket batch' ORDER BY t.created_at DESC LIMIT 500`).all();
+    ? db.prepare(`SELECT t.*,e.title AS event_title,tt.name AS ticket_type,tt.price FROM event_tickets t JOIN events e ON e.id=t.event_id JOIN event_ticket_types tt ON tt.id=t.ticket_type_id WHERE t.event_id=? ORDER BY t.created_at DESC`).all(eventId)
+    : db.prepare(`SELECT t.*,e.title AS event_title,tt.name AS ticket_type,tt.price FROM event_tickets t JOIN events e ON e.id=t.event_id JOIN event_ticket_types tt ON tt.id=t.ticket_type_id ORDER BY t.created_at DESC LIMIT 500`).all();
   res.json(rows);
 });
 app.post('/api/admin/tickets/:id/verify-payment', guard, (req,res)=>{
@@ -1509,7 +1485,8 @@ app.post('/api/events/scan', (req,res)=>{
   const tx=db.transaction(()=>{
     const t=db.prepare('SELECT * FROM event_tickets WHERE ticket_code=? AND event_id=?').get(code,scanner.event_id);
     if(!t)return {ok:false,reason:'INVALID',message:'Invalid ticket for this event.'};
-    if(t.payment_status!=='PAID'||t.ticket_status!=='VALID')return {ok:false,reason:t.ticket_status==='USED'?'ALREADY_USED':'NOT_PAID',message:t.ticket_status==='USED'?'This ticket has already been used.':'Payment is not verified; do not allow entry.'};
+    if(t.ticket_status==='USED')return {ok:false,reason:'ALREADY_SCANNED',message:'ALREADY SCANNED — this ticket has already been used.',ticketId:t.id,eventId:t.event_id};
+    if(t.payment_status!=='PAID'||t.ticket_status!=='VALID')return {ok:false,reason:'NOT_PAID',message:'Payment is not verified; do not allow entry.'};
     const changed=db.prepare("UPDATE event_tickets SET ticket_status='USED',checked_in_at=CURRENT_TIMESTAMP,checked_in_by=? WHERE id=? AND ticket_status='VALID' AND payment_status='PAID'").run(scanner.staff_name,t.id);
     if(!changed.changes)return {ok:false,reason:'ALREADY_USED',message:'This ticket has already been scanned.'};
     return {ok:true,reason:'VALID',message:'VALID TICKET — ENTRY ALLOWED',ticketId:t.id,eventId:t.event_id};
