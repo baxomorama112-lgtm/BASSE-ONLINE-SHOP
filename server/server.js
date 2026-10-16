@@ -1280,13 +1280,21 @@ app.post('/api/admin/events/create', guard, (req,res)=>{
   if(!Array.isArray(b.ticketTypes)||!b.ticketTypes.length||b.ticketTypes.length>12)return res.status(400).json({error:'Add between 1 and 12 ticket types.'});
   for(const t of b.ticketTypes)if(!cleanText(t.name,60)||!Number.isInteger(Number(t.price))||Number(t.price)<0||!Number.isInteger(Number(t.quantity))||Number(t.quantity)<1)return res.status(400).json({error:'Each ticket type needs a name, non-negative Dalasi price and positive quantity.'});
   const id=serviceId('EVT'), status=b.publish===false?'PENDING':'APPROVED';
-  const tx=db.transaction(()=>{
-    db.prepare('INSERT INTO events(id,organizer_partner_id,title,description,venue,event_date,event_time,flyer_url,status,category) VALUES(?,NULL,?,?,?,?,?,?,?,?)')
-      .run(id,title,cleanText(b.description,2000),venue,date,cleanText(b.time,20),cleanText(b.flyerUrl,500),status,category);
-    const ins=db.prepare('INSERT INTO event_ticket_types(event_id,name,price,quantity) VALUES(?,?,?,?)');
-    for(const t of b.ticketTypes)ins.run(id,cleanText(t.name,60),Number(t.price),Number(t.quantity));
-  });tx();backupShopData('admin-event-created');
-  res.status(201).json({ok:true,id,status,message:status==='APPROVED'?'Event published and visible to customers.':'Event saved as pending approval.'});
+  try {
+    const tx=db.transaction(()=>{
+      db.prepare('INSERT INTO events(id,organizer_partner_id,title,description,venue,event_date,event_time,flyer_url,status,category) VALUES(?,NULL,?,?,?,?,?,?,?,?)')
+        .run(id,title,cleanText(b.description,2000),venue,date,cleanText(b.time,20),cleanText(b.flyerUrl,500),status,category);
+      const ins=db.prepare('INSERT INTO event_ticket_types(event_id,name,price,quantity) VALUES(?,?,?,?)');
+      for(const t of b.ticketTypes)ins.run(id,cleanText(t.name,60),Number(t.price),Number(t.quantity));
+    });
+    tx();backupShopData('admin-event-created');
+    broadcastLive('events',{eventId:id,created:true});
+    broadcastLive('notifications',{type:'event-created',eventId:id,title});
+    res.status(201).json({ok:true,id,status,message:status==='APPROVED'?'Event published and visible to customers.':'Event saved as pending approval.'});
+  } catch(err) {
+    console.error('[event-create] Failed to save event and ticket types:',err);
+    res.status(500).json({error:'The event could not be saved. Check the server log for [event-create], then retry. Your form should keep its entries.'});
+  }
 });
 app.get('/api/admin/events', guard, (req,res)=>{const rows=db.prepare(`SELECT e.*,p.business_name AS organizer FROM events e LEFT JOIN business_partners p ON p.id=e.organizer_partner_id ORDER BY e.created_at DESC`).all();res.json(rows.map(e=>({...e,ticketTypes:db.prepare('SELECT id,name,price,quantity,sold FROM event_ticket_types WHERE event_id=? ORDER BY id').all(e.id)})));});
 app.patch('/api/admin/events/:id', guard, (req,res)=>{

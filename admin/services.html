@@ -23,20 +23,32 @@ $('createOrganizer').onclick=async()=>{try{const j=await api('/api/events/'+enco
 $('createScanner').onclick=async()=>{try{const j=await api('/api/events/'+encodeURIComponent($('eventId').value)+'/scanner-access',{method:'POST',body:JSON.stringify({staffName:$('staffName').value})});$('scannerResult').textContent='8-DIGIT SCANNER CODE — save it now; it will not be shown again:\n'+j.token+'\nEvent: '+j.eventId+'\nScanner page: '+location.origin+'/scanner'}catch(e){$('scannerResult').textContent=e.message}};
 $('verifyTicket').onclick=async()=>{try{const j=await api('/api/admin/tickets/'+encodeURIComponent($('ticketId').value)+'/verify-payment',{method:'POST',body:'{}'});$('ticketResult').textContent='Payment verified. Ticket is now VALID. Code: '+j.ticket.ticket_code;await loadTickets();await refresh()}catch(e){$('ticketResult').textContent=e.message}};
 function addTicketType(name='',price='',quantity=''){
- const row=document.createElement('div');row.className='row card';
- const n=document.createElement('input');n.placeholder='Ticket name (e.g. Regular)';n.value=name;n.required=true;
- const p=document.createElement('input');p.type='number';p.min='0';p.step='1';p.placeholder='Price (D)';p.value=price;p.required=true;
- const q=document.createElement('input');q.type='number';q.min='1';q.step='1';q.placeholder='Quantity';q.value=quantity;q.required=true;
- const rm=el('button','Remove');rm.type='button';rm.className='secondary';rm.onclick=()=>row.remove();
- row.append(n,p,q,rm);row.dataset.ticketType='1';$('ticketTypeRows').append(row);
+ const row=document.createElement('div');row.className='row card';row.dataset.ticketType='1';
+ const n=document.createElement('input');n.placeholder='Ticket name (e.g. Regular)';n.value=name;n.required=true;n.setAttribute('aria-label','Ticket type name');
+ const p=document.createElement('input');p.type='number';p.min='0';p.step='1';p.placeholder='Price (D)';p.value=price;p.required=true;p.setAttribute('aria-label','Ticket price in Dalasi');
+ const q=document.createElement('input');q.type='number';q.min='1';q.step='1';q.placeholder='Quantity';q.value=quantity;q.required=true;q.setAttribute('aria-label','Ticket quantity');
+ const rm=el('button','Remove');rm.type='button';rm.className='secondary';rm.onclick=()=>{row.remove();if(!$('ticketTypeRows').querySelector('[data-ticket-type]'))addTicketType('Regular',0,100)};
+ row.append(n,p,q,rm);$('ticketTypeRows').append(row);return row;
 }
-$('addTicketType').onclick=()=>addTicketType();addTicketType('Regular',0,100);$('flyerFile').addEventListener('change',()=>{const box=$('flyerPreview');box.replaceChildren();const file=$('flyerFile').files[0];if(file){const img=document.createElement('img');img.alt='Flyer preview';img.src=URL.createObjectURL(file);img.style.cssText='max-width:220px;max-height:220px;object-fit:contain;border-radius:12px';box.append(img)}});
-$('createEventForm').onsubmit=async e=>{
- e.preventDefault();const out=$('createEventResult');out.textContent='Creating event…';
- const f=new FormData(e.currentTarget), rows=[...$('ticketTypeRows').querySelectorAll('[data-ticket-type]')];
- const ticketTypes=rows.map(r=>{const i=r.querySelectorAll('input');return {name:i[0].value,price:Number(i[1].value),quantity:Number(i[2].value)}});
- try{let flyerUrl=f.get('flyerUrl')||'';const file=$('flyerFile').files[0];if(file){out.textContent='Uploading flyer…';const fd=new FormData();fd.append('flyer',file);const up=await fetch('/api/admin/event-flyer',{method:'POST',headers:{Authorization:'Bearer '+token},body:fd});const uj=await up.json();if(!up.ok)throw Error(uj.error||'Flyer upload failed');flyerUrl=uj.url;}
- const j=await api('/api/admin/events/create',{method:'POST',body:JSON.stringify({title:f.get('title'),category:f.get('category'),date:f.get('date'),time:f.get('time'),venue:f.get('venue'),description:f.get('description'),flyerUrl,publish:f.has('publish'),ticketTypes})});out.textContent=j.message+' Event saved. Select it from the event dropdowns below.';$('createEventForm').reset();$('ticketTypeRows').replaceChildren();addTicketType('Regular',0,100);$('flyerPreview').replaceChildren();await refresh()}catch(err){out.textContent=err.message}
-};
+$('addTicketType').addEventListener('click',()=>{addTicketType('','',100);$('createEventResult').textContent='Ticket type added. Enter its name, price and quantity.'});
+addTicketType('Regular',0,100);
+$('flyerFile').addEventListener('change',()=>{const box=$('flyerPreview');box.replaceChildren();const file=$('flyerFile').files[0];if(!file)return;if(file.size>8*1024*1024){$('flyerFile').value='';$('createEventResult').textContent='Flyer is too large. Choose an image under 8 MB.';return}const img=document.createElement('img');img.alt='Flyer preview';img.src=URL.createObjectURL(file);img.style.cssText='max-width:320px;max-height:220px;object-fit:contain;border-radius:12px;border:1px solid #dbe3f0';box.append(img)});
+$('createEventForm').addEventListener('submit',async e=>{
+ e.preventDefault();const form=e.currentTarget,out=$('createEventResult'),submit=form.querySelector('button[type="submit"]');if(submit.disabled)return;
+ const f=new FormData(form),rows=[...$('ticketTypeRows').querySelectorAll('[data-ticket-type]')];
+ const ticketTypes=rows.map(r=>{const i=r.querySelectorAll('input');return {name:i[0].value.trim(),price:Number(i[1].value),quantity:Number(i[2].value)}});
+ const invalid=ticketTypes.findIndex(t=>!t.name||!Number.isInteger(t.price)||t.price<0||!Number.isInteger(t.quantity)||t.quantity<1);
+ if(!ticketTypes.length||invalid!==-1){out.textContent=invalid!==-1?`Ticket type ${invalid+1}: enter a name, a whole-number price (D0 or more), and quantity of at least 1.`:'Add at least one ticket type.';return}
+ submit.disabled=true;submit.textContent='Saving event…';out.textContent='Saving event details and ticket types…';
+ try{
+  let flyerUrl=String(f.get('flyerUrl')||'');const file=$('flyerFile').files[0];
+  if(file){out.textContent='Uploading event flyer…';const fd=new FormData();fd.append('flyer',file);const up=await fetch('/api/admin/event-flyer',{method:'POST',headers:{Authorization:'Bearer '+token},body:fd});let uj={};try{uj=await up.json()}catch{}if(!up.ok)throw Error(uj.error||`Flyer upload failed (${up.status}). Your event details are still on the form.`);flyerUrl=uj.url||'';if(!flyerUrl)throw Error('Flyer upload returned no image URL. Please retry.')}
+  const j=await api('/api/admin/events/create',{method:'POST',body:JSON.stringify({title:String(f.get('title')||'').trim(),category:f.get('category'),date:f.get('date'),time:f.get('time'),venue:String(f.get('venue')||'').trim(),description:String(f.get('description')||'').trim(),flyerUrl,publish:f.has('publish'),ticketTypes})});
+  out.textContent=`✓ ${j.message||'Event created successfully.'} Event ID: ${j.id||'saved'}.`;
+  await refresh();if(j.id){$('physicalEventId').value=j.id;$('eventId').value=j.id;$('organizerEventId').value=j.id;const created=adminEvents.find(x=>x.id===j.id);populateTicketTypes(created);}
+  form.reset();$('ticketTypeRows').replaceChildren();addTicketType('Regular',0,100);$('flyerPreview').replaceChildren();
+ }catch(err){out.textContent='Could not save event: '+(err?.message||'Unknown error')+' Your form entries have been kept so you can correct the issue and retry.'}
+ finally{submit.disabled=false;submit.textContent='Create event'}
+});
 showLogin();if(token){refresh();loadTickets();setInterval(()=>{if(token&&!document.hidden){refresh();loadTickets(true)}},7000)}
 </script></body></html>

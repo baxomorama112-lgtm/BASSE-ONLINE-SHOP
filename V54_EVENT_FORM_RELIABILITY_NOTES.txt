@@ -1,0 +1,16 @@
+BASSE ONLINE SHOP V54 — EVENT FORM RELIABILITY PATCH
+
+Changes based on the uploaded V53 source:
+- Reworked the Create Event form handler to explicitly add/remove ticket type rows, validate every row before submission, prevent duplicate submissions, and keep entered values when an API request fails.
+- Added an 8 MB flyer upload limit and clearer upload/save errors; a selected flyer preview is shown before saving.
+- On successful event creation, refreshes event records and selects the new event in the scanner/physical-ticket/organizer selectors.
+- Added server-side error logging around the event + ticket-type database transaction and emits live events/notification signals after a successful create.
+- Kept the existing QR/PDF generation, Waychit checkout integration, and eight-digit scanner access implementation intact rather than faking payment confirmation.
+
+Validation performed:
+- `node --check server/server.js` passed.
+- Extracted inline JavaScript from admin/services.html and `node --check` passed.
+
+Important live-environment note:
+- This source archive can be syntax-checked here, but the complete app was not run against your production SQLite database, Render environment, or Waychit account. Do a test event in a staging deployment before replacing production files.
+- Online payment must only become PAID after a valid Waychit response/webhook. The admin's manual payment action remains for independently confirmed cash/manual payments; it must not be auto-approved simply because a ticket was generated.
