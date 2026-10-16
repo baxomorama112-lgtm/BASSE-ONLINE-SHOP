@@ -1289,6 +1289,22 @@ app.post('/api/admin/events/create', guard, (req,res)=>{
   res.status(201).json({ok:true,id,status,message:status==='APPROVED'?'Event published and visible to customers.':'Event saved as pending approval.'});
 });
 app.get('/api/admin/events', guard, (req,res)=>{const rows=db.prepare(`SELECT e.*,p.business_name AS organizer FROM events e LEFT JOIN business_partners p ON p.id=e.organizer_partner_id ORDER BY e.created_at DESC`).all();res.json(rows.map(e=>({...e,ticketTypes:db.prepare('SELECT id,name,price,quantity,sold FROM event_ticket_types WHERE event_id=? ORDER BY id').all(e.id)})));});
+app.patch('/api/admin/events/:id', guard, (req,res)=>{
+  const b=req.body||{}, title=cleanText(b.title,160), venue=cleanText(b.venue,200), date=cleanText(b.date,20), category=cleanText(b.category,40);
+  const allowed=['Music','Football','Community Event','Gym','Trade','Other'];
+  if(!title||!venue||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date)||!allowed.includes(category))return res.status(400).json({error:'Enter event title, category, venue and a valid date.'});
+  const r=db.prepare('UPDATE events SET title=?,description=?,venue=?,event_date=?,event_time=?,flyer_url=?,category=? WHERE id=?').run(title,cleanText(b.description,2000),venue,date,cleanText(b.time,20),cleanText(b.flyerUrl,500),category,req.params.id);
+  if(!r.changes)return res.status(404).json({error:'Event not found.'});
+  backupShopData('event-details-updated');broadcastLive('events',{eventId:req.params.id,updated:true});res.json({ok:true,message:'Event details saved.'});
+});
+app.post('/api/admin/events/:id/ticket-types', guard, (req,res)=>{
+  const event=db.prepare('SELECT id FROM events WHERE id=?').get(req.params.id), b=req.body||{}, name=cleanText(b.name,60), price=Number(b.price), quantity=Number(b.quantity);
+  const count=db.prepare('SELECT COUNT(*) AS n FROM event_ticket_types WHERE event_id=? AND active=1').get(req.params.id).n;
+  if(!event)return res.status(404).json({error:'Event not found.'});
+  if(count>=12)return res.status(400).json({error:'This event already has the maximum of 12 ticket types.'});
+  if(!name||!Number.isInteger(price)||price<0||!Number.isInteger(quantity)||quantity<1)return res.status(400).json({error:'Enter a ticket name, price in Dalasi and quantity.'});
+  const info=db.prepare('INSERT INTO event_ticket_types(event_id,name,price,quantity) VALUES(?,?,?,?)').run(req.params.id,name,price,quantity);backupShopData('event-ticket-type-added');res.status(201).json({ok:true,id:info.lastInsertRowid,message:'Ticket type added.'});
+});
 app.patch('/api/admin/events/:id/status', guard, (req,res)=>{
   const status=cleanText(req.body.status,20).toUpperCase();
   if(!['APPROVED','REJECTED','CANCELLED'].includes(status))return res.status(400).json({error:'Invalid event status.'});
@@ -1397,13 +1413,13 @@ app.post('/api/events/:eventId/scanner-access', guard, (req,res)=>{
   const event=db.prepare('SELECT id FROM events WHERE id=?').get(req.params.eventId);
   const name=cleanText(req.body.staffName,100);
   if(!event||!name)return res.status(400).json({error:'Choose an event and enter scanner staff name.'});
-  const token=crypto.randomBytes(32).toString('hex'), hash=crypto.createHash('sha256').update(token).digest('hex');
+  let token=null,hash='';for(let attempt=0;attempt<30;attempt++){const candidate=String(crypto.randomInt(10000000,100000000));const candidateHash=crypto.createHash('sha256').update(candidate).digest('hex');if(!db.prepare('SELECT 1 FROM event_scanners WHERE scanner_token_hash=?').get(candidateHash)){token=candidate;hash=candidateHash;break;}}if(!token)return res.status(500).json({error:'Could not create a unique scanner code. Please try again.'});
   db.prepare('INSERT INTO event_scanners(event_id,staff_name,scanner_token_hash) VALUES(?,?,?)').run(event.id,name,hash);
   backupShopData('scanner-created');res.status(201).json({ok:true,staffName:name,token,eventId:event.id,message:'Copy this scanner token to the staff device securely. It is shown only once.'});
 });
 app.post('/api/events/scan', (req,res)=>{
   const token=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'').trim();
-  if(token.length<32)return res.status(401).json({error:'Scanner sign-in required.'});
+  if(!/^\d{8}$/.test(token))return res.status(401).json({error:'Enter the 8-digit scanner access code.'});
   const hash=crypto.createHash('sha256').update(token).digest('hex');
   const scanner=db.prepare('SELECT * FROM event_scanners WHERE scanner_token_hash=? AND active=1').get(hash);
   if(!scanner)return res.status(401).json({error:'Scanner access is invalid or disabled.'});
