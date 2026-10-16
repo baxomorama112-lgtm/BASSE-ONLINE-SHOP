@@ -1,4 +1,5 @@
 const express=require("express"),Database=require("better-sqlite3"),multer=require("multer"),compression=require("compression"),path=require("path"),crypto=require("crypto"),fs=require("fs");
+const QRCode=require("qrcode");
 const app=express(),PORT=process.env.PORT||3000,ROOT=__dirname,DATA_DIR=process.env.DATA_DIR||path.join(ROOT,"data");
 app.use(compression({threshold:1024}));
 const PUBLIC_BASE_URL=(process.env.PUBLIC_BASE_URL||"https://basseonlineshop.com").replace(/\/$/,"");
@@ -884,26 +885,42 @@ app.patch("/api/admin/orders/:id/status",guard,(req,res)=>{
 });
 app.get("/api/payment-config",(req,res)=>res.json({configured:!!process.env.WAYCHIT_API_KEY,publicBaseUrl:PUBLIC_BASE_URL,staticFallback:true,returnUrl:PUBLIC_BASE_URL+"/payment-return",automaticReturnSupported:!!process.env.WAYCHIT_API_KEY}));
 app.post("/api/waychit/webhook",(req,res)=>{
-  let sig=req.headers["waychit-signature"],secret=process.env.WAYCHIT_WEBHOOK_SECRET,raw=req.rawBody||"";
+  // Never trust a browser return URL for payment. Only a valid, recent provider signature
+  // is allowed to activate tickets or orders.
+  const sig=req.headers["waychit-signature"], secret=process.env.WAYCHIT_WEBHOOK_SECRET, raw=req.rawBody||"";
   if(!sig||!secret||!raw)return res.status(400).send("Webhook not configured");
   try{
-    let parts=String(sig).split(","),t=parts.find(x=>x.trim().startsWith("t="))?.trim().split("=")[1],sigs=parts.filter(x=>x.trim().startsWith("v1=")).map(x=>x.trim().split("=")[1]);
-    if(!t||!sigs.length||Math.abs(Date.now()/1000-Number(t))>300)return res.status(400).send("Invalid signature");
-    let expected=crypto.createHmac("sha256",secret).update(`${t}.${raw}`).digest("hex");
-    if(!sigs.includes(expected))return res.status(400).send("Invalid signature");
-    let e=JSON.parse(raw);
-    let ref=e.paymentRequest?.clientReference||e.paymentSession?.clientReference||e.data?.clientReference;
-    if((e.type==="payment.request.completed"||e.type==="payment.session.completed")&&ref){
-      if(String(ref).startsWith('TICKET:')){
-        const ticketId=String(ref).slice(7);
-        const ticket=db.prepare("SELECT * FROM event_tickets WHERE id=?").get(ticketId);
-        if(ticket){db.prepare("UPDATE event_tickets SET payment_status='PAID',ticket_status='VALID' WHERE id=? AND payment_status!='PAID'").run(ticketId);backupShopData("ticket-waychit-payment");broadcastLive("tickets",{ticketId,eventId:ticket.event_id,paymentStatus:'PAID'});broadcastLive("notifications",{type:'ticket-payment',ticketId,eventId:ticket.event_id});}
-      } else {
-        const group=db.prepare("SELECT payment_group_id FROM orders WHERE id=?").get(ref)?.payment_group_id; if(group) db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE payment_group_id=? AND payment_status!='REFUNDED'").run(group); else db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE id=? AND payment_status!='REFUNDED'").run(ref); const paidOrders=group?db.prepare("SELECT * FROM orders WHERE payment_group_id=?").all(group):db.prepare("SELECT * FROM orders WHERE id=?").all(ref); for(const po of paidOrders){notifyCustomerOrder(po,"💳 PAYMENT CONFIRMED",`Payment for order #${po.id} is confirmed. Your order is now being processed.`);} backupShopData("webhook-payment");broadcastLive("orders",{orderId:ref,orderGroupId:group||null});broadcastLive("notifications",{orderId:ref,orderGroupId:group||null});
+    const parts=String(sig).split(","), t=parts.find(x=>x.trim().startsWith("t="))?.trim().split("=")[1], sigs=parts.filter(x=>x.trim().startsWith("v1=")).map(x=>x.trim().split("=")[1]);
+    if(!t||!sigs.length||!Number.isFinite(Number(t))||Math.abs(Date.now()/1000-Number(t))>300)return res.status(400).send("Invalid signature");
+    const expected=crypto.createHmac("sha256",secret).update(`${t}.${raw}`).digest("hex");
+    const valid=sigs.some(candidate=>{try{return crypto.timingSafeEqual(Buffer.from(candidate,'hex'),Buffer.from(expected,'hex'))}catch{return false}});
+    if(!valid)return res.status(400).send("Invalid signature");
+    const e=JSON.parse(raw), data=e.data||e.payload||e;
+    const type=String(e.type||e.event||data.type||'').toLowerCase();
+    const completed=/completed|succeeded|successful|paid/.test(type);
+    if(completed){
+      const pr=e.paymentRequest||data.paymentRequest||data.payment_request||{};
+      const ps=e.paymentSession||data.paymentSession||data.payment_session||{};
+      const ref=pr.clientReference||pr.client_reference||ps.clientReference||ps.client_reference||data.clientReference||data.client_reference||e.clientReference||e.client_reference||'';
+      const requestId=pr.id||ps.id||data.paymentRequestId||data.payment_request_id||'';
+      let ticket=null;
+      if(String(ref).startsWith('TICKET:')) ticket=db.prepare("SELECT * FROM event_tickets WHERE id=?").get(String(ref).slice(7));
+      if(!ticket&&requestId)ticket=db.prepare("SELECT * FROM event_tickets WHERE waychit_request_id=?").get(String(requestId));
+      if(ticket){
+        const changed=db.prepare("UPDATE event_tickets SET payment_status='PAID',ticket_status=CASE WHEN ticket_status='PENDING_PAYMENT' THEN 'VALID' ELSE ticket_status END WHERE id=? AND payment_status!='PAID'").run(ticket.id);
+        if(changed.changes){backupShopData("ticket-waychit-payment");broadcastLive("tickets",{ticketId:ticket.id,eventId:ticket.event_id,paymentStatus:'PAID'});broadcastLive("notifications",{type:'ticket-payment',ticketId:ticket.id,eventId:ticket.event_id});}
+      }else if(ref&&!String(ref).startsWith('TICKET:')){
+        const group=db.prepare("SELECT payment_group_id FROM orders WHERE id=?").get(ref)?.payment_group_id;
+        if(group)db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE payment_group_id=? AND payment_status!='REFUNDED'").run(group);
+        else db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE id=? AND payment_status!='REFUNDED'").run(ref);
+        const paidOrders=group?db.prepare("SELECT * FROM orders WHERE payment_group_id=?").all(group):db.prepare("SELECT * FROM orders WHERE id=?").all(ref);
+        for(const po of paidOrders)notifyCustomerOrder(po,"💳 PAYMENT CONFIRMED",`Payment for order #${po.id} is confirmed. Your order is now being processed.`);
+        backupShopData("webhook-payment");broadcastLive("orders",{orderId:ref,orderGroupId:group||null});broadcastLive("notifications",{orderId:ref,orderGroupId:group||null});
       }
     }
+    // Acknowledge validly signed non-completion events too, so the provider does not retry forever.
     res.sendStatus(200);
-  }catch(e){res.status(400).send("Bad webhook")}
+  }catch(err){console.error('[waychit-webhook] Processing failed:',err.message);res.status(400).send("Bad webhook")}
 });
 
 
@@ -1374,6 +1391,19 @@ app.post('/api/events/:eventId/tickets', async (req,res)=>{
   }
   catch(e){res.status(409).json({error:e.message||'Could not reserve tickets.'})}
 });
+// Server-side QR generation avoids reliance on browser CDNs or third-party QR image services.
+app.post('/api/tickets/qr', async (req,res)=>{
+  const code=cleanText(req.body?.code,100);
+  if(!code)return res.status(400).json({error:'Ticket code is required.'});
+  try{
+    const dataUrl=await QRCode.toDataURL(code,{width:320,margin:2,errorCorrectionLevel:'M',type:'image/png'});
+    res.set('Cache-Control','no-store');
+    res.json({ok:true,dataUrl});
+  }catch(e){
+    console.error('Ticket QR generation failed:',e.message);
+    res.status(500).json({error:'The server could not generate this ticket QR code.'});
+  }
+});
 app.get('/api/tickets/status/:code',(req,res)=>{
   const t=db.prepare(`SELECT t.id,t.ticket_code,t.payment_status,t.ticket_status,t.checked_in_at,e.title AS event_title,tt.name AS ticket_type,tt.price FROM event_tickets t JOIN events e ON e.id=t.event_id JOIN event_ticket_types tt ON tt.id=t.ticket_type_id WHERE t.ticket_code=?`).get(cleanText(req.params.code,100));
   if(!t)return res.status(404).json({error:'Ticket not found.'});
@@ -1389,15 +1419,20 @@ app.get('/api/admin/events/summary', guard, (req,res)=>{
     GROUP BY e.id ORDER BY e.event_date DESC`).all();
   res.json({totals:{events:events.length,published:events.filter(e=>e.status==='APPROVED').length,generated:events.reduce((n,e)=>n+Number(e.tickets_generated||0),0),paid:events.reduce((n,e)=>n+Number(e.tickets_paid||0),0),checkedIn:events.reduce((n,e)=>n+Number(e.tickets_checked_in||0),0)},events});
 });
-app.post('/api/admin/events/:eventId/physical-tickets', guard, (req,res)=>{
+app.post('/api/admin/events/:eventId/physical-tickets', guard, async (req,res)=>{
   const event=db.prepare('SELECT id,title,status FROM events WHERE id=?').get(req.params.eventId);
   const typeId=Number(req.body.ticketTypeId), qty=Number(req.body.quantity);
   if(!event)return res.status(404).json({error:'Event not found.'});
   if(!Number.isInteger(qty)||qty<1||qty>300)return res.status(400).json({error:'Generate between 1 and 300 tickets per print batch.'});
   const type=db.prepare('SELECT * FROM event_ticket_types WHERE id=? AND event_id=? AND active=1').get(typeId,event.id);
   if(!type)return res.status(404).json({error:'Choose a valid ticket type for this event.'});
-  const tx=db.transaction(()=>{const fresh=db.prepare('SELECT * FROM event_ticket_types WHERE id=?').get(type.id);if(!fresh||fresh.quantity-fresh.sold<qty)throw new Error('Not enough ticket inventory remains for this ticket type. Increase the ticket quantity first.');const ins=db.prepare(`INSERT INTO event_tickets(id,event_id,ticket_type_id,ticket_code,customer_name,customer_whatsapp) VALUES(?,?,?,?,?,?)`);const tickets=[];for(let i=0;i<qty;i++){const id=serviceId('TKT'),code=crypto.randomBytes(24).toString('hex');ins.run(id,event.id,type.id,code,'Physical ticket batch','');tickets.push({id,code,eventTitle:event.title,ticketType:type.name,price:type.price,status:'PENDING_PAYMENT'});}db.prepare('UPDATE event_ticket_types SET sold=sold+? WHERE id=?').run(qty,type.id);return tickets;});
-  try{const tickets=tx();backupShopData('physical-ticket-batch');res.status(201).json({ok:true,event:event.title,ticketType:type.name,tickets,message:'Physical ticket batch generated. Tickets remain invalid for entry until payment is verified.'});}catch(e){res.status(409).json({error:e.message||'Could not generate physical tickets.'});}
+  try{
+    // Build unique codes and QR images first; do not reserve inventory unless every QR succeeds.
+    const prepared=await Promise.all(Array.from({length:qty},async()=>{const id=serviceId('TKT'),code=crypto.randomBytes(24).toString('hex');return {id,code,eventTitle:event.title,ticketType:type.name,price:type.price,status:'PENDING_PAYMENT',qrDataUrl:await QRCode.toDataURL(code,{width:320,margin:2,errorCorrectionLevel:'M',type:'image/png'})}}));
+    const tx=db.transaction(()=>{const fresh=db.prepare('SELECT * FROM event_ticket_types WHERE id=? AND event_id=? AND active=1').get(type.id,event.id);if(!fresh||fresh.quantity-fresh.sold<qty)throw new Error('Not enough ticket inventory remains for this ticket type. Increase the ticket quantity first.');const ins=db.prepare(`INSERT INTO event_tickets(id,event_id,ticket_type_id,ticket_code,customer_name,customer_whatsapp) VALUES(?,?,?,?,?,?)`);for(const t of prepared)ins.run(t.id,event.id,type.id,t.code,'Physical ticket batch','');db.prepare('UPDATE event_ticket_types SET sold=sold+? WHERE id=?').run(qty,type.id);});
+    tx();backupShopData('physical-ticket-batch');
+    res.status(201).json({ok:true,event:event.title,ticketType:type.name,tickets:prepared,message:'Physical ticket batch generated with QR codes. Tickets remain invalid for entry until payment is verified.'});
+  }catch(e){console.error('Physical ticket batch generation failed:',e.message);res.status(409).json({error:e.message||'Could not generate physical tickets.'});}
 });
 app.get('/api/admin/tickets', guard, (req,res)=>{
   const eventId=cleanText(req.query.eventId,100);
