@@ -48,6 +48,7 @@
 .design-preview[data-design="bold"] .mini-ticket{background:#fff7df;border:2px solid #b98b27;color:#172344}
 .design-preview[data-design="flyer"] .mini-ticket{background:linear-gradient(110deg,#0b1b4b,#3b2470);color:#fff;border:1px dashed #d8c9ff}
 .design-preview[data-design="flyer"] .mini-ticket:after{content:"FLYER AREA";position:absolute;left:7px;bottom:5px;width:58%;height:22px;border:1px dashed #fff9;display:grid;place-items:center;font-size:7px;color:#fff9}
+.preview-flyer-area{position:absolute;left:7px;bottom:5px;width:58%;height:22px;border:1px dashed currentColor;display:grid;place-items:center;font-size:7px;overflow:hidden;opacity:.95}.preview-flyer-area img{width:100%;height:100%;object-fit:cover}.design-preview[data-design="flyer"] .mini-ticket:after{content:none}
 #physicalResult,#ticketResult{overflow-wrap:anywhere}
 .wide{grid-column:1/-1}
 @media(max-width:760px){.eventrow .eventhead{grid-template-columns:minmax(0,1fr) auto}.eventrow .eventhead .event-meta{grid-column:1/-1}.design-previews{grid-template-columns:1fr}.design-preview .mini-ticket{height:100px}.eventrow details .ticket-inventory{grid-template-columns:1fr}}
@@ -70,8 +71,8 @@ async function api(url,opts={}){const r=await fetch(url,{...opts,headers:{...hea
 function showLogin(){ $('login').classList.toggle('hidden',!!token);$('app').classList.toggle('hidden',!token)}
 function el(tag,text){const n=document.createElement(tag);n.textContent=text;return n}
 let adminEvents=[];function populateTicketTypes(event){const sel=$('physicalTypeId');sel.replaceChildren(new Option('Choose ticket type',''));(event?.ticketTypes||[]).forEach(t=>sel.add(new Option(`${t.name} — D${Number(t.price).toLocaleString()} (${Math.max(0,t.quantity-t.sold)} left)`,String(t.id))));}
-function fillEventSelectors(rows){adminEvents=rows;for(const id of ['eventId','physicalEventId','organizerEventId','ticketsEventFilter']){const sel=$(id),old=sel.value;sel.replaceChildren(new Option('Select an event',''));rows.forEach(e=>sel.add(new Option(`${e.title} · ${e.category||'Event'} · ${e.event_date||''}`,e.id)));if(rows.some(e=>e.id===old))sel.value=old;}const current=rows.find(e=>e.id===$('physicalEventId').value);populateTicketTypes(current);}
-$('physicalEventId').addEventListener('change',()=>populateTicketTypes(adminEvents.find(e=>e.id===$('physicalEventId').value)));
+function fillEventSelectors(rows){adminEvents=rows;for(const id of ['eventId','physicalEventId','organizerEventId','ticketsEventFilter']){const sel=$(id),old=sel.value;sel.replaceChildren(new Option('Select an event',''));rows.forEach(e=>sel.add(new Option(`${e.title} · ${e.category||'Event'} · ${e.event_date||''}`,e.id)));if(rows.some(e=>e.id===old))sel.value=old;}const current=rows.find(e=>e.id===$('physicalEventId').value);populateTicketTypes(current);renderTicketDesignPreviews();}
+$('physicalEventId').addEventListener('change',()=>{populateTicketTypes(adminEvents.find(e=>e.id===$('physicalEventId').value));renderTicketDesignPreviews()});$('physicalTypeId').addEventListener('change',renderTicketDesignPreviews);
 async function signIn(){try{const r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$('email').value,password:$('password').value})});const j=await r.json();if(!r.ok)throw Error(j.error||'Login failed');token=j.token;localStorage.setItem('basseAdminToken',token);$('loginResult').textContent='Signed in.';showLogin();await refresh()}catch(e){$('loginResult').textContent=e.message}}
 async function refresh(){if(!token)return;const box=$('events');
 /* Return shared event tools to the main page before rebuilding the event list. */
@@ -84,10 +85,38 @@ const openEvent=el('button','Open event');openEvent.className='event-open';openE
 const quick=el('div','');quick.className='event-quick-actions';const dots=el('button','⋮');dots.className='secondary';dots.title='Event actions';dots.type='button';quick.append(openEvent,dots);head.append(quick);
 const openDetails=()=>{details.open=true;['physicalEventId','eventId','organizerEventId','ticketsEventFilter'].forEach(id=>{const sel=$(id);if(sel)sel.value=String(row.id)});populateTicketTypes(row);const physicalCard=$('generatePhysical')?.closest('section.card');const recordsCard=$('tickets')?.closest('section.card');if(physicalCard){physicalCard.classList.remove('hidden');details.append(physicalCard)}if(recordsCard){recordsCard.classList.remove('hidden');details.append(recordsCard)}const designBox=$('ticketDesignPreviews');if(designBox)designBox.classList.add('wide');window.__basseSelectedEventId=String(row.id);loadTickets();details.scrollIntoView({behavior:'smooth',block:'start'});};
 openEvent.onclick=openDetails;dots.onclick=()=>{if(details.open){details.open=false}else openDetails()};
-summary.addEventListener('click',()=>{setTimeout(()=>{if(details.open)openDetails()},0)});
+summary.addEventListener('click',()=>{setTimeout(()=>{if(details.open){window.__basseSelectedEventId=String(row.id);['physicalEventId','eventId','organizerEventId','ticketsEventFilter'].forEach(id=>{const sel=$(id);if(sel)sel.value=String(row.id)});populateTicketTypes(row);renderTicketDesignPreviews()}},0)});
 box.append(div)})}catch(e){box.append(el('p',e.message))}try{const summary=await api('/api/admin/events/summary');const vals=[summary.totals.events,summary.totals.published,summary.totals.generated,summary.totals.paid,summary.totals.checkedIn];document.querySelectorAll('#eventStats .stat strong').forEach((n,i)=>n.textContent=Number(vals[i]||0).toLocaleString())}catch(e){}}
+async function refreshStatsOnly(){if(!token)return;try{const summary=await api('/api/admin/events/summary');const vals=[summary.totals.events,summary.totals.published,summary.totals.generated,summary.totals.paid,summary.totals.checkedIn];document.querySelectorAll('#eventStats .stat strong').forEach((n,i)=>n.textContent=Number(vals[i]||0).toLocaleString())}catch(e){/* keep the last known dashboard figures during temporary network issues */}}
 $('addEventToggle').onclick=()=>{const card=$('createEventCard');card.classList.toggle('hidden');$('addEventToggle').textContent=card.classList.contains('hidden')?'+ Add event':'Close event form';if(!card.classList.contains('hidden'))card.scrollIntoView({behavior:'smooth',block:'start'})};
-function renderTicketDesignPreviews(){const box=$('ticketDesignPreviews');if(!box)return;box.replaceChildren();const designs=[['classic','Design 1','Mask Party style'],['bold','Design 2','Premium ticket'],['flyer','Design 3','Reserved flyer space']];designs.forEach(([value,name,hint])=>{const b=el('button','');b.type='button';b.className='design-preview'+(($('ticketDesign').value===value)?' selected':'');b.dataset.design=value;const sample=el('div','');sample.className='mini-ticket';sample.append(el('small','DJ BAXO ENTERTAINMENT · ADMIT ONE'),el('b','MASK PARTY 2026'),el('small','ADVANCE · D200 · BASSE YOUTH CENTER'),el('small','NO REFUND · PRESENT AT ENTRANCE'));const qr=el('span','');qr.className='fakeqr';sample.append(qr);const nameNode=el('span',name);nameNode.className='preview-name';b.append(sample,nameNode);const hintNode=el('span',hint);hintNode.className='preview-hint';b.append(hintNode);b.onclick=()=>{$('ticketDesign').value=value;renderTicketDesignPreviews()};box.append(b)})}
+function renderTicketDesignPreviews(){
+ const box=$('ticketDesignPreviews');if(!box)return;
+ box.replaceChildren();
+ const event=adminEvents.find(e=>String(e.id)===String($('physicalEventId')?.value));
+ const ticket=(event?.ticketTypes||[]).find(t=>String(t.id)===String($('physicalTypeId')?.value));
+ const title=event?.title||'Your event title';
+ const category=(ticket?.name||'Ticket type').toUpperCase();
+ const price=ticket?'D'+Number(ticket.price||0).toLocaleString():'Ticket price';
+ const venue=event?.venue||'Event venue';
+ const date=event?.event_date||'Event date';
+ const designs=[['classic','Design 1','Professional admission ticket'],['bold','Design 2','Premium ticket'],['flyer','Design 3','Reserved flyer space']];
+ designs.forEach(([value,name,hint])=>{
+  const b=el('button','');b.type='button';b.className='design-preview'+(($('ticketDesign').value===value)?' selected':'');b.dataset.design=value;
+  const sample=el('div','');sample.className='mini-ticket';
+  sample.append(el('small','BASSE ONLINE SHOP · ADMIT ONE'),el('b',title),el('small',category+' · '+price+' · '+venue),el('small',date+' · NO REFUND · PRESENT AT ENTRANCE'));
+  const qr=el('span','');qr.className='fakeqr';sample.append(qr);
+  if(value==='flyer'){
+   const flyerBox=el('div','');flyerBox.className='preview-flyer-area';
+   if(event?.flyer_url){const img=document.createElement('img');img.src=event.flyer_url;img.alt='Selected event flyer preview';img.onerror=()=>{img.remove();flyerBox.textContent='FLYER SPACE'};flyerBox.append(img)}
+   else flyerBox.textContent='FLYER SPACE';
+   sample.append(flyerBox);
+  }
+  const nameNode=el('span',name);nameNode.className='preview-name';b.append(sample,nameNode);
+  const hintNode=el('span',hint);hintNode.className='preview-hint';b.append(hintNode);
+  b.onclick=()=>{$('ticketDesign').value=value;renderTicketDesignPreviews()};
+  box.append(b);
+ });
+}
 $('ticketDesign').addEventListener('change',renderTicketDesignPreviews);renderTicketDesignPreviews();
 $('loginBtn').onclick=signIn;$('refresh').onclick=refresh;$('ticketsEventFilter')?.addEventListener('change',()=>loadTickets());
 let lastTicketIds=null;async function loadTickets(silent=false){const box=$('tickets');try{const eventId=$('ticketsEventFilter')?.value||'';const rows=await api('/api/admin/tickets'+(eventId?'?eventId='+encodeURIComponent(eventId):''));const ids=new Set(rows.map(t=>t.id));if(lastTicketIds&&silent){const fresh=rows.filter(t=>!lastTicketIds.has(t.id));if(fresh.length){const alert=$('liveAlert');alert.textContent='🔔 '+fresh.length+' new ticket reservation(s) received. Ticket figures updated automatically.';alert.classList.remove('hidden');if('Notification'in window&&Notification.permission==='granted')new Notification('BASSE Tickets',{body:fresh.length+' new ticket(s) received.'})}}lastTicketIds=ids;box.replaceChildren();if(!rows.length){box.textContent='No tickets for this event yet.';return}rows.forEach(t=>{const div=el('div','');div.className='card ticket-record';const detail=el('div','');detail.append(el('strong',t.event_title+' · '+t.ticket_type));detail.append(el('div','Ticket code: '+String(t.ticket_code||'').slice(0,18)+'…'));detail.lastChild.className='ticket-code';detail.append(el('p',(t.customer_name==='Physical ticket batch'?'Physical batch · ':'Online ticket · ')+'Payment: '+t.payment_status+' · Entry: '+t.ticket_status));detail.lastChild.className='meta';detail.lastChild.style.cssText='display:inline-block;padding:5px 9px;border-radius:999px;background:'+(t.payment_status==='PAID'?'#e8f8ee':'#fff5df')+';color:'+(t.payment_status==='PAID'?'#116329':'#8a5b00')+';font-weight:800';const actions=el('div','');actions.className='actions';const copy=el('button','Copy ticket code');copy.className='secondary';copy.onclick=async()=>{try{await navigator.clipboard.writeText(t.ticket_code);$('ticketResult').textContent='Ticket code copied.'}catch{$('ticketResult').textContent='Ticket code: '+t.ticket_code}};actions.append(copy);const physical=t.customer_name==='Physical ticket batch';const btn=el('button',t.payment_status==='PAID'?(physical?'Physical · SOLD ✓':'Paid ✓'):'Approve payment');btn.className=t.payment_status==='PAID'?'secondary':'';btn.disabled=t.payment_status==='PAID';btn.onclick=async()=>{if(!confirm('Only verify if payment is independently confirmed (cash/manual). Waychit payments confirm automatically.'))return;try{const j=await api('/api/admin/tickets/'+encodeURIComponent(t.id)+'/verify-payment',{method:'POST',body:'{}'});$('ticketResult').textContent='Payment verified. Ticket is now valid. Code: '+(j.ticket.ticket_code||t.ticket_code);await loadTickets();await refresh()}catch(e){$('ticketResult').textContent=e.message}};actions.append(btn);div.append(detail,actions);box.append(div)})}catch(e){box.textContent=e.message}}$('loadTickets').onclick=()=>loadTickets();
@@ -150,5 +179,5 @@ $('createEventForm').addEventListener('submit',async e=>{
  }catch(err){out.textContent='Could not save event: '+(err?.message||'Unknown error')+' Your form entries have been kept so you can correct the issue and retry.'}
  finally{submit.disabled=false;submit.textContent='Create event'}
 });
-showLogin();if(token){refresh();loadTickets();setInterval(()=>{if(token&&!document.hidden)loadTickets(true)},4000);setInterval(()=>{if(token&&!document.hidden)refresh()},15000)}
+showLogin();if(token){refresh();loadTickets();setInterval(()=>{if(token&&!document.hidden)loadTickets(true)},4000);setInterval(()=>{if(token&&!document.hidden)refreshStatsOnly()},15000)}
 </script></body></html>
