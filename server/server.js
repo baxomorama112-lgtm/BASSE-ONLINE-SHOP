@@ -344,6 +344,11 @@ function recordLoginAttempt(portal,identifier,success,reason=''){
   try{db.prepare('INSERT INTO login_attempts(portal,identifier,success,reason) VALUES(?,?,?,?)').run(String(portal||'unknown'),maskLoginIdentifier(identifier),success?1:0,String(reason||'').slice(0,180));}catch(e){}
 }
 function guard(req,res,next){const s=getSession(req);if(!s||s.type!=="admin")return res.status(401).json({error:"Admin login required"});req.sessionToken=s.token;next()}
+app.post('/api/admin/event-flyer', guard, upload.single('flyer'), (req,res)=>{
+  if(!req.file)return res.status(400).json({error:'Choose a flyer image first.'});
+  if(!/^image\/(jpeg|png|webp|gif)$/.test(req.file.mimetype)) { try{fs.unlinkSync(req.file.path)}catch{}; return res.status(400).json({error:'Flyer must be JPG, PNG, WEBP or GIF.'}); }
+  res.status(201).json({ok:true,url:'/uploads/'+req.file.filename});
+});
 function vendorGuard(req,res,next){const s=getSession(req);if(!s||s.type!=="vendor")return res.status(401).json({error:"Vendor login required"});req.vendorId=s.vendor_id;req.sessionToken=s.token;next()}
 function driverGuard(req,res,next){const s=getSession(req);if(!s||s.type!=="driver")return res.status(401).json({error:"Driver login required"});req.driverId=s.vendor_id;req.sessionToken=s.token;next()}
 app.post("/api/auth/logout",(req,res)=>{const token=(req.headers.authorization||"").replace("Bearer ","").trim();if(token)db.prepare("DELETE FROM auth_sessions WHERE token=?").run(token);res.json({ok:true});});
@@ -889,7 +894,13 @@ app.post("/api/waychit/webhook",(req,res)=>{
     let e=JSON.parse(raw);
     let ref=e.paymentRequest?.clientReference||e.paymentSession?.clientReference||e.data?.clientReference;
     if((e.type==="payment.request.completed"||e.type==="payment.session.completed")&&ref){
-      const group=db.prepare("SELECT payment_group_id FROM orders WHERE id=?").get(ref)?.payment_group_id; if(group) db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE payment_group_id=? AND payment_status!='REFUNDED'").run(group); else db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE id=? AND payment_status!='REFUNDED'").run(ref); const paidOrders=group?db.prepare("SELECT * FROM orders WHERE payment_group_id=?").all(group):db.prepare("SELECT * FROM orders WHERE id=?").all(ref); for(const po of paidOrders){notifyCustomerOrder(po,"💳 PAYMENT CONFIRMED",`Payment for order #${po.id} is confirmed. Your order is now being processed.`);} backupShopData("webhook-payment");broadcastLive("orders",{orderId:ref,orderGroupId:group||null});broadcastLive("notifications",{orderId:ref,orderGroupId:group||null});
+      if(String(ref).startsWith('TICKET:')){
+        const ticketId=String(ref).slice(7);
+        const ticket=db.prepare("SELECT * FROM event_tickets WHERE id=?").get(ticketId);
+        if(ticket){db.prepare("UPDATE event_tickets SET payment_status='PAID',ticket_status='VALID' WHERE id=? AND payment_status!='PAID'").run(ticketId);backupShopData("ticket-waychit-payment");broadcastLive("tickets",{ticketId,eventId:ticket.event_id,paymentStatus:'PAID'});broadcastLive("notifications",{type:'ticket-payment',ticketId,eventId:ticket.event_id});}
+      } else {
+        const group=db.prepare("SELECT payment_group_id FROM orders WHERE id=?").get(ref)?.payment_group_id; if(group) db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE payment_group_id=? AND payment_status!='REFUNDED'").run(group); else db.prepare("UPDATE orders SET payment_status='PAID',order_status='PROCESSING' WHERE id=? AND payment_status!='REFUNDED'").run(ref); const paidOrders=group?db.prepare("SELECT * FROM orders WHERE payment_group_id=?").all(group):db.prepare("SELECT * FROM orders WHERE id=?").all(ref); for(const po of paidOrders){notifyCustomerOrder(po,"💳 PAYMENT CONFIRMED",`Payment for order #${po.id} is confirmed. Your order is now being processed.`);} backupShopData("webhook-payment");broadcastLive("orders",{orderId:ref,orderGroupId:group||null});broadcastLive("notifications",{orderId:ref,orderGroupId:group||null});
+      }
     }
     res.sendStatus(200);
   }catch(e){res.status(400).send("Bad webhook")}
@@ -1195,6 +1206,7 @@ try {
 
 // Backward-compatible event category migration for existing SQLite databases.
 try { db.exec("ALTER TABLE events ADD COLUMN category TEXT NOT NULL DEFAULT 'Music'"); } catch(e) { if(!/duplicate column/i.test(String(e.message))) console.warn('Event category migration:',e.message); }
+try { db.exec("ALTER TABLE event_tickets ADD COLUMN waychit_request_id TEXT DEFAULT NULL"); } catch(e) { if(!/duplicate column/i.test(String(e.message))) console.warn('Ticket payment migration:',e.message); }
 function serviceId(prefix) { return prefix + '_' + crypto.randomBytes(12).toString('hex'); }
 function cleanText(v, max=300) { return String(v ?? '').trim().slice(0,max); }
 app.post('/api/partners/apply', (req,res) => {
@@ -1308,7 +1320,7 @@ app.get('/api/organizer/dashboard',(req,res)=>{
     FROM event_ticket_types tt LEFT JOIN event_tickets t ON t.ticket_type_id=tt.id WHERE tt.event_id=? GROUP BY tt.id`).all(access.event_id);
   res.json({event,totals,ticketTypes,organizerName:access.organizer_name});
 });
-app.post('/api/events/:eventId/tickets', (req,res)=>{
+app.post('/api/events/:eventId/tickets', async (req,res)=>{
   const b=req.body||{}, event=db.prepare("SELECT id FROM events WHERE id=? AND status='APPROVED'").get(req.params.eventId),
     type=db.prepare('SELECT * FROM event_ticket_types WHERE id=? AND event_id=? AND active=1').get(Number(b.ticketTypeId),req.params.eventId),
     name=cleanText(b.customerName,100), phone=cleanText(b.customerWhatsapp,30), qty=Number(b.quantity||1);
@@ -1323,8 +1335,25 @@ app.post('/api/events/:eventId/tickets', (req,res)=>{
     db.prepare('UPDATE event_ticket_types SET sold=sold+? WHERE id=?').run(qty,type.id);
     return ids;
   });
-  try{const tickets=reserve();backupShopData('ticket-reserved');res.status(201).json({ok:true,tickets,status:'PENDING_PAYMENT',message:'Tickets are reserved, not valid for entry until payment is verified.'})}
+  try{
+    const tickets=reserve();backupShopData('ticket-reserved');
+    let paymentUrl='',paymentError='';
+    if(qty===1 && Number(type.price)>0 && process.env.WAYCHIT_API_KEY){
+      try{
+        const r=await fetch('https://api.waychit.com/v1/payment-requests',{method:'POST',headers:{Authorization:'Bearer '+process.env.WAYCHIT_API_KEY,'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({amount:Number(type.price),description:`${type.name} ticket — ${req.params.eventId}`,clientReference:'TICKET:'+tickets[0].id,successRedirectUrl:PUBLIC_BASE_URL+'/services.html?payment=success&ticket='+encodeURIComponent(tickets[0].code),failureRedirectUrl:PUBLIC_BASE_URL+'/services.html?payment=failed&ticket='+encodeURIComponent(tickets[0].code)})});
+        const body=await r.text();let d={};try{d=JSON.parse(body)}catch{}
+        if(r.ok&&d.paymentRequest?.waychitLaunchUrl){paymentUrl=d.paymentRequest.waychitLaunchUrl;db.prepare('UPDATE event_tickets SET waychit_request_id=? WHERE id=?').run(d.paymentRequest.id,tickets[0].id)}else paymentError=d.error?.message||d.message||'Waychit could not create a ticket payment.';
+      }catch(e){paymentError='Waychit is temporarily unavailable.'}
+    }else if(Number(type.price)>0)paymentError=process.env.WAYCHIT_API_KEY?'Automatic ticket payment is available for one ticket at a time.':'Waychit API is not configured for direct ticket payments.';
+    backupShopData('ticket-payment-request');broadcastLive('tickets',{eventId:event.id,ticketIds:tickets.map(t=>t.id)});broadcastLive('notifications',{type:'ticket-reservation',eventId:event.id,ticketIds:tickets.map(t=>t.id)});
+    res.status(201).json({ok:true,tickets,status:'PENDING_PAYMENT',paymentUrl,paymentError,total:Number(type.price)*qty,message:paymentUrl?'Reservation created. Continue to Waychit to pay; your ticket activates after payment confirmation.':'Reservation created, but direct online payment is not available until Waychit is configured. The ticket is not valid for entry until payment is verified.'});
+  }
   catch(e){res.status(409).json({error:e.message||'Could not reserve tickets.'})}
+});
+app.get('/api/tickets/status/:code',(req,res)=>{
+  const t=db.prepare(`SELECT t.id,t.ticket_code,t.payment_status,t.ticket_status,t.checked_in_at,e.title AS event_title,tt.name AS ticket_type,tt.price FROM event_tickets t JOIN events e ON e.id=t.event_id JOIN event_ticket_types tt ON tt.id=t.ticket_type_id WHERE t.ticket_code=?`).get(cleanText(req.params.code,100));
+  if(!t)return res.status(404).json({error:'Ticket not found.'});
+  res.json({ticket:{code:t.ticket_code,status:t.ticket_status,paymentStatus:t.payment_status,eventTitle:t.event_title,ticketType:t.ticket_type,price:t.price,checkedInAt:t.checked_in_at}});
 });
 app.get('/api/admin/events/summary', guard, (req,res)=>{
   const events=db.prepare(`SELECT e.id,e.title,e.category,e.status,e.event_date,e.venue,
