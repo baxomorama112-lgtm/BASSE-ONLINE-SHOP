@@ -1,0 +1,22 @@
+BASSE ONLINE SHOP V58 — Ticket checkout, scanner and event admin reliability
+
+Verified fixes in this source snapshot:
+- Paid online ticket purchases now fail clearly and release the pending ticket reservation/inventory if Waychit cannot create a hosted payment URL. This prevents failed attempts from silently consuming stock and causing later checkout failures.
+- Free online tickets are issued as PAID + VALID, without a manual payment verification step.
+- The customer ticket list stores each ticket's actual status from the server rather than forcing every ticket to display as pending.
+- Scanner HTTP 409 results are rendered as business statuses; a repeated scan explicitly displays “This ticket has already been scanned” instead of the generic “Ticket check failed”.
+- Scanner access navigates to a dedicated mobile-first live camera page. The access token remains in same-origin session storage and is not placed in the URL. Camera scanning pauses between detections to avoid immediately overwriting the first successful result.
+- Physical batch tickets remain PAID + VALID on creation and are omitted from the noisy online payment-verification ticket list. The scan database still enforces one-time entry.
+- Event cards, edit forms, inventory controls and scanner launch have clearer responsive spacing. Event deletion remains available with explicit confirmation.
+- Existing Waychit signed webhook verification remains the source of truth for paid online tickets.
+
+Deployment checklist:
+1. Deploy the contents of `basse_work` to the existing Render service, preserving the existing persistent DATA_DIR and environment variables.
+2. Confirm WAYCHIT_API_KEY, WAYCHIT_WEBHOOK_SECRET and PUBLIC_BASE_URL are configured in Render.
+3. After deploy, hard-refresh `/admin/services.html` and `/services.html`.
+4. Test one paid online ticket, a multi-ticket purchase, a failed Waychit checkout, a physical print batch, a free ticket, and the second scan of a used ticket.
+5. Test camera access from HTTPS on the actual phone; browser camera permissions cannot be fully validated in this local source workspace.
+
+Validation scope:
+- ZIP integrity and JavaScript syntax checks are run locally.
+- Live Render database state, live Waychit payment creation/webhook delivery and real-device camera permission must be verified after deployment; this workspace cannot claim those live checks.
