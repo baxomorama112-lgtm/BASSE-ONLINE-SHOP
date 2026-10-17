@@ -63,3 +63,17 @@ section{scroll-margin-top:90px}.section-heading,.section-title{display:flex;alig
 /* Responsive quality */
 @media(max-width:700px){.product-card,.product-card-modern,.product-item,.service-card,.event-card,.store-card,.vendor-card,.category-card{border-radius:14px}.section-heading,.section-title{align-items:flex-start}th,td{padding:10px 9px}button,.btn{min-height:40px}h1{font-size:clamp(1.6rem,7vw,2.25rem)}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+
+
+/* V67 shared BASSE app visual system */
+:root{--basse-navy:#0b1947;--basse-blue:#214aa5;--basse-gold:#f6c642;--basse-bg:#f4f6fb;--basse-line:#e1e6f0}
+body{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:-.01em}
+.card{border-radius:22px;box-shadow:0 10px 34px #0b194710}
+input,select,textarea{border-radius:13px!important;border:1px solid #dfe5f0!important;min-height:46px}
+input:focus,select:focus,textarea:focus{outline:3px solid #f6c64266!important;border-color:#214aa5!important}
+button{transition:transform .16s ease,box-shadow .16s ease,background .16s ease}
+button:focus-visible,a:focus-visible{outline:3px solid #f6c642aa;outline-offset:2px}
+.login{background:radial-gradient(ellipse at 50% 0%,#dce7ff 0%,#f4f6fb 52%,#e9eef8 100%)}
+.login .card,.login-card{border:1px solid #e4e9f3;border-radius:26px;background:#fff;box-shadow:0 24px 70px #10285b1b}
+.logo{filter:drop-shadow(0 8px 16px #0b19471b)}
+header,.vendor-header{box-shadow:0 4px 18px #0b19470a}

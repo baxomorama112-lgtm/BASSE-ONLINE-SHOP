@@ -803,6 +803,15 @@ async function loadStorePreview(){
   }
 }
 
+
+// V67: first-visit welcome gate; preserves guest shopping and existing account flows.
+function hideWelcomeGate(){const gate=document.getElementById('basseWelcomeGate');if(gate){gate.classList.add('welcome-gate-leaving');setTimeout(()=>{gate.hidden=true;gate.setAttribute('aria-hidden','true')},260)}try{sessionStorage.setItem('basseWelcomeSeen','1')}catch{}}
+function continueAsGuest(){hideWelcomeGate()}
+function welcomeCustomerLogin(){hideWelcomeGate();openCustomerLogin()}
+function welcomeCustomerSignup(){hideWelcomeGate();openCustomerSignup()}
+function welcomeVendorLogin(){hideWelcomeGate();openVendorLogin()}
+(function initWelcomeGate(){try{const gate=document.getElementById('basseWelcomeGate');if(!gate)return;const customer=JSON.parse(localStorage.getItem('basseCustomer')||'null');if(customer||sessionStorage.getItem('basseWelcomeSeen')==='1'){gate.hidden=true;gate.setAttribute('aria-hidden','true')}else{document.body.classList.add('welcome-gate-active')}}catch{}})();
+
 updateCartCount();const initialSearch=new URLSearchParams(location.search).get("q");if(initialSearch){$("search").value=initialSearch;}loadProducts();loadStorePreview();handleReturn();setTimeout(()=>{if(new URLSearchParams(location.search).get("vendor")==="apply"){openVendorApply();history.replaceState({},"",location.pathname)}resumeVendorApplication();if(!new URLSearchParams(location.search).get("payment"))resumePendingPayment()},200);
 // Instant catalog/order updates. EventSource reconnects automatically if the connection drops.
 function connectLive(){
