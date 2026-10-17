@@ -1,0 +1,13 @@
+BASSE ONLINE SHOP V65 — Ticket marketplace and event-card refinement
+
+Changes made from V64:
+- Replaced emoji category symbols on marketplace/services.html with consistent inline SVG line icons for Music, Football, Events, Gym, Trade, and Other.
+- Redesigned category tiles with a clean marketplace card treatment, hover/selected states, subtitles, and responsive layout.
+- Removed the long explanatory paragraph and the generic “Upcoming Events & Tickets” block presentation. Approved events now appear as a “Featured upcoming events” flyer-card grid immediately beneath categories; selecting a category changes the featured section heading and filters the existing event cache.
+- Removed emoji from ticket section tabs and the shop name on this page.
+- Refined admin/services.html event-management cards to better match the Products control center, with clearer card headers, contained management panels, focus states, and mobile spacing.
+- Preserved existing ticket purchasing, API calls, category filtering logic, event management handlers, QR/PDF functionality, and payment behavior; no server/business logic changed.
+
+Validation:
+- HTML/CSS/JS text edits applied to the existing V64 project.
+- This is not a live-browser or payment-flow test. Deploy to a staging service or test the ZIP before replacing the current production deployment.
