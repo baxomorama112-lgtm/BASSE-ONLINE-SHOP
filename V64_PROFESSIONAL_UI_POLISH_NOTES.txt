@@ -1,0 +1,5 @@
+BASSE ONLINE SHOP V64 — PROFESSIONAL UI POLISH
+
+Based on V63. Adds a consistent visual polish layer across marketplace, admin, vendor and driver CSS: cohesive navy/blue/yellow tokens, cleaner cards, hover states, form focus, tables, responsive spacing and reduced-motion support. Existing HTML, routes, payment, scanner and business logic are preserved.
+
+IMPORTANT: This is a visual-layer update, not a claim that every backend flow has been end-to-end tested. Test in staging before replacing a live deployment. User-provided BASSE logo and existing assets were not replaced.
