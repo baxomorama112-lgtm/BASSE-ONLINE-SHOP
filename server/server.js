@@ -139,6 +139,11 @@ CREATE TABLE IF NOT EXISTS order_notifications(
 );
 CREATE INDEX IF NOT EXISTS idx_order_notifications_recipient ON order_notifications(recipient_type,recipient_phone,read_at,id);
 `);
+// BulkGate SMS delivery log prevents duplicate transactional messages on webhook retries.
+try{db.exec(`CREATE TABLE IF NOT EXISTS sms_send_log(
+ event_key TEXT PRIMARY KEY, order_id TEXT, recipient TEXT, message_type TEXT, status TEXT NOT NULL DEFAULT 'PENDING', provider_sms_id TEXT, error_code TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, sent_at TEXT
+); CREATE INDEX IF NOT EXISTS idx_sms_send_log_created ON sms_send_log(created_at,status);`)}catch(e){console.error("SMS log setup failed:",e.message)}
+
 function cleanupExpiredChatMessages(){
   try{
     db.prepare("DELETE FROM chat_messages WHERE datetime(created_at) < datetime('now','-72 hours')").run();
@@ -407,6 +412,14 @@ app.post("/api/admin/products",guard,upload.array("images",8),(req,res)=>{let b=
 let x=db.prepare("INSERT INTO products(name,category,price,stock,description,image,images,vendor_id,options_json) VALUES(?,?,?,?,?,?,?,?,?)").run(b.name,b.category,+b.price,+b.stock||0,b.description||"",img,imgs,b.vendorId?+b.vendorId:null,productOptionsFromBody(b));let created=db.prepare("SELECT * FROM products WHERE id=?").get(x.lastInsertRowid);backupCatalog();broadcastLive("catalog",{productId:created.id});res.json(created)});
 app.put("/api/admin/products/:id",guard,upload.array("images",8),(req,res)=>{let p=db.prepare("SELECT * FROM products WHERE id=?").get(req.params.id);if(!p)return res.status(404).json({error:"Product not found"});let b=req.body,files=req.files||[],fileImgs=files.map(f=>"/uploads/"+f.filename),img=fileImgs[0]||b.imageUrl||p.image,oldImgs=p.images||"[]",imgs=fileImgs.length?JSON.stringify(fileImgs):(b.images?JSON.stringify(String(b.images).split(",").map(x=>x.trim()).filter(Boolean)):oldImgs);db.prepare("UPDATE products SET name=?,category=?,price=?,stock=?,description=?,image=?,images=?,vendor_id=?,options_json=? WHERE id=?").run(b.name,b.category,+b.price,+b.stock,b.description||"",img,imgs,b.vendorId?+b.vendorId:p.vendor_id||null,productOptionsFromBody(b,p.options_json)||"{}",p.id);let updated=db.prepare("SELECT * FROM products WHERE id=?").get(p.id);backupCatalog();broadcastLive("catalog",{productId:p.id});res.json(updated)});
 app.delete("/api/admin/products/:id",guard,(req,res)=>{db.prepare("UPDATE products SET active=0 WHERE id=?").run(req.params.id);backupCatalog();broadcastLive("catalog",{productId:Number(req.params.id)});res.json({ok:true})});
+
+app.post("/api/admin/sms/test",guard,async(req,res)=>{
+  const number=String(req.body?.number||"").replace(/[^0-9+]/g,"");
+  if(!/^\+?220[0-9]{7,9}$/.test(number))return res.status(400).json({error:"Enter a Gambian number in international format, e.g. +220XXXXXXXX."});
+  if(String(process.env.BULKGATE_SMS_ENABLED||"false").toLowerCase()!=="true")return res.status(409).json({error:"SMS is disabled. Set BULKGATE_SMS_ENABLED=true in Render only when ready to send a paid test SMS."});
+  try{const result=await sendBulkGateSms(number,"BASSE ONLINE SHOP test: SMS integration is connected.",{eventKey:"admin-test:"+crypto.createHash("sha256").update(number+":"+Date.now()).digest("hex"),orderId:null,messageType:"test"});if(!result.ok)return res.status(502).json({error:"BulkGate did not accept the test SMS. Check server logs and API settings."});res.json({ok:true,status:"accepted",smsId:result.smsId||null});}
+  catch(e){console.error("[bulkgate-test]",e.message);res.status(502).json({error:"SMS test failed. Check BulkGate credentials and account balance."})}
+});
 
 app.get("/api/admin/order-notifications",guard,(req,res)=>{
   const rows=db.prepare("SELECT * FROM order_notifications WHERE recipient_type='admin' ORDER BY id DESC LIMIT 100").all();
@@ -1512,6 +1525,36 @@ function notifyNewOrder(order){
   addOrderNotification("admin","",order.id,"🛍️ NEW ORDER",`${order.customer_name||"Customer"} (+${order.whatsapp||""}) placed ${order.product_name} × ${order.quantity} for D${Number(order.total||0).toLocaleString()}.`);
 }
 function notifyCustomerOrder(order,title,message){
-  if(order?.whatsapp)addOrderNotification("customer",order.whatsapp,order.id,title,message);
+  if(!order?.whatsapp)return;
+  addOrderNotification("customer",order.whatsapp,order.id,title,message);
+  // SMS is additive: existing in-app/WhatsApp notification behavior remains unchanged.
+  // Only short transactional notifications are sent; marketing SMS must use a separate compliant flow.
+  const msg=String(message||title||"").replace(/[🛍️💳📦🚚]/gu,"").trim().slice(0,300);
+  const type=/PAYMENT CONFIRMED/i.test(title)?"payment":/ORDER RECEIVED/i.test(title)?"new-order":/DELIVERY|delivered|Driver|picked up|on the way/i.test(title+" "+message)?"delivery":"order-update";
+  const eventKey=crypto.createHash("sha256").update([String(order.id),type,String(title||""),String(message||"")].join("|" )).digest("hex");
+  void sendBulkGateSms(order.whatsapp,msg,{eventKey,orderId:String(order.id),messageType:type}).catch(e=>console.error("[bulkgate-sms]",e.message));
+}
+
+async function sendBulkGateSms(rawNumber,text,meta={}){
+  if(String(process.env.BULKGATE_SMS_ENABLED||"false").toLowerCase()!=="true")return {ok:false,disabled:true};
+  const applicationId=String(process.env.BULKGATE_APPLICATION_ID||"").trim();
+  const applicationToken=String(process.env.BULKGATE_APPLICATION_TOKEN||"").trim();
+  if(!applicationId||!applicationToken)throw new Error("BulkGate credentials are not configured");
+  const number=String(rawNumber||"").replace(/[^0-9]/g,"");
+  if(!/^220[0-9]{7,9}$/.test(number))throw new Error("Recipient is not a valid stored Gambian phone number");
+  const dailyLimit=Math.max(1,Math.min(100,Number(process.env.BULKGATE_SMS_DAILY_LIMIT)||5));
+  const sentToday=Number(db.prepare("SELECT COUNT(*) c FROM sms_send_log WHERE status='ACCEPTED' AND date(created_at)=date('now')").get().c||0);
+  if(sentToday>=dailyLimit)throw new Error("Daily BASSE SMS safety limit reached");
+  const eventKey=String(meta.eventKey||crypto.createHash("sha256").update(number+"|"+text).digest("hex"));
+  const prior=db.prepare("SELECT status,provider_sms_id FROM sms_send_log WHERE event_key=?").get(eventKey);
+  if(prior?.status==="ACCEPTED"||prior?.status==="SENDING")return {ok:true,duplicate:true,smsId:prior.provider_sms_id||null};
+  if(prior)db.prepare("UPDATE sms_send_log SET status='SENDING',error_code=NULL WHERE event_key=?").run(eventKey);
+  else db.prepare("INSERT INTO sms_send_log(event_key,order_id,recipient,message_type,status) VALUES(?,?,?,?, 'SENDING')").run(eventKey,meta.orderId||null,number,meta.messageType||"notification");
+  try{
+    const response=await fetch("https://portal.bulkgate.com/api/1.0/simple/transactional",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({application_id:applicationId,application_token:applicationToken,number,text:String(text||"").slice(0,300),duplicates_check:"on",tag:"basse-"+String(meta.messageType||"notification").slice(0,24)}) ,signal:AbortSignal.timeout(12000)});
+    const body=await response.json().catch(()=>({}));
+    if(!response.ok||body?.data?.status!=="accepted"){const code=String(body?.type||body?.error||response.status).slice(0,100);db.prepare("UPDATE sms_send_log SET status='FAILED',error_code=? WHERE event_key=?").run(code,eventKey);console.error("[bulkgate-sms] Provider rejected SMS",response.status,code);return {ok:false,status:response.status};}
+    const smsId=String(body.data.sms_id||"");db.prepare("UPDATE sms_send_log SET status='ACCEPTED',provider_sms_id=?,sent_at=CURRENT_TIMESTAMP WHERE event_key=?").run(smsId,eventKey);return {ok:true,smsId};
+  }catch(e){db.prepare("UPDATE sms_send_log SET status='FAILED',error_code=? WHERE event_key=?").run(String(e.name||"request_error").slice(0,100),eventKey);throw e;}
 }
 ;

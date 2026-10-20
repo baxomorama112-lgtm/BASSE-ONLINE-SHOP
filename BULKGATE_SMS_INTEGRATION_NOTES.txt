@@ -1,0 +1,27 @@
+BASSE ONLINE SHOP — BulkGate SMS integration patch
+
+Included:
+- Server-side BulkGate Simple API sender using environment variables.
+- SMS notifications piggyback on the existing customer order notification helper for order received, payment confirmed, and order/delivery status messages.
+- Daily safety limit defaults to 5 accepted SMS/day.
+- Duplicate-event protection using a local SQLite log and BulkGate duplicate-check option.
+- Admin-only POST /api/admin/sms/test endpoint to send one fixed test message to a Gambian phone number.
+- SMS disabled by default; existing in-app notifications remain unchanged.
+
+Render environment variables to configure:
+BULKGATE_APPLICATION_ID=<application ID>
+BULKGATE_APPLICATION_TOKEN=<private application token>
+BULKGATE_SMS_ENABLED=false  # keep false until deployment is checked; set true for a deliberate test
+BULKGATE_SMS_DAILY_LIMIT=5
+
+Security:
+- Never put the token in frontend code or GitHub.
+- Use Render Dashboard > backend service > Environment to set secrets.
+- Do not use transactional SMS for marketing messages.
+
+Test endpoint (requires admin login):
+POST /api/admin/sms/test
+JSON body: {"number":"+220XXXXXXXX"}
+The endpoint only sends a fixed test message. It returns an error until BULKGATE_SMS_ENABLED=true.
+
+Validation performed: Node.js syntax check passed. Runtime smoke test could not run in this container because project npm dependencies (including express) are not installed. Not deployed to Render; existing live project is unchanged.
