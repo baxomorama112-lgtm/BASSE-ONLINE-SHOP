@@ -1,0 +1,16 @@
+BASSE ONLINE SHOP V69 — PREMIUM LUXURY REDESIGN
+
+Starting point: V68_LOGIN_GATE_FIX.
+
+Implemented in source:
+- Removed the forced welcome/login overlay and its auto-show JavaScript. The marketplace now opens directly, with login/account access remaining available through the Account entry points.
+- Kept the existing single marketplace hero banner. No new homepage carousel or ticket promotion banner was added.
+- Added a restrained premium visual system: navy/blue with muted gold accents, better surface hierarchy, glass header/nav, cleaner shadows and borders, crisp focus states, card hover depth and restrained one-time entrance animations.
+- Improved product card layout with a readable price row and View details cue, without changing product detail, cart or checkout handlers.
+- Extended matching polish to admin, vendor and driver portal CSS; no portal authentication or map logic was intentionally changed.
+- Preserved existing BASSE logo assets.
+
+Validation performed:
+- JavaScript syntax checks for marketplace and operational portal scripts.
+- HTML parsing and archive integrity checks.
+- Static browser preview checks for initial marketplace layout at desktop and mobile widths; backend-dependent content/payment/live map functionality require a configured running server and were not certified by these static checks.

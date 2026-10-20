@@ -40,7 +40,7 @@ function renderProductGrid(ps, silent=false){
   const sameOrder=existingIds.length===ids.length && existingIds.every((id,i)=>id===ids[i]);
 
   if(!sameOrder){
-    grid.innerHTML=ps.length?ps.map(p=>`<article class="product" data-id="${p.id}" tabindex="0" role="button" onclick="buy(${p.id})" onkeydown="if(event.key==='Enter'||event.key===' ')buy(${p.id})"><div class="pic"><img src="${p.image||""}" alt="${esc(p.name)}" loading="lazy" decoding="async"><span class="tag">${esc(p.category)}</span></div><div class="info"><h3>${esc(p.name)}</h3><div class="price">${money(p.price)}</div></div></article>`).join(""):`<div class="empty-search"><div></div><h3>No products found</h3><p>Try another product name or category.</p></div>`;
+    grid.innerHTML=ps.length?ps.map((p,i)=>`<article class="product" data-id="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)} details" style="--card-index:${Math.min(i,9)}" onclick="buy(${p.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();buy(${p.id})}"><div class="pic"><img src="${p.image||""}" alt="${esc(p.name)}" loading="lazy" decoding="async"><span class="tag">${esc(p.category||"Product")}</span><span class="product-image-glint" aria-hidden="true"></span></div><div class="info"><h3>${esc(p.name)}</h3><div class="product-price-row"><div class="price">${money(p.price)}</div><span class="product-card-arrow" aria-hidden="true">↗</span></div><div class="product-view-link"><span>View details</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div></article>`).join(""):`<div class="empty-search"><div></div><h3>No products found</h3><p>Try another product name or category.</p></div>`;
     return;
   }
 
@@ -804,13 +804,6 @@ async function loadStorePreview(){
 }
 
 
-// V67: first-visit welcome gate; preserves guest shopping and existing account flows.
-function hideWelcomeGate(){const gate=document.getElementById('basseWelcomeGate');if(gate){gate.classList.add('welcome-gate-leaving');setTimeout(()=>{gate.hidden=true;gate.setAttribute('aria-hidden','true')},260)}try{sessionStorage.setItem('basseWelcomeSeen','1')}catch{}}
-function continueAsGuest(){hideWelcomeGate()}
-function welcomeCustomerLogin(){hideWelcomeGate();openCustomerLogin()}
-function welcomeCustomerSignup(){hideWelcomeGate();openCustomerSignup()}
-function welcomeVendorLogin(){hideWelcomeGate();openVendorLogin()}
-(function initWelcomeGate(){try{const gate=document.getElementById('basseWelcomeGate');if(!gate)return;const customer=JSON.parse(localStorage.getItem('basseCustomer')||'null');if(customer||sessionStorage.getItem('basseWelcomeSeen')==='1'){gate.hidden=true;gate.setAttribute('aria-hidden','true')}else{document.body.classList.add('welcome-gate-active')}}catch{}})();
 
 updateCartCount();const initialSearch=new URLSearchParams(location.search).get("q");if(initialSearch){$("search").value=initialSearch;}loadProducts();loadStorePreview();handleReturn();setTimeout(()=>{if(new URLSearchParams(location.search).get("vendor")==="apply"){openVendorApply();history.replaceState({},"",location.pathname)}resumeVendorApplication();if(!new URLSearchParams(location.search).get("payment"))resumePendingPayment()},200);
 // Instant catalog/order updates. EventSource reconnects automatically if the connection drops.

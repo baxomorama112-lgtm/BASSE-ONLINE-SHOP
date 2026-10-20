@@ -1,24 +1,12 @@
 <!doctype html>
 <html lang="en"><head><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><title>BASSE ONLINE SHOP | Basse Market, Gambia</title><meta name="description" content="BASSE ONLINE SHOP — your online Basse Market in The Gambia. Shop phones, fashion, beauty, electronics, home & living and accessories online."><meta name="keywords" content="Basse Online Shop, Basse Market, online shop Basse Gambia, shopping in Basse, Gambia marketplace, Pasemarket"><link rel="canonical" href="https://basseonlineshop.com/"><meta property="og:type" content="website"><meta property="og:title" content="BASSE ONLINE SHOP | Basse Market, Gambia"><meta property="og:description" content="Shop products, browse local services, and discover event tickets online in Basse, The Gambia."><meta property="og:url" content="https://basseonlineshop.com/"><meta property="og:image" content="https://basseonlineshop.com/basse-official-logo.png"><meta name="twitter:card" content="summary"><meta name="twitter:title" content="BASSE ONLINE SHOP | Basse Market, Gambia"><meta name="twitter:description" content="Shop products, browse local services, and discover event tickets online in Basse, The Gambia."><meta name="twitter:image" content="https://basseonlineshop.com/basse-official-logo.png"><meta name="robots" content="index,follow,max-image-preview:large"><meta name="theme-color" content="#071a4a"><script type="application/ld+json">{"@context":"https://schema.org","@type":"OnlineStore","name":"BASSE ONLINE SHOP","url":"https://basseonlineshop.com/","description":"Online marketplace for Basse and surrounding areas in The Gambia, offering phones, fashion, beauty, electronics, home and accessories.","areaServed":{"@type":"City","name":"Basse","containedInPlace":{"@type":"Country","name":"The Gambia"}},"sameAs":[],"potentialAction":{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"https://basseonlineshop.com/?q={search_term_string}"},"query-input":"required name=search_term_string"}}</script><link rel="stylesheet" href="style.css"></head>
 <body>
-<div id="basseWelcomeGate" class="basse-welcome-gate" aria-label="Welcome to BASSE ONLINE SHOP">
-  <div class="welcome-shell">
-    <div class="welcome-brand-stage"><span class="welcome-glow"></span><img src="/basse-official-logo.png" alt="BASSE ONLINE SHOP" class="welcome-logo"><span class="welcome-brand-caption">YOUR MARKET. YOUR COMMUNITY.</span></div>
-    <div class="welcome-form-stage"><span class="welcome-eyebrow">WELCOME BACK</span><h1>Shop local. Live better.</h1><p>Sign in to manage your orders, save your details and enjoy BASSE ONLINE SHOP.</p>
-      <button type="button" class="welcome-primary" onclick="welcomeCustomerLogin()">Log in <span>→</span></button>
-      <button type="button" class="welcome-secondary" onclick="welcomeCustomerSignup()">Create customer account</button>
-      <div class="welcome-divider"><span>OR</span></div>
-      <div class="welcome-role-row"><button type="button" onclick="welcomeVendorLogin()"><span class="welcome-role-icon">▦</span><span><b>Vendor portal</b><small>Manage your shop</small></span><strong>›</strong></button><a href="/driver/"><span class="welcome-role-icon">⌁</span><span><b>Driver portal</b><small>Manage deliveries</small></span><strong>›</strong></a></div>
-      <button type="button" class="welcome-guest" onclick="continueAsGuest()">Continue browsing as guest</button>
-      <small class="welcome-footnote">Secure access · Built for Basse, The Gambia</small>
-    </div>
-  </div>
-</div>
 <header class="top">
 <a class="brand" href="#" aria-label="BASSE Marketplace"><img class="brand-logo" src="/basse-official-logo.png" alt="BASSE Marketplace"></a>
 <div class="search-wrap top-search"><div class="search"><input id="search" autocomplete="off" placeholder="Search products, phones, fashion, beauty..." aria-label="Search products"><button id="searchBtn" type="button" aria-label="Search"><span aria-hidden="true">⌕</span></button><button id="clearSearch" class="clear-search" type="button" aria-label="Clear search">×</button></div><div id="searchSuggestions" class="search-suggestions"></div></div>
 <div class="top-actions"><a class="stores-head-btn" href="/digital-services.html" style="text-decoration:none" aria-label="Digital services">Digital Services</a>
 <button class="stores-head-btn" type="button" onclick="openStores()" aria-label="Browse stores" title="Browse stores"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 5 4h14l2 6.5M4 11v9h16v-9M9 20v-6h6v6M3 10.5h18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Shops</span></button>
+<button class="account-head-btn" type="button" onclick="openAccount()" aria-label="Account" title="Account"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5 21c.5-4 2.8-6 7-6s6.5 2 7 6"/></svg><span>Account</span></button>
 <button class="notify" type="button" onclick="openOrderNotifications()" aria-label="Notifications"><span class="bell-icon" aria-hidden="true"></span><i id="orderNotifyBadge" class="hidden">0</i></button>
 <button class="cart" onclick="openCart()" aria-label="Cart"><span class="ui-icon cart-icon" aria-hidden="true"></span><i id="cartCount">0</i></button>
 </div>
@@ -30,7 +18,7 @@
   </a>
   <div class="banner-overlay"><button onclick="document.querySelector('#products').scrollIntoView({behavior:'smooth'})">SHOP NOW <b>→</b></button></div>
 </section>
-<section id="categories" class="categories"><div class="section-title"><div><h2>Explore Categories</h2><span class="category-subtitle">Find what you need, all in one place</span></div><a href="#categories" class="section-link">View all <b>→</b></a></div><div class="cats">
+<section id="categories" class="categories"><div class="section-title"><div><h2>Explore Categories</h2><span class="category-subtitle">Find what you need, all in one place</span></div><a href="#products" class="section-link">Shop all <b>→</b></a></div><div class="cats">
 <button class="active" onclick="setCat('All',this)" aria-label="All products"><img src="/category-images/all.jpg" alt="All"><b>All</b></button>
 <button onclick="setCat('Fashion',this)" aria-label="Fashion"><img src="/category-images/fashion.jpg" alt="Fashion"><b>Fashion</b></button>
 <button onclick="setCat('Electronics',this)" aria-label="Electronics"><img src="/category-images/electronics.jpg" alt="Electronics"><b>Electronics</b></button>

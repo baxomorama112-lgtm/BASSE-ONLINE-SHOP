@@ -77,3 +77,31 @@ button:focus-visible,a:focus-visible{outline:3px solid #f6c642aa;outline-offset:
 .login .card,.login-card{border:1px solid #e4e9f3;border-radius:26px;background:#fff;box-shadow:0 24px 70px #10285b1b}
 .logo{filter:drop-shadow(0 8px 16px #0b19471b)}
 header,.vendor-header{box-shadow:0 4px 18px #0b19470a}
+
+
+/* V69 — premium BASSE visual language across operational portals */
+:root{--lux-navy:#0b1e4d;--lux-blue:#214fae;--lux-gold:#e6b943;--lux-ink:#17233c;--lux-muted:#6b7890;--lux-line:#e4e9f2;--lux-surface:#f5f7fb}
+body{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--lux-ink);background:radial-gradient(ellipse at 75% -12%,#eaf0ff 0%,transparent 38%),var(--lux-surface);-webkit-font-smoothing:antialiased}
+.card,.panel,.order-card,.location-banner,.stats>div{border:1px solid var(--lux-line);box-shadow:0 7px 24px rgba(11,30,77,.045);transition:transform .23s ease,box-shadow .23s ease,border-color .23s ease}
+.card:hover,.order-card:hover{box-shadow:0 13px 34px rgba(11,30,77,.075);border-color:#d6dfef}
+button,.small-action,.primary-action,.submit-product{transition:transform .2s ease,box-shadow .2s ease,background-color .2s ease,border-color .2s ease}
+button:hover,.small-action:hover,.primary-action:hover,.submit-product:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(11,30,77,.12)}
+button:active{transform:scale(.985)}
+input,select,textarea{font-family:inherit;transition:border-color .2s ease,box-shadow .2s ease}
+input:focus,select:focus,textarea:focus{border-color:#8ba8e1!important;box-shadow:0 0 0 4px rgba(33,79,174,.08)!important;outline:0}
+.status,.badge,.pill,.status-badge{border-radius:999px;font-weight:750;letter-spacing:.015em}
+header,.vendor-header{background:rgba(255,255,255,.93);backdrop-filter:blur(18px) saturate(145%);-webkit-backdrop-filter:blur(18px) saturate(145%);border-bottom:1px solid rgba(220,227,239,.9)}
+.login{position:relative;isolation:isolate;overflow:hidden;background:radial-gradient(ellipse at 18% 8%,rgba(230,185,67,.22),transparent 27%),radial-gradient(ellipse at 88% 90%,rgba(90,131,221,.23),transparent 30%),linear-gradient(135deg,#071638 0%,#102e6c 56%,#214fae 100%)}
+.login:before,.login:after{content:"";position:absolute;z-index:-1;border:1px solid rgba(255,255,255,.13);border-radius:50%;width:500px;height:500px;animation:luxOrbit 16s ease-in-out infinite alternate}
+.login:before{top:-260px;right:-110px}.login:after{bottom:-335px;left:-125px;width:590px;height:590px;animation-delay:-5s}
+.login .card,.login-card{position:relative;z-index:1;border:1px solid rgba(255,255,255,.7);border-radius:27px;background:rgba(255,255,255,.97);box-shadow:0 28px 85px rgba(0,0,0,.24);animation:luxCardIn .5s cubic-bezier(.2,.7,.2,1) both}
+.login .logo{display:grid;place-items:center;margin:0 auto 14px;width:70px;height:70px;border-radius:21px;background:linear-gradient(145deg,#fff9e3,#fff);border:1px solid #f0e2b5;color:var(--lux-navy);font-size:37px;font-weight:900;filter:drop-shadow(0 10px 17px rgba(11,30,77,.12))}
+.login h1{color:var(--lux-navy);letter-spacing:-.04em}.login p{color:var(--lux-muted);line-height:1.6}
+.login .card button,.login-card button{min-height:48px;border-radius:13px;background:linear-gradient(115deg,#0b1e4d,#214fae);box-shadow:0 9px 22px rgba(11,30,77,.17)}
+.login .card button:hover,.login-card button:hover{box-shadow:0 13px 28px rgba(11,30,77,.23)}
+@keyframes luxCardIn{from{opacity:0;transform:translateY(12px) scale(.99)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes luxOrbit{from{transform:translate3d(0,0,0) rotate(0deg)}to{transform:translate3d(12px,-10px,0) rotate(14deg)}}
+@media(prefers-reduced-motion:reduce){.login:before,.login:after,.login .card,.login-card{animation:none!important}*,*:before,*:after{transition:none!important}}
+
+body>header{box-shadow:0 6px 24px rgba(11,30,77,.06)}body>header>div>b{letter-spacing:.045em;color:var(--lux-navy)}main{max-width:940px;padding:20px}.location-banner{border-left:3px solid #214fae;border-radius:18px;background:linear-gradient(120deg,#fff,#f9fbff)}.order-card{border-radius:20px;background:linear-gradient(145deg,#fff,#fcfdff)}.order-head{gap:12px;align-items:flex-start}.driver-map{border-radius:20px;box-shadow:0 10px 28px rgba(11,30,77,.075)}.map-legend{align-items:center}.order-card .actions{gap:10px}.order-card button{box-shadow:0 5px 14px rgba(11,30,77,.08)}
+@media(max-width:700px){main{padding:13px}.location-banner{padding:13px;gap:10px}.driver-map{height:290px}}
