@@ -1,0 +1,18 @@
+BASSE ONLINE SHOP V56 — Ticketing reliability patch
+
+Changes made to project source:
+1. Added server-side `qrcode` dependency and `/api/tickets/qr`. Customer ticket QR and physical batch QR no longer depend on jsDelivr or an external QR image service.
+2. Physical ticket creation returns QR PNG data URLs from the server. Admin batch PDF generation uses those images.
+3. Online ticket purchase redirects directly to the returned Waychit hosted payment URL after reserving the ticket and saving the pending reservation locally. If Waychit cannot create a payment URL, the page shows the actual error instead of implying that a ticket was purchased.
+4. Scanner errors provide clearer guidance when a ticket is invalid for the scanner's assigned event. Unpaid tickets are deliberately rejected; only PAID + VALID tickets may be checked in once.
+5. Existing inventory, event approval, ticket status and duplicate-check-in rules are preserved.
+
+Deployment:
+- Existing Render service uses rootDir `server` and build command `npm install`; the new qrcode dependency is installed by the existing configuration.
+- Commit and push the contents of `basse_work` to the same GitHub repository, then deploy using the existing Render service.
+- After deploy, hard-refresh admin/services and marketplace/services pages.
+- Test a small physical batch, verify PDF QR scans to its ticket code, and test scanner with a PAID + VALID ticket assigned to that event.
+- A pending ticket should fail scan by design. This is payment protection, not a scanner defect.
+- Real Waychit payment still depends on existing WAYCHIT_API_KEY and provider response. Do not mark pending tickets paid manually unless cash/off-site payment has actually been confirmed.
+
+Validation performed locally: source edits and syntax checks; live Render/Waychit were not accessed or tested.

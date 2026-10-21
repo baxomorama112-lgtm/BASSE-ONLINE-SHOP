@@ -1,0 +1,7 @@
+V32 CHAT UI UPDATE
+- Customer chat now uses a compact Messenger-style conversation with online indicator and quick-help chips.
+- Customer Inbox keeps saved conversations and opens them without losing history.
+- Admin and Vendor chat now have a Messages/search pane, conversation header, visible typing field, product-share selector, and prominent SEND button.
+- Admin/Vendor composer is kept visible at the bottom of the conversation pane on mobile and desktop.
+- Existing bottom navigation/categories are unchanged.
+- Existing chat persistence/API, product sharing, Waychit, cart, orders, delivery and other systems are retained.

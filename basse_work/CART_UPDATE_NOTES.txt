@@ -1,0 +1,9 @@
+BASSE ONLINE SHOP - CART UPDATE
+
+- Replaced the Add to Cart placeholder with a real local cart.
+- Added cart count, quantity controls, remove, cart checkout, and Buy Now remains available.
+- Added server-side /api/orders/cart for multi-item checkout and stock reservation.
+- Cart checkout uses the existing Waychit payment integration.
+- Waychit webhook now supports grouped cart payments and marks all cart item orders paid together.
+- Existing single-product Buy Now order flow was preserved.
+- No ModemPay changes were made; Waychit remains the current payment method.

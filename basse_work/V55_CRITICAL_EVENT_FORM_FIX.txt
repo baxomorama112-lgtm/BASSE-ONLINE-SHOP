@@ -1,0 +1,28 @@
+BASSE ONLINE SHOP V55 — Critical Event Form Fix
+
+Root cause found in the supplied V54 source:
+admin/services.html assigned .onclick to an element with id="verifyTicket", but that
+element does not exist in the current HTML. The assignment threw a TypeError while
+the inline script was running. Because JavaScript execution stopped at that line,
+the later Add Ticket Type click handler and Create Event submit handler were never
+registered. This explains why both controls appeared dead.
+
+Fixes:
+- Guarded the legacy verification hook because current ticket-record cards provide their
+  own verification actions.
+- Bound Add Ticket Type directly through the button's onclick property.
+- Added visible runtime/unhandled-rejection messages to the event form for diagnosis.
+- Kept the existing event-create API and database transaction flow intact.
+
+Deployment:
+1. Extract this ZIP and commit/push its contents to the same GitHub repository.
+2. Deploy through your existing Render service (do not create a new service).
+3. After deployment, open /admin/services.html?build=V55 or refresh the Services & Events
+   iframe from the main admin dashboard.
+4. Confirm that clicking Add Ticket Type adds another row immediately.
+5. Create a test event with two ticket types. Confirm the success message and that it
+   appears under Published events & event management after refresh.
+
+Note:
+This fixes the frontend JavaScript crash that disabled the form controls. It does not
+pretend that a live Waychit payment or a live production deployment was tested here.

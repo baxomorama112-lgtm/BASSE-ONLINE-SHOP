@@ -1,0 +1,11 @@
+BASSE ONLINE SHOP V21
+
+Customer live tracking fix:
+- Replaced the customer-side MapLibre tracking renderer with the stable Leaflet customer map implementation used in the earlier working tracking build.
+- Uses CARTO Voyager raster tiles with automatic OpenStreetMap tile fallback.
+- Keeps the existing live driver GPS/API/EventSource backend unchanged.
+- Customer location continues to update automatically while the Track Order window is open.
+- VIEW LIVE DRIVER LOCATION now refreshes the existing customer map and fits to customer/driver positions instead of rebuilding the driver/admin map.
+- Added mobile map resize handling and stable marker/polyline updates.
+
+Existing V20 product-image/order-photo changes are retained.

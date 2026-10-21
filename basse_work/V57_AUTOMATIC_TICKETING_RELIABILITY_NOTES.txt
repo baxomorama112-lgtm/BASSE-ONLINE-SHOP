@@ -1,0 +1,22 @@
+BASSE ONLINE SHOP V57 — Automatic ticket payment and reliability patch
+
+Source-level changes in this package:
+- Kept the existing event form and API flow; Add Ticket Type and Create Event handlers are registered explicitly and validated with Node syntax checks.
+- Waychit webhook handling still requires the configured recent signature and secret. It now reads common signed event/payload wrappers, recognizes completion/success event names, and can match a ticket by its saved Waychit payment-request ID when a client reference is omitted.
+- Ticket activation is idempotent: a verified completed payment changes a pending ticket to PAID/VALID once, broadcasts the ticket update and notification, and does not reset a used ticket.
+- Ticket QR generation remains server-side. Physical batch generation now creates every QR image before reserving ticket inventory, so QR generation failures do not consume inventory or leave orphaned tickets.
+- Admin ticket records refresh separately from the full event cards to reduce the Services & Events blinking; customer ticket status checks run more frequently than event-list refresh.
+- Scanner continues to reject pending/unpaid tickets and only checks in PAID + VALID tickets once.
+
+Important payment configuration:
+- Render must have WAYCHIT_API_KEY and WAYCHIT_WEBHOOK_SECRET configured.
+- Configure the Waychit webhook destination as https://basseonlineshop.com/api/waychit/webhook.
+- Keep PUBLIC_BASE_URL=https://basseonlineshop.com.
+- Online ticket payment verification is automatic only after Waychit sends a valid signed completion webhook. A success/return page alone is not proof of payment.
+- Physical tickets sold for cash/offline payment still require an administrator to confirm that real payment was received. Generating/printing a ticket must not automatically mark it paid.
+
+Validation performed:
+- ZIP integrity check.
+- `node --check server/server.js`.
+- JavaScript syntax checks for the inline scripts in admin/services.html, marketplace/services.html and marketplace/scanner.html.
+- Live Render database, Waychit credentials/webhook delivery, device camera and production checkout were not accessible from this local workspace and therefore are not claimed as live-tested.

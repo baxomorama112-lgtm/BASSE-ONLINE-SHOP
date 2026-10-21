@@ -1,0 +1,17 @@
+BASSE ONLINE SHOP V66 — MARKETPLACE EXPERIENCE UPDATE
+
+Starting point: V65_TICKET_MARKETPLACE_CARDS.
+
+Changes in this update:
+- Added a ticket-discovery feature banner between category browsing and product listings on the marketplace home page. It links to the existing /services.html#events ticket area.
+- Refined product cards for a clearer ecommerce hierarchy and restored visible product action buttons in the listing grid (the prior CSS hid .product .buy). Existing product click and buy handlers are unchanged.
+- Refined category controls, product-card spacing, image hover treatment, and mobile grid behavior.
+- Kept existing logo asset, routes, API calls, checkout, Waychit integration, account logic, and ticket backend code unchanged.
+- Retained the existing ticket category and featured event design from V65.
+
+Verification performed:
+- ZIP integrity check.
+- HTML insertion point and expected sections checked.
+- JavaScript files are unchanged in this update.
+
+Not verified here: live browser appearance, Render deployment, live API data, payment completion, ticket creation, QR scanning, or mobile device testing. Deploy to staging or test in a backup before replacing production.

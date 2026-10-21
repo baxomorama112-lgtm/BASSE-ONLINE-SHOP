@@ -1,0 +1,16 @@
+BASSE ONLINE SHOP V36 — ORDER NOTIFICATIONS + CUSTOMER TRACKING
+
+Added:
+- Admin order notification center with unread badge on Orders.
+- Admin receives an in-site notification when a new order is created.
+- Customer receives in-site order notifications using the phone/WhatsApp number attached to the order.
+- Customer top bell shows unread order notification count.
+- Customer can open a notification and continue to Track Order.
+- Customer notifications are created for payment confirmation, order status changes, and driver delivery updates.
+- Existing WhatsApp confirmation flow is preserved.
+- Existing customer order tracking and GPS/live driver tracking are preserved.
+- Order notifications are included in the existing backup/restore tables.
+- Existing chat system and bottom navigation are preserved.
+
+Important:
+- Customer phone numbers are used to retrieve their own order notifications and are not displayed publicly.

@@ -1,0 +1,21 @@
+BASSE ONLINE SHOP V73 — BulkGate SMS + Customer OTP
+
+Included:
+- Existing BulkGate SMS test endpoint and admin test control from V71.
+- Order, payment, delivery/status SMS hooks from V72.
+- Optional admin new-order SMS via BASSE_ADMIN_SMS_NUMBER.
+- Customer registration now sends a 6-digit SMS OTP and only creates/updates the account after verification.
+- OTP expires in 5 minutes, limits incorrect attempts to 5, and rate-limits resend requests to one per minute and three per hour per number.
+- OTP hashes are stored, not raw OTP codes.
+
+Render environment:
+- BULKGATE_SMS_ENABLED=true
+- BULKGATE_APPLICATION_ID=<existing BulkGate application ID>
+- BULKGATE_APPLICATION_TOKEN=<existing BulkGate token>
+- BASSE_ADMIN_SMS_NUMBER=220XXXXXXXX (optional admin alert number)
+- CUSTOMER_OTP_SECRET=<optional long random secret; if omitted, BulkGate token is used to derive OTP hashes>
+
+IMPORTANT:
+- This ZIP is prepared and syntax-checked, but not deployed or end-to-end tested against the live database/BulkGate account.
+- Existing customer registrations now require SMS delivery. If SMS is disabled or BulkGate fails, registration returns an error rather than silently creating an unverified account.
+- Before replacing the live service, back up the current project/database. Test a new customer signup and verify the OTP before announcing it to customers.

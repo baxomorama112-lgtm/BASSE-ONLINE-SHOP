@@ -1,0 +1,25 @@
+BASSE ONLINE SHOP V51 - Ticketing workflow fixes
+
+Changes in this package:
+- Admin event flyer can be selected from the device and uploaded through an authenticated endpoint; preview is shown before event creation.
+- Admin event tools use event-name dropdowns instead of requiring manual event IDs. Physical ticket type dropdown is populated from the selected event.
+- Event management cards show human-readable statuses (PUBLISHED / WAITING FOR APPROVAL / REJECTED / CANCELLED), remove raw JSON and long event IDs from the visible summary, and show ticket remaining counts.
+- Ticket reservations are polled by the Services & Events admin page every 7 seconds. New reservations show an in-page notification and ticket rows refresh automatically.
+- Customer ticket reservation requests use the existing configured Waychit API to create a ticket-specific payment request and direct the customer to the hosted payment page. The signed Waychit webhook marks the ticket paid/valid only when a completed event arrives. If WAYCHIT_API_KEY is missing or Waychit rejects the request, the UI explicitly reports that direct payment was not created rather than pretending payment is available.
+- Ticket status endpoint allows the customer's My Tickets view to update status after payment confirmation.
+- Ticket marketplace event cards show uploaded flyers; category selection filters the approved events list; My Tickets displays payment and entry status with a QR code.
+- Organizer dashboard refreshes ticket totals every 10 seconds.
+
+Important deployment requirements:
+- Deploy the server and static pages together.
+- Keep existing persistent DATA_DIR and database; do not reset the database.
+- Confirm WAYCHIT_API_KEY and WAYCHIT_WEBHOOK_SECRET are configured in the hosting environment and the Waychit webhook points to /api/waychit/webhook. Direct online ticket payment cannot be completed without a valid provider configuration.
+- Verify the complete flow in a test event before selling real tickets. Camera QR scanning depends on browser BarcodeDetector support and camera permission; manual code entry remains available.
+
+Checks performed:
+- node --check server/server.js
+- node --check for inline scripts in admin/services.html, marketplace/services.html, marketplace/organizer.html, marketplace/scanner.html
+- ZIP integrity test
+
+Not performed:
+- Live deployment, production database integration test, or real Waychit payment transaction.

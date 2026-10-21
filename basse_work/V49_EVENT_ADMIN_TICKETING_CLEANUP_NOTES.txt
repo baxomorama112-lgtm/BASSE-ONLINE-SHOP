@@ -1,0 +1,25 @@
+BASSE ONLINE SHOP V49 — EVENT ADMIN + CLEAN TICKET MARKETPLACE
+
+Admin:
+- Added authenticated Admin Control Center form to create an event with category, date, time, venue, description, optional flyer URL, and multiple ticket types with Dalasi prices and quantities.
+- Admin can publish immediately or save pending for approval.
+- Published events are visible on the customer ticket marketplace.
+- Existing service booking and business partner application management remains in the admin-side Services & Events panel.
+- Scanner tokens are created through the existing admin-only scanner endpoint; result now includes the dedicated scanner page URL.
+
+Marketplace:
+- Removed the large Tickets & Events promotional banner.
+- Removed Scanner Access from the customer ticket marketplace.
+- Marketplace ticket view contains ticket categories, Upcoming Events, and My Tickets only.
+- Upcoming Events shows approved events and ticket reservation options; category buttons filter by stored event category.
+- My Tickets is a separate view and displays only saved tickets with QR codes and download controls.
+- Added standalone /scanner page for authorized event staff with token access, camera QR scanning where supported, and manual ticket-code verification.
+
+Backend:
+- Added backward-compatible event category column migration.
+- Added authenticated admin event creation/publish endpoint.
+- Existing marketplace products, payment, delivery, vendor, and backup flows were not intentionally changed.
+
+Checks:
+- Node syntax check passed for server and inline scripts.
+- Live deployment and real payment/ticket/scanner flow have not been tested from this local ZIP.

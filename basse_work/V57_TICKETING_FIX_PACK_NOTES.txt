@@ -1,0 +1,16 @@
+BASSE ONLINE SHOP V57 TICKETING FIX PACK
+========================================
+
+Changes made in this patch:
+- Online ticket checkout now creates one Waychit payment request for the full quantity (unit price × quantity), rather than rejecting paid multi-ticket purchases.
+- All tickets in that purchase are linked to the same Waychit request ID. The payment webhook activates all tickets in that purchase together.
+- Physical ticket batches are inserted as payment_status=PAID and ticket_status=VALID immediately, and returned with matching statuses; they no longer enter manual payment verification.
+- Repeat scans return a distinct ALREADY_SCANNED reason and a human-readable "ALREADY SCANNED" message.
+- Added authenticated admin event deletion endpoint; deletes the event's scanners, tickets, ticket types and event in a transaction.
+- Added a Delete event control to each event in the Services & Events admin list, with confirmation.
+- Added a direct link to the dedicated /scanner page in the admin header.
+
+Validation performed:
+- Node.js syntax check passed for server/server.js.
+- ZIP is based on the supplied V57 archive, not V58.
+- Full live payment/webhook testing requires your deployed environment and valid Waychit credentials. No deployment was performed.

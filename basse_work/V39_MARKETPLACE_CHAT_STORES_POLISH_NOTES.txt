@@ -1,0 +1,23 @@
+BASSE ONLINE SHOP V39 — MARKETPLACE CHAT & STORES POLISH
+
+Built on V38 without replacing the existing server, checkout, Waychit, stock, order, delivery, live viewer, restore, admin or vendor workflows.
+
+Marketplace:
+- Added a dedicated marketplace support/chat card leading to the existing Messenger inbox.
+- Improved chat entry icons with crisp inline SVG icons and refined inbox cards.
+- Added visualViewport-based chat height handling so the conversation and composer remain usable when the mobile keyboard opens.
+- Changed product tiles and store product thumbnails to lazy-load/decode asynchronously to reduce initial image work.
+- Store cards and store detail accept each vendor's uploaded logo, falling back to store initials when a logo has not been added.
+
+Vendor / Stores:
+- Added a Store Profile logo upload card, file preview and save action.
+- Added an authenticated POST /api/vendor/store-logo endpoint.
+- Added backward-compatible SQLite migration for vendors.logo_url.
+- Public store listing/detail APIs and server-rendered store pages now include the saved logo.
+- Admin vendor list uses the store logo when available.
+
+Chat fixes:
+- Admin reply send flow now awaits message reload and inbox refresh, shows clear success/failure feedback, and displays message-load errors instead of silently hiding them.
+- Customer, admin and vendor chat inputs react to visual viewport changes, scroll the message thread to the latest message, and use 16px font sizing to prevent mobile browser auto-zoom.
+
+Validation performed: node --check passed for server/server.js, marketplace/app.js, admin/app.js, vendor/app.js and driver/app.js. A live browser/payment end-to-end test was not available in this environment.

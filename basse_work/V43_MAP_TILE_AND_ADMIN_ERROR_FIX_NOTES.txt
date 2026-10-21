@@ -1,0 +1,10 @@
+BASSE ONLINE SHOP V43 — MAP TILE AND ADMIN DELIVERY ERROR FIX
+
+Based on V42. Fixes confirmed from user screenshots:
+- Admin map renderer referenced an undefined variable `row`, causing the visible “row is not defined” error. It now validates the latitude/longitude arguments passed into the renderer.
+- Admin and customer tracking map now use OpenStreetMap public tiles as the primary layer. The previous CARTO tile URL could return an API-key-required watermark as a successful image response, so the tileerror fallback never triggered.
+- Admin map only converts coordinate fields to numbers after confirming that both coordinates are present.
+- Driver portal already used OpenStreetMap tiles and remains unchanged.
+- Existing driver GPS sharing, delivery endpoints, customer order tracking, live polling, marker updates, and distance line are retained.
+
+Limitations: OSM basemap availability depends on network/tile service access. This does not add road-following routing; the line between driver and customer remains a straight-line indicator. Source not deployed to production.

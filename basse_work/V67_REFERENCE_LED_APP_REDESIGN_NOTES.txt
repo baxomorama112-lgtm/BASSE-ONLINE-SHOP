@@ -1,0 +1,9 @@
+BASSE ONLINE SHOP V67 — REFERENCE-LED APP REDESIGN
+
+Implemented in project files:
+- Removed the extra ticket-discovery promotional banner from the marketplace home page; retained the existing marketplace banner.
+- Added a responsive first-visit welcome/login gateway with glowing original BASSE logo, customer login/signup entry points, vendor portal entry point, driver portal entry point, and guest browsing option. Existing customer/vendor authentication functions are reused.
+- Added a calm, polished mobile/desktop visual layer to marketplace, vendor and driver styles.
+- Preserved existing product, checkout, Waychit, order tracking, map, ticket and dashboard logic.
+
+Checks: JavaScript syntax validation and ZIP integrity are required after packaging. This change has not been browser-tested against the deployed site and does not claim live payment or map flow verification. Keep the prior deployment/ZIP as a rollback backup.

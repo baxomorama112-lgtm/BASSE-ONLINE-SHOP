@@ -1,0 +1,17 @@
+BASSE ONLINE SHOP V53 — Event ticket QR/PDF and admin cleanup
+
+Changes:
+- Fixed QR generation to require a real QR PNG/data URL and never silently create a PDF without QR images.
+- Compact customer ticket design displays event flyer, status, code and QR; PDF print view includes the ticket QR and flyer when allowed by the image host.
+- Event marketplace cards show the flyer prominently; clicking Music/Football/etc. filters the upcoming event list.
+- Physical ticket batches now render actual QR images, show flyers on the ticket sheet, and produce compact A4 PDFs with one unique QR per ticket.
+- Removed partner applications and service-booking lists from the dedicated Services & Events admin page; they remain in their main admin area.
+- Ticket records now filter by event and show a short code, payment/entry state and in-card payment verification; the separate manual long-ID verification form was removed.
+- Event cards remain compact/collapsible with edit details, flyer replacement, inventory and status controls.
+- Admin ticket polling/notification behaviour is retained. Waychit-confirmed payments still activate tickets through the configured server webhook; manual verification is retained only as a backup for confirmed cash/offline payments.
+
+Warnings:
+- Waychit direct payment requires WAYCHIT_API_KEY and WAYCHIT_WEBHOOK_SECRET on the live server. A ticket reservation should not be treated as paid if a payment URL is not returned.
+- QR/PDF helpers load from public CDNs; this update fails visibly instead of silently downloading a ticket without a QR if those dependencies are unavailable.
+- Browser Print / Save as PDF can be used for customer ticket views.
+- This archive has not been deployed to live hosting. Test in staging first.

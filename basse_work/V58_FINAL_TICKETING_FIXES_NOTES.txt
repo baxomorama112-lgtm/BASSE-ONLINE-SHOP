@@ -1,0 +1,24 @@
+BASSE ONLINE SHOP V58 — Final ticketing fixes
+
+This version builds on the provided V57 ZIP and preserves the existing shop and payment integrations.
+
+Implemented:
+1. Physical ticket batches are marked PAID and VALID immediately when generated, because these are offline/cash-sale tickets. Their QR check-in remains one-time.
+2. Online ticket checkout accepts 1–10 tickets and sends one Waychit payment request for the full quantity total. All tickets are linked to that request and become PAID/VALID only after a valid signed Waychit completion webhook.
+3. Ticket quantity and total are shown in the customer purchase dialog. Ticket codes are deduplicated in the local My Tickets list.
+4. Scanner opens directly into its dedicated scanning screen, requests the camera, and visually distinguishes valid scans from rejected/already-used tickets.
+5. Admin event cards have a delete action with confirmation. Deleting an event transactionally removes its ticket records, ticket types and scanner/organizer access records.
+6. Event dashboard copy and layout are tidied; removed the redundant ticket-verification activity panel and organizer access section from this admin screen. The main event, ticket type, scanner and physical print workflows remain.
+7. Physical ticket print labels say PAID / PHYSICAL SALE / VALID FOR ENTRY. PDF flyer placement was adjusted to avoid overlapping the ticket code.
+
+Production configuration:
+- Set WAYCHIT_API_KEY and WAYCHIT_WEBHOOK_SECRET in Render.
+- Set PUBLIC_BASE_URL=https://basseonlineshop.com.
+- Configure the Waychit webhook at https://basseonlineshop.com/api/waychit/webhook.
+- Online tickets must not be treated as paid merely because the browser returns from the payment page; a valid signed Waychit completion webhook activates them.
+
+Validation:
+- Server JavaScript passes node --check.
+- Inline JavaScript in admin/services.html, marketplace/services.html and marketplace/scanner.html passes node --check.
+- ZIP integrity checked after packaging.
+- Live Render, SQLite production data, real Waychit checkout/webhook delivery and phone camera permissions cannot be exercised from this local workspace, so those production integrations still need a real test purchase and scan after deployment.

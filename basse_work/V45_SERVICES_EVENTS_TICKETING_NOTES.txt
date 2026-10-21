@@ -1,0 +1,23 @@
+BASSE ONLINE SHOP V45 — SERVICES, PARTNERS, BOOKINGS & EVENT TICKETING
+
+Added:
+- New More navigation item in the marketplace bottom navigation.
+- marketplace/services.html service hub for partner applications, salon/barber and tailoring requests, approved event listings, ticket reservations and scanner page.
+- Database-backed business partner applications with admin approval/rejection/request-more-info/suspend states.
+- Service booking request records with admin status and quote management.
+- Event creation endpoint restricted to approved event-organizer partners; events start PENDING until admin approval.
+- Ticket types with inventory reservation, unique random ticket codes and QR rendering in the service page.
+- Ticket payment verification endpoint restricted to the existing admin session.
+- Event-specific scanner tokens issued through the admin-authenticated endpoint.
+- Online QR/manual-code scanner; server verifies scanner event scope and atomically accepts a valid paid ticket once only.
+- Event attendance summary endpoint for admin sessions.
+- New tables included in the existing JSON backup snapshot.
+- User-provided BASSE logo copied to marketplace/basse-official-logo.png and old marketplace logo references updated to use it.
+
+Important workflow/security notes:
+- Event ticket payment is manual admin verification; no unverified ticket is marked valid. This does not claim automatic Waychit event-ticket checkout.
+- Scanner tokens are event-scoped bearer credentials and must be kept private.
+- Camera scanning uses the browser BarcodeDetector API where supported (typically Chrome on Android); manual code entry remains available. HTTPS is required for camera access in browsers.
+- Partner approval and admin ticket verification use the existing admin guard.
+- Partner/event organizer dashboard is not a full self-service portal yet; event creation API requires an approved partner ID and must be wired to a secure organizer UI before public organizer self-service.
+- This ZIP has not been deployed. Verify provider secrets, admin auth, database backup/restore and payment provider integration in the target environment before production use.

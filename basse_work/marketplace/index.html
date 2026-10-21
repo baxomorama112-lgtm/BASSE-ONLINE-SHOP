@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en"><head><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><title>BASSE ONLINE SHOP | Basse Market, Gambia</title><meta name="description" content="BASSE ONLINE SHOP — your online Basse Market in The Gambia. Shop phones, fashion, beauty, electronics, home & living and accessories online."><meta name="keywords" content="Basse Online Shop, Basse Market, online shop Basse Gambia, shopping in Basse, Gambia marketplace, Pasemarket"><link rel="canonical" href="https://basseonlineshop.com/"><meta property="og:type" content="website"><meta property="og:title" content="BASSE ONLINE SHOP | Basse Market, Gambia"><meta property="og:description" content="Shop products, browse local services, and discover event tickets online in Basse, The Gambia."><meta property="og:url" content="https://basseonlineshop.com/"><meta property="og:image" content="https://basseonlineshop.com/basse-official-logo.png"><meta name="twitter:card" content="summary"><meta name="twitter:title" content="BASSE ONLINE SHOP | Basse Market, Gambia"><meta name="twitter:description" content="Shop products, browse local services, and discover event tickets online in Basse, The Gambia."><meta name="twitter:image" content="https://basseonlineshop.com/basse-official-logo.png"><meta name="robots" content="index,follow,max-image-preview:large"><meta name="theme-color" content="#071a4a"><script type="application/ld+json">{"@context":"https://schema.org","@type":"OnlineStore","name":"BASSE ONLINE SHOP","url":"https://basseonlineshop.com/","description":"Online marketplace for Basse and surrounding areas in The Gambia, offering phones, fashion, beauty, electronics, home and accessories.","areaServed":{"@type":"City","name":"Basse","containedInPlace":{"@type":"Country","name":"The Gambia"}},"sameAs":[],"potentialAction":{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"https://basseonlineshop.com/?q={search_term_string}"},"query-input":"required name=search_term_string"}}</script><link rel="stylesheet" href="style.css"></head>
+<body>
+<header class="top">
+<a class="brand" href="#" aria-label="BASSE Marketplace"><img class="brand-logo" src="/basse-official-logo.png" alt="BASSE Marketplace"></a>
+<div class="search-wrap top-search"><div class="search"><input id="search" autocomplete="off" placeholder="Search products, phones, fashion, beauty..." aria-label="Search products"><button id="searchBtn" type="button" aria-label="Search"><span aria-hidden="true">⌕</span></button><button id="clearSearch" class="clear-search" type="button" aria-label="Clear search">×</button></div><div id="searchSuggestions" class="search-suggestions"></div></div>
+<div class="top-actions"><a class="stores-head-btn" href="/digital-services.html" style="text-decoration:none" aria-label="Digital services">Digital Services</a>
+<button class="stores-head-btn" type="button" onclick="openStores()" aria-label="Browse stores" title="Browse stores"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 5 4h14l2 6.5M4 11v9h16v-9M9 20v-6h6v6M3 10.5h18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Shops</span></button>
+<button class="account-head-btn" type="button" onclick="openAccount()" aria-label="Account" title="Account"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5 21c.5-4 2.8-6 7-6s6.5 2 7 6"/></svg><span>Account</span></button>
+<button class="notify" type="button" onclick="openOrderNotifications()" aria-label="Notifications"><span class="bell-icon" aria-hidden="true"></span><i id="orderNotifyBadge" class="hidden">0</i></button>
+<button class="cart" onclick="openCart()" aria-label="Cart"><span class="ui-icon cart-icon" aria-hidden="true"></span><i id="cartCount">0</i></button>
+</div>
+</header>
+<main>
+<section class="hero market-banner" aria-label="BASSE Marketplace promotion">
+  <a class="banner-link" href="#products" aria-label="Shop BASSE MARKETPLACE">
+    <img src="/basse-market-banner.jpg" alt="BASSE Marketplace — Stay home, make order, shop local and get delivery">
+  </a>
+  <div class="banner-overlay"><button onclick="document.querySelector('#products').scrollIntoView({behavior:'smooth'})">SHOP NOW <b>→</b></button></div>
+</section>
+<section id="categories" class="categories"><div class="section-title"><div><h2>Explore Categories</h2><span class="category-subtitle">Find what you need, all in one place</span></div><a href="#products" class="section-link">Shop all <b>→</b></a></div><div class="cats">
+<button class="active" onclick="setCat('All',this)" aria-label="All products"><img src="/category-images/all.jpg" alt="All"><b>All</b></button>
+<button onclick="setCat('Fashion',this)" aria-label="Fashion"><img src="/category-images/fashion.jpg" alt="Fashion"><b>Fashion</b></button>
+<button onclick="setCat('Electronics',this)" aria-label="Electronics"><img src="/category-images/electronics.jpg" alt="Electronics"><b>Electronics</b></button>
+<button onclick="setCat('Phones',this)" aria-label="Phones"><img src="/category-images/phones.jpg" alt="Phones"><b>Phones</b></button>
+<button onclick="setCat('Beauty',this)" aria-label="Beauty"><img src="/category-images/beauty.jpg" alt="Beauty"><b>Beauty</b></button>
+<button onclick="setCat('Home & Living',this)" aria-label="Home and Living"><img src="/category-images/home-living.jpg" alt="Home and Living"><b>Home &amp; Living</b></button>
+<button onclick="setCat('Accessories',this)" aria-label="Accessories"><img src="/category-images/accessories.jpg" alt="Accessories"><b>Accessories</b></button>
+<button class="ticket-category" type="button" onclick="window.location.href='services.html#events'" aria-label="Tickets"><img src="/category-images/tickets.svg" alt="Ticket icon"><b>Tickets</b></button>
+</div></section>
+
+<section id="products"><div class="section-title"><div><h2>Featured products</h2><span>Fresh products from BASSE ONLINE SHOP</span></div><small id="count"></small></div><div id="grid"></div></section>
+<section class="app-download-card" aria-label="BASSE app download">
+  <div class="app-download-copy">
+    <span class="app-download-kicker">BASSE ONLINE SHOP APP</span>
+    <h2>Shop faster from your phone</h2>
+    <p>Get the BASSE app for a smoother marketplace, faster checkout and easy order access.</p>
+    <a class="app-download-button" href="/download">DOWNLOAD APP <b>→</b></a>
+  </div>
+  <div class="app-download-logo-wrap">
+    <img src="/basse-app-logo.png" alt="BASSE ONLINE SHOP app">
+  </div>
+</section>
+<section class="market-chat-promo" aria-label="Chat with BASSE support and stores"><div class="market-chat-promo-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H9l-5 4V5.5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M8 8h8M8 11.5h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div><div class="market-chat-promo-copy"><span>REAL PEOPLE · QUICK REPLIES</span><h2>Need help with a product or order?</h2><p>Chat directly with BASSE support or message a store, just like a marketplace messenger.</p></div><button type="button" class="market-chat-promo-button" onclick="openChatInbox()">OPEN CHAT <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button></section>
+<section class="trust" aria-label="BASSE services">
+  <div class="trust-card"><span class="trust-icon payment-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M24 4 40 10v12c0 10-6.4 18.3-16 22C14.4 40.3 8 32 8 22V10l16-6Z" fill="none" stroke="currentColor" stroke-width="2.8"/><path d="m16 24 5 5 11-12" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><b>Secure payment</b><span>Pay safely with trusted methods</span></div></div>
+  <button class="trust-card support-card" type="button" onclick="showSupport()"><span class="trust-icon support-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M10 25v-4a14 14 0 0 1 28 0v4" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><rect x="6" y="23" width="9" height="13" rx="4" fill="none" stroke="currentColor" stroke-width="2.8"/><rect x="33" y="23" width="9" height="13" rx="4" fill="none" stroke="currentColor" stroke-width="2.8"/><path d="M33 36c-1 5-5 7-10 7h-3" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg></span><span class="trust-copy"><b>Customer support</b><span>Tap to show support number</span></span><span class="trust-arrow" aria-hidden="true">→</span></button>
+  <div class="trust-card"><span class="trust-icon delivery-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M5 12h24v21H5zM29 20h8l6 7v6H29z" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linejoin="round"/><circle cx="13" cy="37" r="4" fill="none" stroke="currentColor" stroke-width="2.8"/><circle cx="36" cy="37" r="4" fill="none" stroke="currentColor" stroke-width="2.8"/><path d="M33 27h8" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg></span><div><b>Fast delivery</b><span>Quick and reliable delivery to your door</span></div></div>
+</section>
+</main>
+<nav class="bottom" aria-label="Main navigation">
+<a class="active" data-nav="home" href="#" onclick="setActiveNav('home')" aria-label="Home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.8 12 3l9 7.8v9.1h-6v-6H9v6H3z"/></svg><small>Home</small></a>
+<a data-nav="categories" href="#categories" onclick="setActiveNav('categories')" aria-label="Categories"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1.1"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1.1"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1.1"/><rect x="14" y="14" width="6.5" height="6.5" rx="1.1"/></svg><small>Categories</small></a>
+<button type="button" data-nav="chat" onclick="openChatInbox()" aria-label="Messenger"><span class="bottom-icon-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H9l-5 4z"/><path d="M8 8h8M8 11.5h5"/></svg><i id="chatUnreadBadge" class="chat-unread-badge hidden">0</i></span><small>Messenger</small></button>
+<button type="button" data-nav="cart" onclick="openCart()" aria-label="Cart"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2 11h10l3-8H7"/><circle cx="9" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/></svg><small>Cart</small></button>
+
+<button type="button" data-nav="account" onclick="openAccount()" aria-label="Account"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.3"/><path d="M5 21c.5-4 2.8-6 7-6s6.5 2 7 6"/></svg><small>Account</small></button>
+</nav>
+<div id="modal" class="modal"></div><div id="toast" class="toast"></div><script src="app.js" defer></script>
+</body></html>

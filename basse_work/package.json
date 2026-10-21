@@ -1,0 +1,1 @@
+{"name":"basse-online-shop","private":true,"version":"1.0.0","scripts":{"start":"npm --prefix server start","build":"echo ready"}}

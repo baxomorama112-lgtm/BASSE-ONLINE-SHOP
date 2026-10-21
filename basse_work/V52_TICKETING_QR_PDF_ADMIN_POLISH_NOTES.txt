@@ -1,0 +1,17 @@
+BASSE ONLINE SHOP V52 — Ticketing and Services Admin polish
+
+Changes based on user screenshots:
+- Replaced customer name/phone browser prompts with a responsive in-page form.
+- Customer ticket display includes QR image, event flyer when available, event information, status, and PDF download.
+- Ticket batch generation creates compact ticket cards and a downloadable multi-page A4 PDF with a QR per ticket.
+- Event records use collapsed management details; event title/category/date/time/venue/description/flyer URL can be edited, and new ticket types can be added.
+- Ticket records are compact and provide a direct payment verification action with confirmation; admin must confirm payment before marking valid.
+- Scanner access now uses an 8-digit numeric code; scanner page accepts 8 digits.
+- Scanner supports BarcodeDetector where available and a jsQR fallback for browsers such as iOS Safari.
+- Admin continues polling records every 7 seconds; customer ticket status polls every 15 seconds.
+
+Important:
+- QR and PDF rendering use CDN libraries, so clients need internet access to load them.
+- Waychit payment requires the existing server-side WAYCHIT_API_KEY and configured webhook secret/endpoint.
+- Existing ticket and scanner tokens remain as they were. Newly generated scanner codes use eight digits.
+- Live production checkout, Waychit settlement, camera scanning and database migration were not exercised in this offline workspace; test in staging before production rollout.

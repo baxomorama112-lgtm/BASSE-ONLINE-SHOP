@@ -1,0 +1,22 @@
+BASSE ONLINE SHOP V74 — Customer + Vendor OTP and transactional SMS
+
+Includes:
+- Customer registration OTP (6 digits, 5-minute expiry, max 5 wrong attempts, resend throttles).
+- Vendor application OTP before vendor application is submitted.
+- Vendor application remains PENDING until Admin approval.
+- Existing BulkGate SMS test endpoint/button.
+- Customer order, payment, delivery/status SMS notifications.
+- Optional admin SMS alerts for new orders and verified vendor applications using BASSE_ADMIN_SMS_NUMBER.
+
+Render variables:
+- BULKGATE_SMS_ENABLED=true
+- BULKGATE_APPLICATION_ID=<existing application ID>
+- BULKGATE_APPLICATION_TOKEN=<existing application token>
+- BASSE_ADMIN_SMS_NUMBER=220XXXXXXXX (optional)
+- CUSTOMER_OTP_SECRET=<optional long random secret; if omitted, application token is used to derive OTP hashes>
+
+Testing notes:
+- JavaScript syntax checked; ZIP integrity checked.
+- Not deployed and not end-to-end tested against the live Render database or BulkGate.
+- Customer/vendor signup now requires BulkGate SMS to be enabled and available; if sending fails, account/application is not completed.
+- Back up the current code and database before replacing the live service, then test one customer OTP and one vendor OTP before opening to customers.

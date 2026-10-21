@@ -1,0 +1,9 @@
+V33 - Alibaba-style chat flow + 72-hour message retention
+
+Customer chat now opens a Messenger-style home box first, with separate Chat with Admin and Chat with a Vendor choices. Selecting one opens a separate conversation box. Vendor selection lists approved vendors.
+
+Quick action inputs use 16px font to prevent iOS browser zoom. Existing bottom navigation remains unchanged.
+
+Chat messages are retained for 72 hours. Server cleanup runs on startup, hourly, and before chat API operations. Messages older than 72 hours are deleted; empty conversations older than 72 hours are also removed.
+
+Existing Waychit, cart, checkout, order, vendor/admin/driver/GPS and other marketplace features are unchanged.

@@ -1,0 +1,8 @@
+BASSE ONLINE SHOP V46 — TICKET CATEGORY / ACCOUNT ENTRY UPDATE
+
+- Added a Tickets category card with a dedicated ticket icon to the marketplace category carousel.
+- Selecting Tickets opens Services & Events directly at Approved Events & Tickets.
+- Removed the More item from the mobile bottom navigation.
+- Added Become a Scanner to the account options, linking to the scanner-access section. Scanner access still requires the event-specific token issued by an administrator.
+- Updated the Become a Vendor helper text to clarify that approved vendors manage their own BASSE shop/service page. Existing vendor store pages and product management remain in place.
+- No wallet functionality was added. Existing payment and marketplace flows were not intentionally changed.

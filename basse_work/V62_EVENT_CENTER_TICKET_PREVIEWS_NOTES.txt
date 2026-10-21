@@ -1,0 +1,18 @@
+BASSE ONLINE SHOP V62 — EVENT CONTROL CENTER + TICKET DESIGN PREVIEWS
+
+Changes:
+- Services & Events starts with a compact event-list control center and Add Event action.
+- Event editing, flyer management, publication status, ticket types, physical ticket generation and ticket records are grouped inside the selected event detail panel opened from the event action controls.
+- Ticket batch generation and ticket records are hidden until an event is opened, then scoped to that event.
+- Added three selectable ticket design previews before generation:
+  1. Mask Party-inspired professional layout.
+  2. Premium gold ticket layout.
+  3. Flyer-space layout; the event flyer is embedded only in this design so designs 1 and 2 remain clean.
+- Ticket design selector order now matches the requested design roles.
+- Event deletion is grouped with event actions instead of occupying the overview row.
+- Existing server APIs, authentication, scanner, QR generation and payment flow are preserved.
+
+Validation:
+- Inline JavaScript passed Node syntax validation.
+- ZIP archive integrity verified after packaging.
+- No production deployment or live payment/QR end-to-end testing was performed. Test in staging first.
