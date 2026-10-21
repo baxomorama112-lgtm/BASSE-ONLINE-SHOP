@@ -1,0 +1,21 @@
+BASSE ONLINE SHOP V77 — MOBILE UI + SMS REDUCTION
+
+Changes:
+1. Marketplace category tiles now use a consistent premium 4-column mobile grid, restrained navy/gold brand palette, softly elevated white cards, and matching selected/unselected states. Removed the large blue outline/highlight around the active category.
+2. Account, customer login/signup, vendor application, and verification sheets reset scroll position whenever the form view changes. The mobile modal is sized to the iOS visual viewport and stays scrollable above the keyboard; labels and inputs are consistent 16px mobile form controls to avoid cramped layouts and iOS input zoom.
+3. marketplace/index.html now requests style.css?v=77 and app.js?v=77 so browsers are less likely to keep stale mobile CSS/JS in cache.
+4. Customer transactional SMS is reduced to two intended customer events:
+   - Order received: sent once per order, stating that payment still needs confirmation.
+   - Ready for delivery: sent once when the paid order is set to READY.
+   Other order status changes (payment confirmation, processing, cancellation/refund, driver updates, delivered) continue to appear in the app's notification flow but no longer send a customer SMS.
+5. Stable per-order/per-event SMS idempotency keys prevent repeated messages on retried state updates. OTP, vendor application OTP, BulkGate test messages, and optional admin new-order SMS remain unchanged.
+
+Checks performed:
+- JavaScript syntax checks for marketplace/app.js and server/server.js.
+- ZIP integrity check.
+- Static assertions for no selected category outline and the two-event customer SMS gate.
+- Mocked notification-flow test: exactly two customer SMS calls were emitted for seven simulated order states (order received and ready for delivery); payment-confirmed, processing, driver en-route, cancellation, and delivered stayed in-app only.
+
+Important:
+- This package has not been deployed to the live website in this step.
+- BulkGate's provider-side daily limit still applies. This change reduces customer status SMS; it does not increase BulkGate's account/API limit.

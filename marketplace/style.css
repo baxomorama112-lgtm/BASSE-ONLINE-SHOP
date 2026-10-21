@@ -1490,3 +1490,240 @@ main{animation:bassePageReveal .6s cubic-bezier(.2,.7,.2,1) both}
 }
 @media(max-width:390px){#grid{gap:8px}#grid .product .info{padding:9px}#grid .product .price{font-size:15px}.product-view-link{font-size:8.5px}.cats{gap:8px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto!important}main,.hero.market-banner,.cats button,#grid .product,.modal.show,.modal.show .sheet{animation:none!important}button,a,.product,.product .pic img,.product-card-arrow,.product-view-link svg{transition:none!important}.hero.market-banner:after{display:none!important}}
+
+
+/* V77 — premium category tiles without the distracting selected-state ring. */
+.cats{
+  align-items:stretch!important;
+  overflow:visible!important;
+  padding:4px 1px 8px!important;
+  gap:12px 10px!important;
+}
+.cats button{
+  box-sizing:border-box!important;
+  width:100%!important;
+  min-width:0!important;
+  min-height:0!important;
+  height:auto!important;
+  padding:12px 5px 11px!important;
+  gap:8px!important;
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  justify-content:center!important;
+  border:1px solid #e7ebf3!important;
+  border-radius:21px!important;
+  background:linear-gradient(180deg,#ffffff 0%,#fbfcff 100%)!important;
+  color:#17243d!important;
+  box-shadow:0 6px 18px rgba(16,43,103,.055)!important;
+  transform:none!important;
+  transition:box-shadow .18s ease,border-color .18s ease,background-color .18s ease!important;
+}
+.cats button:before,.cats button:after{display:none!important;content:none!important}
+.cats button:hover{
+  border-color:#d9e1ee!important;
+  box-shadow:0 9px 22px rgba(16,43,103,.085)!important;
+  transform:translateY(-1px)!important;
+}
+.cats button.active,
+.cats button.active:hover{
+  padding:12px 5px 11px!important;
+  border:1px solid #e7ebf3!important;
+  background:linear-gradient(180deg,#ffffff 0%,#fbfcff 100%)!important;
+  color:#17243d!important;
+  box-shadow:0 6px 18px rgba(16,43,103,.055)!important;
+}
+.cats button.active img,
+.cats button:focus:not(:focus-visible) img{
+  outline:none!important;
+  border:0!important;
+  box-shadow:none!important;
+  transform:none!important;
+}
+.cats button:focus:not(:focus-visible){outline:none!important}
+.cats button img{
+  width:72px!important;
+  height:72px!important;
+  max-width:100%!important;
+  aspect-ratio:1!important;
+  object-fit:cover!important;
+  border:0!important;
+  border-radius:18px!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  margin:0 auto!important;
+  padding:0!important;
+}
+.cats button b{
+  margin:0!important;
+  padding:0 2px!important;
+  min-height:2.3em!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  text-align:center!important;
+  overflow-wrap:normal!important;
+  word-break:normal!important;
+  font-size:11px!important;
+  line-height:1.15!important;
+  font-weight:800!important;
+  color:inherit!important;
+}
+@media(min-width:761px){
+  .cats{grid-template-columns:repeat(8,minmax(0,1fr))!important;gap:14px!important}
+  .cats button{padding:14px 7px 12px!important;border-radius:23px!important}
+  .cats button.active,.cats button.active:hover{padding:14px 7px 12px!important}
+  .cats button img{width:78px!important;height:78px!important}
+}
+@media(min-width:761px) and (max-width:1100px){
+  .cats{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+}
+@media(max-width:760px){
+  .cats{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:10px 8px!important}
+  .cats button{padding:10px 3px 9px!important;border-radius:19px!important}
+  .cats button.active,.cats button.active:hover{padding:10px 3px 9px!important}
+  .cats button img{width:clamp(54px,16.7vw,72px)!important;height:clamp(54px,16.7vw,72px)!important;border-radius:16px!important}
+  .cats button b{font-size:10.5px!important;min-height:2.35em!important}
+}
+@media(max-width:360px){
+  .cats{gap:8px 6px!important}
+  .cats button{padding:8px 2px!important}
+  .cats button img{width:54px!important;height:54px!important}
+  .cats button b{font-size:9.5px!important}
+}
+
+/* V77 — keep account and registration forms in a full-height, scrollable mobile sheet.
+   Reset scroll on form changes and size the overlay to the visual viewport above the keyboard. */
+@media(max-width:760px){
+  .modal.show{
+    position:fixed!important;
+    top:var(--basse-vv-top,0px)!important;
+    right:0!important;
+    bottom:auto!important;
+    left:0!important;
+    width:100vw!important;
+    height:var(--basse-vv-height,100dvh)!important;
+    min-height:0!important;
+    max-height:var(--basse-vv-height,100dvh)!important;
+    padding:0!important;
+    overflow:hidden!important;
+    align-items:stretch!important;
+    justify-content:flex-start!important;
+    overscroll-behavior:contain!important;
+  }
+  .modal.show .form-sheet,
+  .modal.show .account-sheet{
+    box-sizing:border-box!important;
+    width:100vw!important;
+    max-width:none!important;
+    height:100%!important;
+    max-height:100%!important;
+    min-height:0!important;
+    margin:0!important;
+    border:0!important;
+    border-radius:0!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    overscroll-behavior:contain!important;
+    -webkit-overflow-scrolling:touch!important;
+    background:#fff!important;
+    padding:calc(12px + env(safe-area-inset-top)) 18px calc(24px + env(safe-area-inset-bottom))!important;
+    scroll-padding-top:76px!important;
+    scroll-padding-bottom:28px!important;
+  }
+  .modal.show .form-sheet .close,
+  .modal.show .account-sheet .close{
+    position:sticky!important;
+    float:right!important;
+    top:0!important;
+    right:auto!important;
+    z-index:20!important;
+    display:grid!important;
+    place-items:center!important;
+    margin:0 0 8px auto!important;
+    width:42px!important;
+    height:42px!important;
+    min-width:42px!important;
+    background:#eef2f8!important;
+    color:#10234a!important;
+    border:0!important;
+    border-radius:50%!important;
+  }
+  .modal.show .form-sheet h2{
+    clear:both;
+    margin:4px 0 9px!important;
+    padding-right:4px!important;
+    font-size:clamp(22px,6vw,27px)!important;
+    line-height:1.2!important;
+    letter-spacing:-.45px!important;
+    color:#12203a!important;
+  }
+  .modal.show .form-sheet>.muted,
+  .modal.show .form-sheet>p{
+    font-size:14px!important;
+    line-height:1.5!important;
+    margin:0 0 20px!important;
+    color:#66738b!important;
+  }
+  .modal.show .form-sheet .form{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr)!important;
+    gap:9px!important;
+    width:100%!important;
+    padding-bottom:10px!important;
+  }
+  .modal.show .form-sheet .form label{
+    display:block!important;
+    margin:4px 0 0!important;
+    font-size:12px!important;
+    line-height:1.25!important;
+    font-weight:800!important;
+    color:#34425c!important;
+  }
+  .modal.show .form-sheet .form input,
+  .modal.show .form-sheet .form select,
+  .modal.show .form-sheet .form textarea,
+  .modal.show .form-sheet input,
+  .modal.show .form-sheet select,
+  .modal.show .form-sheet textarea{
+    box-sizing:border-box!important;
+    display:block!important;
+    width:100%!important;
+    min-width:0!important;
+    min-height:48px!important;
+    padding:13px 14px!important;
+    margin:0!important;
+    border:1px solid #dce3ef!important;
+    border-radius:14px!important;
+    background:#fff!important;
+    color:#15233d!important;
+    font-size:16px!important;
+    line-height:1.35!important;
+    box-shadow:0 2px 5px rgba(17,38,82,.025)!important;
+    scroll-margin-top:76px!important;
+    scroll-margin-bottom:30px!important;
+  }
+  .modal.show .form-sheet .form textarea,
+  .modal.show .form-sheet textarea{min-height:104px!important;resize:vertical!important}
+  .modal.show .form-sheet .form input:focus,
+  .modal.show .form-sheet .form select:focus,
+  .modal.show .form-sheet .form textarea:focus{
+    border-color:#2b65ca!important;
+    outline:2px solid rgba(43,101,202,.12)!important;
+    outline-offset:1px!important;
+    box-shadow:0 0 0 3px rgba(43,101,202,.08)!important;
+  }
+  .modal.show .form-sheet .pay,
+  .modal.show .form-sheet .secondary-btn{
+    width:100%!important;
+    min-height:48px!important;
+    margin-top:7px!important;
+    border-radius:14px!important;
+    font-size:13px!important;
+    font-weight:850!important;
+  }
+  .modal.show .account-sheet{padding-top:calc(12px + env(safe-area-inset-top))!important}
+  .modal.show .account-sheet .account-hero{padding:8px 0 14px!important}
+  .modal.show .account-sheet .account-option{min-height:74px!important;padding:15px!important;border-radius:16px!important}
+  .modal.show .form-sheet.vendor-login-sheet .account-avatar{margin:0 auto 12px!important}
+}

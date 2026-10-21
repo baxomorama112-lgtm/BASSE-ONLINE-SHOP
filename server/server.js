@@ -1606,13 +1606,22 @@ function notifyNewOrder(order){
 }
 function notifyCustomerOrder(order,title,message){
   if(!order?.whatsapp)return;
+  // Keep the in-app order notification feed detailed; SMS is intentionally limited
+  // to two customer events to control costs: order received and ready for delivery.
   addOrderNotification("customer",order.whatsapp,order.id,title,message);
-  // SMS is additive: existing in-app/WhatsApp notification behavior remains unchanged.
-  // Only short transactional notifications are sent; marketing SMS must use a separate compliant flow.
-  const msg=String(message||title||"").replace(/[🛍️💳📦🚚]/gu,"").trim().slice(0,300);
-  const type=/PAYMENT CONFIRMED/i.test(title)?"payment":/ORDER RECEIVED/i.test(title)?"new-order":/REFUND/i.test(title)?"refund":/CANCEL/i.test(title)?"cancellation":/DELIVERY|delivered|Driver|picked up|on the way|ready for delivery/i.test(title+" "+message)?"delivery":"order-update";
-  const eventKey=crypto.createHash("sha256").update([String(order.id),type,String(title||""),String(message||"")].join("|" )).digest("hex");
-  void sendBulkGateSms(order.whatsapp,msg,{eventKey,orderId:String(order.id),messageType:type}).catch(e=>console.error("[bulkgate-sms]",e.message));
+  const titleText=String(title||"");
+  const combined=titleText+" "+String(message||"");
+  const isOrderPlaced=/ORDER RECEIVED/i.test(titleText);
+  const isReadyForDelivery=/READY FOR DELIVERY/i.test(combined);
+  if(!isOrderPlaced&&!isReadyForDelivery)return;
+  const type=isOrderPlaced?"customer-order-placed":"customer-order-ready";
+  const msg=isOrderPlaced
+    ?`BASSE ONLINE SHOP: We received order #${order.id}. We will update you when payment is confirmed.`
+    :`BASSE ONLINE SHOP: Order #${order.id} is ready for delivery. Please keep your phone available.`;
+  // One stable idempotency key per order/event prevents duplicate SMS on retries.
+  const eventKey=crypto.createHash("sha256").update([String(order.id),type].join("|")).digest("hex");
+  void sendBulkGateSms(order.whatsapp,msg,{eventKey,orderId:String(order.id),messageType:type})
+    .catch(e=>console.error("[bulkgate-sms]",e.message));
 }
 
 async function sendBulkGateSms(rawNumber,text,meta={}){

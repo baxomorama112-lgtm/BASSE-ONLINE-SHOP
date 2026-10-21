@@ -109,7 +109,7 @@ function renderProductDetail(product){
       <div class="detail-info modern-detail-info"><span class="tagline">${esc(product.category)}</span><h2>${esc(product.name)}</h2><div class="detail-price">${money(product.price)}</div><p class="muted">${esc(product.description||"Quality product from BASSE MARKET.")}</p>${renderOptionFields(product)?`<div class="product-options"><b>Choose options</b>${renderOptionFields(product)}</div>`:""}<div class="stock-note ${product.stock<1?'out':''}">${product.stock>0?` ${product.stock} available`:"Out of stock"}</div><div class="detail-actions"><button class="secondary-btn cart-add-btn" ${product.stock<1?"disabled":""} onclick="addSelectedToCart()"><b>ADD TO CART</b></button><button class="pay buy-now-modern" ${product.stock<1?"disabled":""} onclick="openCheckout()"><span></span><b>BUY NOW</b><span class="arrow">→</span></button>${product.vendor_id?`<button class="secondary-btn" type="button" onclick="openChat(${Number(product.vendor_id)},'Vendor')"><b>CHAT WITH VENDOR</b></button>`:""}</div><div class="product-hint">Secure checkout · Pay with Waychit</div></div>
     </div></div>`;
   window.__productImages=imgs;
-  $("modal").classList.add("show");document.body.classList.add("basse-modal-open");syncVisualViewport();
+  $("modal").classList.add("show");resetModalSheet();
 }
 async function preloadProductImages(images){
   const list=[...new Set((images||[]).filter(Boolean).map(String))];
@@ -221,7 +221,7 @@ function openCheckout(){
   const savedPhone=esc(String(savedCustomer?.phone||"").replace(/\D/g,"").replace(/^220/,""));
   checkoutGps={lat:null,lng:null,accuracy:null};
   $("modal").innerHTML=`<div class="sheet checkout-sheet"><button class="close" onclick="buy(${selected.id})">←</button><div class="checkout-head"><span class="mini-bag" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M12 18h24l-2 23H14z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M18 18v-4a6 6 0 0 1 12 0v4" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></span><div><small>SECURE CHECKOUT</small><h2>Your order</h2></div></div><p class="muted">${esc(selected.name)}</p><div class="selected-options-summary" id="selectedOptionsSummary"></div><div class="form"><label>Quantity</label><div class="qty-row"><button type="button" onclick="changeQty(-1)">−</button><input id="qty" type="number" min="1" max="${selected.stock}" value="1"><button type="button" onclick="changeQty(1)">+</button></div><label>Full Name</label><input id="name" autocomplete="name" placeholder="Your name" value="${savedName}"><label>WhatsApp Number</label><input id="phone" inputmode="numeric" autocomplete="tel" placeholder="7XXXXXX" value="${savedPhone}"><small>+220 will be added automatically. No account/login is required.</small><label>Delivery Area</label><select id="loc"><option>Basse</option><option>Bansang</option><option>Fatoto</option><option>Other</option></select><button type="button" class="location-btn" onclick="captureCheckoutLocation()"> USE MY CURRENT GPS LOCATION</button><small id="checkoutGpsState" class="gps-note">GPS is optional. Your written delivery area can still be used.</small><div class="summary"><div class="row"><span>Product</span><b>${money(selected.price)}</b></div><div class="row total-row"><span>Total</span><b id="total">${money(selected.price)}</b></div></div><button class="pay pulse" onclick="placeOrder()"> PAY WITH WAYCHIT <span>→</span></button><div class="secure-note"> Secure checkout · You will be redirected to Waychit</div></div></div>`;
-  $("modal").classList.add("show");document.body.classList.add("basse-modal-open");syncVisualViewport();$("qty").oninput=updateTotal;$("phone").addEventListener("keydown",e=>{if(e.key==="Enter")placeOrder()});
+  $("modal").classList.add("show");resetModalSheet();$("qty").oninput=updateTotal;$("phone").addEventListener("keydown",e=>{if(e.key==="Enter")placeOrder()});
 }
 function changeQty(d){let q=Math.max(1,Math.min(selected.stock,(+$('qty').value||1)+d));$('qty').value=q;updateTotal()}
 function updateTotal(){$("total").textContent=money(selected.price*Math.max(1,Math.min(selected.stock,+$("qty").value||1)))}
@@ -605,8 +605,45 @@ function resumePendingPayment(){
   }catch{}
 }
 function closeModal(){stopTrackingPolling();stopChatPoll();$("modal").classList.remove("show");document.body.classList.remove("basse-modal-open");resetStoreNav();setActiveNav("home")}
-function syncVisualViewport(){const vv=window.visualViewport;const h=vv?vv.height:window.innerHeight;document.documentElement.style.setProperty("--basse-vv-height",Math.max(260,Math.round(h))+"px");const modal=document.querySelector(".modal.show .sheet");if(modal){modal.style.maxHeight=Math.max(260,Math.round(h)-8)+"px";modal.style.height=Math.min(modal.scrollHeight,Math.max(260,Math.round(h)-8))+"px";if(document.activeElement&&modal.contains(document.activeElement)&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){setTimeout(()=>document.activeElement.scrollIntoView({block:"nearest",behavior:"smooth"}),80)}}if(document.querySelector(".modal.show .chat-sheet.keyboard-open")){const box=$("chatMessages");if(box)box.scrollTop=box.scrollHeight}}
-if(window.visualViewport){window.visualViewport.addEventListener("resize",syncVisualViewport);window.visualViewport.addEventListener("scroll",syncVisualViewport)}window.addEventListener("orientationchange",()=>setTimeout(syncVisualViewport,120));syncVisualViewport();
+function syncVisualViewport(){
+  const vv=window.visualViewport;
+  const h=vv&&Number.isFinite(vv.height)?vv.height:window.innerHeight;
+  const top=vv&&Number.isFinite(vv.offsetTop)?vv.offsetTop:0;
+  const safeHeight=Math.max(260,Math.round(h));
+  document.documentElement.style.setProperty("--basse-vv-height",safeHeight+"px");
+  document.documentElement.style.setProperty("--basse-vv-top",Math.max(0,Math.round(top))+"px");
+  const sheet=document.querySelector(".modal.show .sheet");
+  if(sheet){
+    // Mobile CSS owns the sheet height. Avoid forcing it to the content's
+    // current scrollHeight, which can collapse the form while the iOS keyboard opens.
+    sheet.style.removeProperty("height");
+    sheet.style.maxHeight=Math.max(260,safeHeight-4)+"px";
+  }
+  if(document.querySelector(".modal.show .chat-sheet.keyboard-open")){
+    const box=$("chatMessages");
+    if(box)box.scrollTop=box.scrollHeight;
+  }
+}
+function resetModalSheet(){
+  const modal=$("modal");
+  if(!modal)return;
+  document.body.classList.add("basse-modal-open");
+  modal.scrollTop=0;
+  const sheet=modal.querySelector(".sheet");
+  if(sheet){
+    sheet.scrollTop=0;
+    sheet.style.removeProperty("height");
+    sheet.style.removeProperty("max-height");
+  }
+  syncVisualViewport();
+}
+if(window.visualViewport){
+  window.visualViewport.addEventListener("resize",syncVisualViewport);
+  window.visualViewport.addEventListener("scroll",syncVisualViewport);
+}
+window.addEventListener("orientationchange",()=>setTimeout(syncVisualViewport,120));
+syncVisualViewport();
+
 async function openOrders(){let raw=localStorage.getItem("basseLastOrder");if(!raw)return toast("No recent order found on this phone.");try{let old=JSON.parse(raw),r=await fetch("/api/order/"+encodeURIComponent(old.id)),o=await r.json();if(!r.ok)throw new Error(o.error||"Order not found");showReturn(o,"",o.payment_status==="PAID",o.whatsappSupport,o.payment_status==="PENDING"?"Your order is waiting for payment confirmation.":"")}catch(e){toast(e.message)}}
 
 
@@ -674,19 +711,19 @@ function openAccount(){
   <button class="account-option" type="button" onclick="window.location.href='scanner.html'"> <span><b>Become a Scanner</b><small>For people who want to scan and validate event tickets</small></span> →</button>
   <button class="account-option vendor-login-option" type="button" onclick="openVendorLogin()"> <span><b>Vendor Login</b><small>Approved vendors: enter your phone and PIN</small></span> →</button>
   <div class="guest-note"> <b>Continue as Guest</b><br><span>No customer login is required to browse or place an order.</span></div>`}</div>`;
-  $("modal").classList.add("show")
+  $("modal").classList.add("show");resetModalSheet();
 }
 function openCustomerSignup(){
- $("modal").innerHTML=`<div class="sheet form-sheet"><button class="close" onclick="openAccount()">←</button><h2>Create Customer Account</h2><p class="muted">Optional — you can always shop as a guest.</p><div class="form"><label>Full Name</label><input id="caName" placeholder="Your name"><label>WhatsApp Number</label><input id="caPhone" inputmode="numeric" placeholder="7XXXXXX"><label>Password</label><input id="caPass" type="password" placeholder="Create a password"><button class="pay" onclick="createCustomer()">CREATE ACCOUNT</button><button class="secondary-btn" onclick="openAccount()">CONTINUE AS GUEST</button></div></div>`;$('modal').classList.add('show')
+ $("modal").innerHTML=`<div class="sheet form-sheet"><button class="close" onclick="openAccount()">←</button><h2>Create Customer Account</h2><p class="muted">Optional — you can always shop as a guest.</p><div class="form"><label>Full Name</label><input id="caName" placeholder="Your name"><label>WhatsApp Number</label><input id="caPhone" inputmode="numeric" placeholder="7XXXXXX"><label>Password</label><input id="caPass" type="password" placeholder="Create a password"><button class="pay" onclick="createCustomer()">CREATE ACCOUNT</button><button class="secondary-btn" onclick="openAccount()">CONTINUE AS GUEST</button></div></div>`;$('modal').classList.add('show');resetModalSheet()
 }
-async function createCustomer(){let n=$("caName").value.trim(),p=$("caPhone").value.replace(/\D/g,"").replace(/^220/,""),pw=$("caPass").value;if(!n||p.length<6)return toast("Enter your name and valid WhatsApp number.");if(pw.length<4)return toast("Password must be at least 4 characters.");const btn=document.querySelector(".form-sheet .pay");if(btn){btn.disabled=true;btn.textContent="SENDING CODE..."}try{let r=await fetch("/api/customers/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n,whatsapp:p,password:pw})}),d=await r.json();if(!r.ok)throw Error(d.error||"Could not send verification code.");$("modal").innerHTML=`<div class="sheet form-sheet"><button class="close" onclick="openAccount()">←</button><h2>Verify Your Phone</h2><p class="muted">Enter the 6-digit code sent by SMS to +220 ${p}. The code expires in 5 minutes.</p><div class="form"><label>SMS Verification Code</label><input id="caOtp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code"><button class="pay" onclick="verifyCustomerOtp('${p}')">VERIFY & CREATE ACCOUNT</button><button class="secondary-btn" onclick="openCustomerSignup()">START AGAIN</button></div></div>`;$("modal").classList.add("show");toast("Verification code sent.")}catch(e){if(btn){btn.disabled=false;btn.textContent="CREATE ACCOUNT"}toast(e.message)}}
+async function createCustomer(){let n=$("caName").value.trim(),p=$("caPhone").value.replace(/\D/g,"").replace(/^220/,""),pw=$("caPass").value;if(!n||p.length<6)return toast("Enter your name and valid WhatsApp number.");if(pw.length<4)return toast("Password must be at least 4 characters.");const btn=document.querySelector(".form-sheet .pay");if(btn){btn.disabled=true;btn.textContent="SENDING CODE..."}try{let r=await fetch("/api/customers/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n,whatsapp:p,password:pw})}),d=await r.json();if(!r.ok)throw Error(d.error||"Could not send verification code.");$("modal").innerHTML=`<div class="sheet form-sheet"><button class="close" onclick="openAccount()">←</button><h2>Verify Your Phone</h2><p class="muted">Enter the 6-digit code sent by SMS to +220 ${p}. The code expires in 5 minutes.</p><div class="form"><label>SMS Verification Code</label><input id="caOtp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code"><button class="pay" onclick="verifyCustomerOtp('${p}')">VERIFY & CREATE ACCOUNT</button><button class="secondary-btn" onclick="openCustomerSignup()">START AGAIN</button></div></div>`;$("modal").classList.add("show");resetModalSheet();toast("Verification code sent.")}catch(e){if(btn){btn.disabled=false;btn.textContent="CREATE ACCOUNT"}toast(e.message)}}
 async function verifyCustomerOtp(p){let code=$("caOtp").value.replace(/\D/g,"");if(code.length!==6)return toast("Enter the 6-digit code.");const btn=document.querySelector(".form-sheet .pay");if(btn){btn.disabled=true;btn.textContent="VERIFYING..."}try{let r=await fetch("/api/customers/register/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({whatsapp:p,code})}),d=await r.json();if(!r.ok)throw Error(d.error||"Could not verify your phone.");localStorage.setItem("basseCustomer",JSON.stringify({name:d.full_name,phone:"+220 "+p,id:d.id,status:d.status}));openAccount();toast("Phone verified. Customer account created.")}catch(e){if(btn){btn.disabled=false;btn.textContent="VERIFY & CREATE ACCOUNT"}toast(e.message)}}
 function openCustomerLogin(){
- $("modal").innerHTML=`<div class="sheet form-sheet"><button class="close" onclick="openAccount()">←</button><h2>Customer Login</h2><p class="muted">Login is optional. You can also continue shopping as a guest.</p><div class="form"><label>WhatsApp Number</label><input id="clPhone" inputmode="numeric" placeholder="7XXXXXX"><label>Password</label><input id="clPass" type="password" placeholder="Your password"><button class="pay" onclick="loginCustomer()">LOGIN</button><button class="secondary-btn" onclick="openAccount()">CONTINUE AS GUEST</button></div></div>`;$('modal').classList.add('show')
+ $("modal").innerHTML=`<div class="sheet form-sheet"><button class="close" onclick="openAccount()">←</button><h2>Customer Login</h2><p class="muted">Login is optional. You can also continue shopping as a guest.</p><div class="form"><label>WhatsApp Number</label><input id="clPhone" inputmode="numeric" placeholder="7XXXXXX"><label>Password</label><input id="clPass" type="password" placeholder="Your password"><button class="pay" onclick="loginCustomer()">LOGIN</button><button class="secondary-btn" onclick="openAccount()">CONTINUE AS GUEST</button></div></div>`;$('modal').classList.add('show');resetModalSheet()
 }
 async function loginCustomer(){let p=$("clPhone").value.replace(/\D/g,"").replace(/^220/,""),pw=$("clPass").value;if(p.length<6||!pw)return toast("Enter your WhatsApp number and password.");try{let r=await fetch("/api/customers/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({whatsapp:p,password:pw})}),d=await r.json();if(!r.ok)throw Error(d.error||"Customer login failed.");localStorage.setItem("basseCustomer",JSON.stringify({name:d.full_name,phone:"+220 "+p,id:d.id,status:d.status}));openAccount();toast("Welcome back ")}catch(e){toast(e.message)}}
 function openVendorApply(){
- $("modal").innerHTML=`<div class="sheet form-sheet"><button class="close" onclick="openAccount()">←</button><h2>Become a Vendor</h2><p class="muted">Apply to sell on BASSE MARKET. Admin will review your application.</p><div class="form"><label>Full Name</label><input id="vName" placeholder="Full name"><label>Business / Shop Name</label><input id="vBusiness" placeholder="Your shop name"><label>WhatsApp Number</label><input id="vPhone" inputmode="numeric" placeholder="7XXXXXX"><label>Location</label><input id="vLocation" placeholder="Basse"><label>Business Type</label><select id="vCategory"><option value="Electronics">Electronics</option><option value="Fashion">Fashion / Clothing</option><option value="Phones">Phones & Accessories</option><option value="Beauty">Beauty</option><option value="Food">Food / Restaurant</option><option value="Salon / Barber">Salon / Barber</option><option value="Tailoring">Tailoring / Custom Outfits</option><option value="Event Organizer">Event Organizer</option><option value="General Store">General Store</option><option value="Other Services">Other Services</option></select><label>Short Description</label><textarea id="vDesc" placeholder="Tell us about your business"></textarea><label>Create Vendor PIN</label><input id="vPass" type="password" inputmode="numeric" minlength="4" maxlength="5" pattern="[0-9]{4,5}" placeholder="4 or 5 digit PIN" required><button class="pay" onclick="submitVendor()">SUBMIT APPLICATION</button></div></div>`;$("modal").classList.add("show")
+ $("modal").innerHTML=`<div class="sheet form-sheet"><button class="close" onclick="openAccount()">←</button><h2>Become a Vendor</h2><p class="muted">Apply to sell on BASSE MARKET. Admin will review your application.</p><div class="form"><label>Full Name</label><input id="vName" placeholder="Full name"><label>Business / Shop Name</label><input id="vBusiness" placeholder="Your shop name"><label>WhatsApp Number</label><input id="vPhone" inputmode="numeric" placeholder="7XXXXXX"><label>Location</label><input id="vLocation" placeholder="Basse"><label>Business Type</label><select id="vCategory"><option value="Electronics">Electronics</option><option value="Fashion">Fashion / Clothing</option><option value="Phones">Phones & Accessories</option><option value="Beauty">Beauty</option><option value="Food">Food / Restaurant</option><option value="Salon / Barber">Salon / Barber</option><option value="Tailoring">Tailoring / Custom Outfits</option><option value="Event Organizer">Event Organizer</option><option value="General Store">General Store</option><option value="Other Services">Other Services</option></select><label>Short Description</label><textarea id="vDesc" placeholder="Tell us about your business"></textarea><label>Create Vendor PIN</label><input id="vPass" type="password" inputmode="numeric" minlength="4" maxlength="5" pattern="[0-9]{4,5}" placeholder="4 or 5 digit PIN" required><button class="pay" onclick="submitVendor()">SUBMIT APPLICATION</button></div></div>`;$("modal").classList.add("show");resetModalSheet()
 }
 function openVendorLogin(){
  $("modal").innerHTML=`<div class="sheet form-sheet vendor-login-sheet">
@@ -702,7 +739,7 @@ function openVendorLogin(){
  <button class="pay" type="button" id="vendorLoginBtn"> LOGIN TO VENDOR DASHBOARD <span>→</span></button>
  <small>Forgot your PIN? Contact BASSE MARKET Admin for a reset.</small>
  </div></div>`;
- $("modal").classList.add("show");document.body.classList.add("basse-modal-open");syncVisualViewport();
+ $("modal").classList.add("show");resetModalSheet();
  $("vendorLoginBtn").addEventListener("click", async function(){
    const phone=$("vendorLoginPhone").value.trim();
    const pin=$("vendorLoginPin").value.trim();
@@ -729,7 +766,7 @@ async function submitVendor(){
     let r=await fetch("/api/vendors/apply",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});
     let d=await r.json();if(!r.ok)throw Error(d.error||"Could not send verification code.");
     sessionStorage.setItem("basseVendorOtpPending",JSON.stringify({phone,pin,businessName:b.businessName,fullName:b.fullName}));
-    $("modal").innerHTML=`<div class="sheet form-sheet"><button class="close" onclick="openAccount()">←</button><h2>Verify Vendor Phone</h2><p class="muted">Enter the 6-digit SMS code sent to +220 ${esc(phone)}. It expires in 5 minutes.</p><div class="form"><label>SMS Verification Code</label><input id="vOtpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code"><button class="pay" onclick="verifyVendorApplication('${phone}')">VERIFY & SUBMIT APPLICATION</button><button class="secondary-btn" onclick="openVendorApply()">START AGAIN</button></div></div>`;$("modal").classList.add("show");toast("Verification code sent.");
+    $("modal").innerHTML=`<div class="sheet form-sheet"><button class="close" onclick="openAccount()">←</button><h2>Verify Vendor Phone</h2><p class="muted">Enter the 6-digit SMS code sent to +220 ${esc(phone)}. It expires in 5 minutes.</p><div class="form"><label>SMS Verification Code</label><input id="vOtpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code"><button class="pay" onclick="verifyVendorApplication('${phone}')">VERIFY & SUBMIT APPLICATION</button><button class="secondary-btn" onclick="openVendorApply()">START AGAIN</button></div></div>`;$("modal").classList.add("show");resetModalSheet();toast("Verification code sent.");
   }catch(e){if(btn){btn.disabled=false;btn.textContent="SUBMIT APPLICATION"}toast(e.message)}
 }
 async function verifyVendorApplication(phone){
@@ -756,7 +793,7 @@ function showVendorPending(id,phone,pin,businessName){
     <button class="secondary-btn" type="button" id="checkVendorApproval">CHECK STATUS</button>
     <button class="secondary-btn" type="button" onclick="closeModal()">CLOSE</button>
   </div>`;
-  $("modal").classList.add("show");document.body.classList.add("basse-modal-open");syncVisualViewport();
+  $("modal").classList.add("show");resetModalSheet();
   const waText=` *BASSE MARKET — NEW VENDOR APPLICATION*%0A%0ABusiness: ${encodeURIComponent(businessName)}%0AVendor: ${encodeURIComponent((window.__vendorPendingName||""))}%0AWhatsApp: +220${encodeURIComponent(phone)}%0AStatus: PENDING%0A%0APlease review and approve this vendor in the Admin Dashboard.`;
   $("sendVendorWhatsApp").onclick=()=>{ location.href=`https://wa.me/2206963349?text=${waText}`; };
   window.__vendorPending={id,phone,pin,businessName};
@@ -902,7 +939,7 @@ async function openOrderNotifications(){
     if(!r.ok)throw Error(d.error||"Notifications unavailable.");
     const rows=d.notifications||[];
     $("modal").innerHTML=`<div class="sheet notification-sheet"><button class="close" onclick="closeModal()">×</button><div class="checkout-head"><span class="mini-bag">🔔</span><div><small>BASSE ONLINE SHOP</small><h2>Order Notifications</h2></div></div><p class="muted">Updates about your orders, payment and delivery appear here.</p><div class="order-notification-list">${rows.length?rows.map(x=>`<button type="button" class="order-notification ${x.read_at?"":"unread"}" onclick="openNotificationOrder('${esc(x.order_id||"")}')"><b>${esc(x.title)}</b><span>${esc(x.message)}</span><small>${esc(new Date(x.created_at).toLocaleString())}${x.order_id?` · ${esc(x.order_id)}`:""}</small></button>`).join(""):"<p class='muted'>No order notifications yet.</p>"}</div></div>`;
-    $("modal").classList.add("show");document.body.classList.add("basse-modal-open");syncVisualViewport();
+    $("modal").classList.add("show");resetModalSheet();
     await fetch("/api/customer/order-notifications/read",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})});
     refreshOrderNotifications();
   }catch(e){toast(e.message||"Notifications unavailable.")}
@@ -920,5 +957,21 @@ function startOrderNotificationPolling(){
 }
 startOrderNotificationPolling();
 
-// Keep account/application fields visible when the iOS keyboard opens.
-document.addEventListener("focusin",e=>{if(e.target&&/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)&&e.target.closest(".modal.show .sheet")){document.body.classList.add("basse-typing");setTimeout(()=>{syncVisualViewport();try{e.target.scrollIntoView({block:"nearest",behavior:"smooth"})}catch{}},180)}});document.addEventListener("focusout",()=>{document.body.classList.remove("basse-typing");setTimeout(syncVisualViewport,120)});
+// Keep account/application fields visible above the iOS keyboard without retaining old scroll offsets.
+document.addEventListener("focusin",e=>{
+  if(!e.target||!/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)||!e.target.closest(".modal.show .sheet"))return;
+  document.body.classList.add("basse-typing");
+  const target=e.target;
+  setTimeout(()=>{
+    syncVisualViewport();
+    const sheet=target.closest(".modal.show .sheet");
+    if(!sheet||!target.isConnected)return;
+    const rect=target.getBoundingClientRect();
+    const h=window.visualViewport?.height||window.innerHeight;
+    const topGuard=72,bottomGuard=h-22;
+    if(rect.top<topGuard)sheet.scrollTop-=topGuard-rect.top;
+    else if(rect.bottom>bottomGuard)sheet.scrollTop+=rect.bottom-bottomGuard;
+  },140);
+});
+document.addEventListener("focusout",()=>{document.body.classList.remove("basse-typing");setTimeout(syncVisualViewport,120)});
+
