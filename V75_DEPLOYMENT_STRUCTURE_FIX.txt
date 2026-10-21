@@ -1,0 +1,9 @@
+V75 DEPLOYMENT STRUCTURE FIX
+
+This package preserves the V74 customer/vendor SMS OTP implementation and fixes the archive layout. Application files are at the ZIP root instead of being nested inside basse_work/.
+
+Deploy the CONTENTS of this ZIP into the root of the GitHub repository connected to Render, replacing matching files. Do not upload the ZIP as a single file to the repository. Keep your existing Render environment secrets. Ensure BULKGATE_SMS_ENABLED=true and BulkGate credentials are set in Render.
+
+Customer registration must call POST /api/customers/register and only create the account after POST /api/customers/register/verify succeeds. Vendor applications must use POST /api/vendors/apply then POST /api/vendors/apply/verify; vendor status remains pending until admin approval.
+
+Validation performed: archive integrity and JavaScript syntax checks. This is not a live end-to-end test and does not itself update GitHub or Render.

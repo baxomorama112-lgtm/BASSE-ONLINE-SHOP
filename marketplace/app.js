@@ -679,7 +679,8 @@ function openAccount(){
 function openCustomerSignup(){
  $("modal").innerHTML=`<div class="sheet form-sheet"><button class="close" onclick="openAccount()">←</button><h2>Create Customer Account</h2><p class="muted">Optional — you can always shop as a guest.</p><div class="form"><label>Full Name</label><input id="caName" placeholder="Your name"><label>WhatsApp Number</label><input id="caPhone" inputmode="numeric" placeholder="7XXXXXX"><label>Password</label><input id="caPass" type="password" placeholder="Create a password"><button class="pay" onclick="createCustomer()">CREATE ACCOUNT</button><button class="secondary-btn" onclick="openAccount()">CONTINUE AS GUEST</button></div></div>`;$('modal').classList.add('show')
 }
-async function createCustomer(){let n=$("caName").value.trim(),p=$("caPhone").value.replace(/\D/g,"").replace(/^220/,""),pw=$("caPass").value;if(!n||p.length<6)return toast("Enter your name and valid WhatsApp number.");if(pw.length<4)return toast("Password must be at least 4 characters.");try{let r=await fetch("/api/customers/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n,whatsapp:p,password:pw})}),d=await r.json();if(!r.ok)throw Error(d.error||"Could not create customer account.");localStorage.setItem("basseCustomer",JSON.stringify({name:d.full_name,phone:"+220 "+p,id:d.id,status:d.status}));openAccount();toast("Customer account created ")}catch(e){toast(e.message)}}
+async function createCustomer(){let n=$("caName").value.trim(),p=$("caPhone").value.replace(/\D/g,"").replace(/^220/,""),pw=$("caPass").value;if(!n||p.length<6)return toast("Enter your name and valid WhatsApp number.");if(pw.length<4)return toast("Password must be at least 4 characters.");const btn=document.querySelector(".form-sheet .pay");if(btn){btn.disabled=true;btn.textContent="SENDING CODE..."}try{let r=await fetch("/api/customers/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n,whatsapp:p,password:pw})}),d=await r.json();if(!r.ok)throw Error(d.error||"Could not send verification code.");$("modal").innerHTML=`<div class="sheet form-sheet"><button class="close" onclick="openAccount()">←</button><h2>Verify Your Phone</h2><p class="muted">Enter the 6-digit code sent by SMS to +220 ${p}. The code expires in 5 minutes.</p><div class="form"><label>SMS Verification Code</label><input id="caOtp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code"><button class="pay" onclick="verifyCustomerOtp('${p}')">VERIFY & CREATE ACCOUNT</button><button class="secondary-btn" onclick="openCustomerSignup()">START AGAIN</button></div></div>`;$("modal").classList.add("show");toast("Verification code sent.")}catch(e){if(btn){btn.disabled=false;btn.textContent="CREATE ACCOUNT"}toast(e.message)}}
+async function verifyCustomerOtp(p){let code=$("caOtp").value.replace(/\D/g,"");if(code.length!==6)return toast("Enter the 6-digit code.");const btn=document.querySelector(".form-sheet .pay");if(btn){btn.disabled=true;btn.textContent="VERIFYING..."}try{let r=await fetch("/api/customers/register/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({whatsapp:p,code})}),d=await r.json();if(!r.ok)throw Error(d.error||"Could not verify your phone.");localStorage.setItem("basseCustomer",JSON.stringify({name:d.full_name,phone:"+220 "+p,id:d.id,status:d.status}));openAccount();toast("Phone verified. Customer account created.")}catch(e){if(btn){btn.disabled=false;btn.textContent="VERIFY & CREATE ACCOUNT"}toast(e.message)}}
 function openCustomerLogin(){
  $("modal").innerHTML=`<div class="sheet form-sheet"><button class="close" onclick="openAccount()">←</button><h2>Customer Login</h2><p class="muted">Login is optional. You can also continue shopping as a guest.</p><div class="form"><label>WhatsApp Number</label><input id="clPhone" inputmode="numeric" placeholder="7XXXXXX"><label>Password</label><input id="clPass" type="password" placeholder="Your password"><button class="pay" onclick="loginCustomer()">LOGIN</button><button class="secondary-btn" onclick="openAccount()">CONTINUE AS GUEST</button></div></div>`;$('modal').classList.add('show')
 }
@@ -723,14 +724,26 @@ async function submitVendor(){
   let phone=String($("vPhone").value||"").replace(/\D/g,"").replace(/^220/,"");
   let b={fullName:$("vName").value,businessName:$("vBusiness").value,whatsapp:phone,location:$("vLocation").value,category:$("vCategory").value,description:$("vDesc").value,password:pin};
   if(!b.fullName||!b.businessName||phone.length<6)return toast("Complete the form with a valid WhatsApp number.");
+  const btn=document.querySelector(".form-sheet .pay");if(btn){btn.disabled=true;btn.textContent="SENDING CODE..."}
   try{
     let r=await fetch("/api/vendors/apply",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});
-    let d=await r.json();
-    if(!r.ok)throw Error(d.error||"Application failed");
-    sessionStorage.setItem("basseVendorApplication",JSON.stringify({phone,pin,id:d.id,businessName:b.businessName,fullName:b.fullName}));
-    window.__vendorPendingName=b.fullName;
-    showVendorPending(d.id,phone,pin,b.businessName);
-  }catch(e){toast(e.message)}
+    let d=await r.json();if(!r.ok)throw Error(d.error||"Could not send verification code.");
+    sessionStorage.setItem("basseVendorOtpPending",JSON.stringify({phone,pin,businessName:b.businessName,fullName:b.fullName}));
+    $("modal").innerHTML=`<div class="sheet form-sheet"><button class="close" onclick="openAccount()">←</button><h2>Verify Vendor Phone</h2><p class="muted">Enter the 6-digit SMS code sent to +220 ${esc(phone)}. It expires in 5 minutes.</p><div class="form"><label>SMS Verification Code</label><input id="vOtpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code"><button class="pay" onclick="verifyVendorApplication('${phone}')">VERIFY & SUBMIT APPLICATION</button><button class="secondary-btn" onclick="openVendorApply()">START AGAIN</button></div></div>`;$("modal").classList.add("show");toast("Verification code sent.");
+  }catch(e){if(btn){btn.disabled=false;btn.textContent="SUBMIT APPLICATION"}toast(e.message)}
+}
+async function verifyVendorApplication(phone){
+  let code=$("vOtpCode").value.replace(/\D/g,"");if(code.length!==6)return toast("Enter the 6-digit code.");
+  const btn=document.querySelector(".form-sheet .pay");if(btn){btn.disabled=true;btn.textContent="VERIFYING..."}
+  try{
+    let r=await fetch("/api/vendors/apply/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({whatsapp:phone,code})});
+    let d=await r.json();if(!r.ok)throw Error(d.error||"Could not verify vendor phone.");
+    const pendingData=JSON.parse(sessionStorage.getItem("basseVendorOtpPending")||"{}");
+    sessionStorage.removeItem("basseVendorOtpPending");
+    sessionStorage.setItem("basseVendorApplication",JSON.stringify({phone,pin:pendingData.pin||"",id:d.id,businessName:d.businessName,fullName:d.fullName}));
+    window.__vendorPendingName=d.fullName;
+    showVendorPending(d.id,phone,pendingData.pin||"",d.businessName);
+  }catch(e){if(btn){btn.disabled=false;btn.textContent="VERIFY & SUBMIT APPLICATION"}toast(e.message)}
 }
 function showVendorPending(id,phone,pin,businessName){
   $("modal").innerHTML=`<div class="sheet return-sheet vendor-pending-sheet">

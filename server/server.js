@@ -143,6 +143,17 @@ CREATE INDEX IF NOT EXISTS idx_order_notifications_recipient ON order_notificati
 try{db.exec(`CREATE TABLE IF NOT EXISTS sms_send_log(
  event_key TEXT PRIMARY KEY, order_id TEXT, recipient TEXT, message_type TEXT, status TEXT NOT NULL DEFAULT 'PENDING', provider_sms_id TEXT, error_code TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, sent_at TEXT
 ); CREATE INDEX IF NOT EXISTS idx_sms_send_log_created ON sms_send_log(created_at,status);`)}catch(e){console.error("SMS log setup failed:",e.message)}
+// Short-lived customer registration OTPs. Store only a hash of the code.
+try{db.exec(`CREATE TABLE IF NOT EXISTS customer_registration_otps(
+ whatsapp TEXT PRIMARY KEY, full_name TEXT NOT NULL, password_hash TEXT NOT NULL,
+ otp_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
+ last_sent_at INTEGER NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);`)}catch(e){console.error("Customer OTP table setup failed:",e.message)}
+try{db.exec(`CREATE TABLE IF NOT EXISTS vendor_application_otps(
+ whatsapp TEXT PRIMARY KEY, payload_json TEXT NOT NULL, otp_hash TEXT NOT NULL,
+ expires_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
+ last_sent_at INTEGER NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);`)}catch(e){console.error("Vendor OTP table setup failed:",e.message)}
 
 function cleanupExpiredChatMessages(){
   try{
@@ -571,23 +582,52 @@ app.post("/api/admin/restore",guard,(req,res)=>{
 app.get("/api/admin/stats",guard,(req,res)=>res.json({products:db.prepare("SELECT COUNT(*) c FROM products WHERE active=1").get().c,orders:db.prepare("SELECT COUNT(*) c FROM orders").get().c,customers:db.prepare("SELECT COUNT(*) c FROM (SELECT whatsapp FROM customer_accounts UNION SELECT whatsapp FROM orders WHERE whatsapp IS NOT NULL AND whatsapp!='')").get().c,pending:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PENDING'").get().c,paid:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='PAID'").get().c,cancelled:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='CANCELLED' OR order_status='CANCELLED'").get().c,refunded:db.prepare("SELECT COUNT(*) c FROM orders WHERE payment_status='REFUNDED'").get().c,sales:db.prepare("SELECT COALESCE(SUM(total),0) s FROM orders WHERE payment_status='PAID' AND order_status!='CANCELLED' AND date(created_at)=date('now','localtime')").get().s,liveViewers:liveViewerStats()}));
 app.get("/api/admin/live-viewers",guard,(req,res)=>res.json(liveViewerStats()));
 app.get("/api/admin/login-attempts",guard,(req,res)=>{const rows=db.prepare("SELECT id,portal,identifier,success,reason,created_at FROM login_attempts ORDER BY id DESC LIMIT 30").all();res.json(rows)});
-app.post("/api/customers/register",(req,res)=>{
- const name=String(req.body?.name||req.body?.fullName||"").trim();
+app.post("/api/customers/register",async(req,res)=>{
+ const name=String(req.body?.name||req.body?.fullName||"").trim().slice(0,120);
  const phone=String(req.body?.whatsapp||req.body?.phone||"").replace(/\D/g,"").replace(/^220/,"");
  const password=String(req.body?.password||"");
  if(!name||phone.length<6)return res.status(400).json({error:"Enter your name and valid WhatsApp number."});
- if(password.length<4)return res.status(400).json({error:"Customer password must be at least 4 characters."});
+ if(password.length<4)return res.status(400).json({error:"Password must be at least 4 characters."});
+ if(String(process.env.BULKGATE_SMS_ENABLED||"false").toLowerCase()!=="true")return res.status(503).json({error:"SMS verification is temporarily unavailable. Please try again later or contact BASSE Admin."});
  const fullPhone="220"+phone;
- const hash=crypto.createHash("sha256").update(password).digest("hex");
- const existing=db.prepare("SELECT id,full_name,whatsapp,password_hash,status FROM customer_accounts WHERE whatsapp=?").get(fullPhone);
- if(existing){
-   if(existing.status==='BLOCKED')return res.status(403).json({error:"This customer account is blocked. Please contact BASSE Admin."});
-   db.prepare("UPDATE customer_accounts SET full_name=?,password_hash=? WHERE id=?").run(name,hash,existing.id);
-   backupShopData("customer-registered");
-   return res.json({ok:true,id:existing.id,full_name:name,whatsapp:fullPhone,status:existing.status||'ACTIVE'});
- }
- const x=db.prepare("INSERT INTO customer_accounts(full_name,whatsapp,password_hash,status) VALUES(?,?,?,?)").run(name,fullPhone,hash,"ACTIVE"); backupShopData("customer-registered");
- res.status(201).json({ok:true,id:Number(x.lastInsertRowid),full_name:name,whatsapp:fullPhone,status:"ACTIVE"});
+ const existing=db.prepare("SELECT id,status FROM customer_accounts WHERE whatsapp=?").get(fullPhone);
+ if(existing?.status==="BLOCKED")return res.status(403).json({error:"This customer account is blocked. Please contact BASSE Admin."});
+ const now=Date.now();
+ const previous=db.prepare("SELECT last_sent_at FROM customer_registration_otps WHERE whatsapp=?").get(fullPhone);
+ if(previous&&now-Number(previous.last_sent_at)<60_000)return res.status(429).json({error:"Please wait 60 seconds before requesting another verification code."});
+ const recent=Number(db.prepare("SELECT COUNT(*) c FROM sms_send_log WHERE recipient=? AND message_type='customer-otp' AND created_at >= datetime('now','-1 hour')").get(fullPhone).c||0);
+ if(recent>=3)return res.status(429).json({error:"Too many verification codes requested. Please try again in an hour."});
+ const code=String(crypto.randomInt(100000,1000000));
+ const otpHash=crypto.createHash("sha256").update(fullPhone+"|"+code+"|"+String(process.env.CUSTOMER_OTP_SECRET||process.env.BULKGATE_APPLICATION_TOKEN||"basse-otp")).digest("hex");
+ db.prepare(`INSERT INTO customer_registration_otps(whatsapp,full_name,password_hash,otp_hash,expires_at,attempts,last_sent_at)
+ VALUES(?,?,?,?,?,0,?) ON CONFLICT(whatsapp) DO UPDATE SET full_name=excluded.full_name,password_hash=excluded.password_hash,otp_hash=excluded.otp_hash,expires_at=excluded.expires_at,attempts=0,last_sent_at=excluded.last_sent_at`).run(fullPhone,name,crypto.createHash("sha256").update(password).digest("hex"),otpHash,now+5*60_000,now);
+ try{
+   const eventKey="customer-otp:"+crypto.createHash("sha256").update(fullPhone+"|"+String(now)).digest("hex");
+   const result=await sendBulkGateSms(fullPhone,`BASSE ONLINE SHOP verification code: ${code}. Expires in 5 minutes. Do not share this code.`,{eventKey,orderId:null,messageType:"customer-otp"});
+   if(!result.ok){db.prepare("DELETE FROM customer_registration_otps WHERE whatsapp=?").run(fullPhone);return res.status(502).json({error:"We couldn't send your verification code. Please try again shortly."});}
+   res.json({ok:true,otpRequired:true,phone:fullPhone,message:"Verification code sent by SMS. It expires in 5 minutes."});
+ }catch(e){db.prepare("DELETE FROM customer_registration_otps WHERE whatsapp=?").run(fullPhone);console.error("[customer-otp-send]",e.message);res.status(502).json({error:"We couldn't send your verification code. Please check your number and try again."});}
+});
+app.post("/api/customers/register/verify",(req,res)=>{
+ const phone=String(req.body?.whatsapp||req.body?.phone||"").replace(/\D/g,"").replace(/^220/,"");
+ const code=String(req.body?.code||"").replace(/\D/g,"");
+ if(phone.length<6||!/^\d{6}$/.test(code))return res.status(400).json({error:"Enter the 6-digit verification code sent to your phone."});
+ const fullPhone="220"+phone;
+ const pending=db.prepare("SELECT * FROM customer_registration_otps WHERE whatsapp=?").get(fullPhone);
+ if(!pending)return res.status(400).json({error:"No active verification code found. Please create your account again."});
+ if(Number(pending.expires_at)<Date.now()){db.prepare("DELETE FROM customer_registration_otps WHERE whatsapp=?").run(fullPhone);return res.status(400).json({error:"That code has expired. Please request a new one."});}
+ if(Number(pending.attempts)>=5){db.prepare("DELETE FROM customer_registration_otps WHERE whatsapp=?").run(fullPhone);return res.status(429).json({error:"Too many incorrect attempts. Please request a new code."});}
+ const expected=crypto.createHash("sha256").update(fullPhone+"|"+code+"|"+String(process.env.CUSTOMER_OTP_SECRET||process.env.BULKGATE_APPLICATION_TOKEN||"basse-otp")).digest("hex");
+ if(expected!==pending.otp_hash){db.prepare("UPDATE customer_registration_otps SET attempts=attempts+1 WHERE whatsapp=?").run(fullPhone);return res.status(400).json({error:"Incorrect verification code. Please check the SMS and try again."});}
+ const existing=db.prepare("SELECT id,status FROM customer_accounts WHERE whatsapp=?").get(fullPhone);
+ if(existing?.status==="BLOCKED"){db.prepare("DELETE FROM customer_registration_otps WHERE whatsapp=?").run(fullPhone);return res.status(403).json({error:"This customer account is blocked. Please contact BASSE Admin."});}
+ let customerId;
+ if(existing){db.prepare("UPDATE customer_accounts SET full_name=?,password_hash=? WHERE id=?").run(pending.full_name,pending.password_hash,existing.id);customerId=existing.id;}
+ else {const x=db.prepare("INSERT INTO customer_accounts(full_name,whatsapp,password_hash,status) VALUES(?,?,?,?)").run(pending.full_name,fullPhone,pending.password_hash,"ACTIVE");customerId=Number(x.lastInsertRowid);}
+ db.prepare("DELETE FROM customer_registration_otps WHERE whatsapp=?").run(fullPhone);
+ backupShopData("customer-registered");
+ const c=db.prepare("SELECT id,full_name,whatsapp,status FROM customer_accounts WHERE id=?").get(customerId);
+ res.status(existing?200:201).json({ok:true,id:c.id,full_name:c.full_name,whatsapp:c.whatsapp,status:c.status||"ACTIVE"});
 });
 app.post("/api/customers/login",(req,res)=>{
  const phone=String(req.body?.whatsapp||req.body?.phone||"").replace(/\D/g,"").replace(/^220/,"");
@@ -1092,19 +1132,51 @@ function orderOptionsLabel(options){if(!Array.isArray(options))return '';return 
 function hashPin(pin){return crypto.createHash("sha256").update(String(pin)).digest("hex")}
 
 // Vendor applications: public application, admin approval, isolated vendor data
-app.post("/api/vendors/apply",(req,res)=>{
-  const b=req.body||{}, pin=String(b.password||"");
+app.post("/api/vendors/apply",async(req,res)=>{
+  const b=req.body||{},pin=String(b.password||"");
   const phone=String(b.whatsapp||"").replace(/\D/g,"").replace(/^220/,"");
-  if(!String(b.fullName||"").trim()||!String(b.businessName||"").trim()||phone.length<6)
-    return res.status(400).json({error:"Please complete your name, business name and WhatsApp number."});
+  const fullName=String(b.fullName||"").trim().slice(0,120),businessName=String(b.businessName||"").trim().slice(0,120);
+  if(!fullName||!businessName||phone.length<6)return res.status(400).json({error:"Please complete your name, business name and WhatsApp number."});
   if(!/^\d{4,5}$/.test(pin))return res.status(400).json({error:"Vendor PIN must be exactly 4 or 5 digits."});
-  const existing=db.prepare("SELECT * FROM vendors WHERE whatsapp=? AND status!='REJECTED'").get("220"+phone);
-  if(existing)return res.status(409).json({error:`A vendor application already exists for this number (${existing.status}). Wait for Admin approval or ask Admin to reset/reopen it.`,id:existing.id,status:existing.status});
-  const x=db.prepare("INSERT INTO vendors(full_name,business_name,whatsapp,email,email_verified,location,category,description,password_hash) VALUES(?,?,?,?,?,?,?,?,?)")
-    .run(String(b.fullName).trim(),String(b.businessName).trim(),"220"+phone,"",1,String(b.location||""),String(b.category||""),String(b.description||""),hashPin(pin));
-  backupShopData("vendor-application");
-  broadcastLive("vendors",{vendorId:Number(x.lastInsertRowid)});
-  res.json({ok:true,id:x.lastInsertRowid,status:"PENDING",message:"Application submitted. Wait for Admin approval."});
+  if(String(process.env.BULKGATE_SMS_ENABLED||"false").toLowerCase()!=="true")return res.status(503).json({error:"SMS verification is unavailable. Please try again later."});
+  const fullPhone="220"+phone;
+  const existing=db.prepare("SELECT id,status FROM vendors WHERE whatsapp=? AND status!='REJECTED'").get(fullPhone);
+  if(existing)return res.status(409).json({error:`A vendor application already exists for this number (${existing.status}). Wait for Admin approval or ask Admin to reopen it.`,id:existing.id,status:existing.status});
+  const now=Date.now(),prev=db.prepare("SELECT last_sent_at FROM vendor_application_otps WHERE whatsapp=?").get(fullPhone);
+  if(prev&&now-Number(prev.last_sent_at)<60_000)return res.status(429).json({error:"Please wait 60 seconds before requesting another code."});
+  const recent=Number(db.prepare("SELECT COUNT(*) c FROM sms_send_log WHERE recipient=? AND message_type='vendor-otp' AND created_at >= datetime('now','-1 hour')").get(fullPhone).c||0);
+  if(recent>=3)return res.status(429).json({error:"Too many codes requested. Please try again in an hour."});
+  const payload={fullName,businessName,whatsapp:fullPhone,location:String(b.location||"").slice(0,160),category:String(b.category||"").slice(0,100),description:String(b.description||"").slice(0,1000),password:pin};
+  const code=String(crypto.randomInt(100000,1000000));
+  const otpHash=crypto.createHash("sha256").update(fullPhone+"|"+code+"|"+String(process.env.CUSTOMER_OTP_SECRET||process.env.BULKGATE_APPLICATION_TOKEN||"basse-otp")).digest("hex");
+  db.prepare(`INSERT INTO vendor_application_otps(whatsapp,payload_json,otp_hash,expires_at,attempts,last_sent_at) VALUES(?,?,?,?,0,?)
+    ON CONFLICT(whatsapp) DO UPDATE SET payload_json=excluded.payload_json,otp_hash=excluded.otp_hash,expires_at=excluded.expires_at,attempts=0,last_sent_at=excluded.last_sent_at`).run(fullPhone,JSON.stringify(payload),otpHash,now+5*60_000,now);
+  try{
+    const eventKey="vendor-otp:"+crypto.createHash("sha256").update(fullPhone+"|"+String(now)).digest("hex");
+    const result=await sendBulkGateSms(fullPhone,`BASSE MARKET vendor application verification code: ${code}. Expires in 5 minutes. Do not share this code.`,{eventKey,orderId:null,messageType:"vendor-otp"});
+    if(!result.ok){db.prepare("DELETE FROM vendor_application_otps WHERE whatsapp=?").run(fullPhone);return res.status(502).json({error:"We couldn't send your verification code. Please try again."});}
+    res.json({ok:true,otpRequired:true,phone:fullPhone,message:"Verification code sent by SMS."});
+  }catch(e){db.prepare("DELETE FROM vendor_application_otps WHERE whatsapp=?").run(fullPhone);console.error("[vendor-otp-send]",e.message);res.status(502).json({error:"We couldn't send your verification code. Please try again."});}
+});
+app.post("/api/vendors/apply/verify",(req,res)=>{
+  const phone=String(req.body?.whatsapp||"").replace(/\D/g,"").replace(/^220/,""),code=String(req.body?.code||"").replace(/\D/g,"");
+  if(phone.length<6||!/^\d{6}$/.test(code))return res.status(400).json({error:"Enter the 6-digit verification code sent to your phone."});
+  const fullPhone="220"+phone,pending=db.prepare("SELECT * FROM vendor_application_otps WHERE whatsapp=?").get(fullPhone);
+  if(!pending)return res.status(400).json({error:"No active code found. Please submit the vendor application again."});
+  if(Number(pending.expires_at)<Date.now()){db.prepare("DELETE FROM vendor_application_otps WHERE whatsapp=?").run(fullPhone);return res.status(400).json({error:"That code expired. Please start again."});}
+  if(Number(pending.attempts)>=5){db.prepare("DELETE FROM vendor_application_otps WHERE whatsapp=?").run(fullPhone);return res.status(429).json({error:"Too many incorrect attempts. Please start again."});}
+  const expected=crypto.createHash("sha256").update(fullPhone+"|"+code+"|"+String(process.env.CUSTOMER_OTP_SECRET||process.env.BULKGATE_APPLICATION_TOKEN||"basse-otp")).digest("hex");
+  if(expected!==pending.otp_hash){db.prepare("UPDATE vendor_application_otps SET attempts=attempts+1 WHERE whatsapp=?").run(fullPhone);return res.status(400).json({error:"Incorrect verification code."});}
+  const b=JSON.parse(pending.payload_json);
+  const existing=db.prepare("SELECT id,status FROM vendors WHERE whatsapp=? AND status!='REJECTED'").get(fullPhone);
+  if(existing){db.prepare("DELETE FROM vendor_application_otps WHERE whatsapp=?").run(fullPhone);return res.status(409).json({error:`A vendor application already exists (${existing.status}).`});}
+  const x=db.prepare("INSERT INTO vendors(full_name,business_name,whatsapp,email,email_verified,location,category,description,password_hash,status) VALUES(?,?,?,?,?,?,?,?,?,'PENDING')")
+    .run(b.fullName,b.businessName,fullPhone,"",0,b.location,b.category,b.description,hashPin(b.password));
+  db.prepare("DELETE FROM vendor_application_otps WHERE whatsapp=?").run(fullPhone);
+  backupShopData("vendor-application");broadcastLive("vendors",{vendorId:Number(x.lastInsertRowid)});
+  const adminNumber=String(process.env.BASSE_ADMIN_SMS_NUMBER||"").trim();
+  if(adminNumber){const msg=`New vendor application #${x.lastInsertRowid}: ${b.businessName} (${b.fullName}) is awaiting approval.`;const eventKey=crypto.createHash("sha256").update("admin-vendor-application|"+String(x.lastInsertRowid)).digest("hex");void sendBulkGateSms(adminNumber,msg,{eventKey,orderId:null,messageType:"admin-vendor-application"}).catch(e=>console.error("[vendor-admin-sms]",e.message));}
+  res.status(201).json({ok:true,id:Number(x.lastInsertRowid),status:"PENDING",fullName:b.fullName,businessName:b.businessName,phone,message:"Phone verified. Application submitted for Admin approval."});
 });
 app.get("/api/vendors/status",(req,res)=>{
   const phone=String(req.query.whatsapp||req.query.phone||"").replace(/\D/g,"").replace(/^220/,"");
@@ -1522,7 +1594,15 @@ function addOrderNotification(recipientType, phone, orderId, title, message){
 }
 function notifyNewOrder(order){
   if(!order)return;
+  const adminMessage=`New BASSE ONLINE SHOP order #${order.id}: ${order.customer_name||"Customer"} ordered ${order.product_name} x ${order.quantity} for D${Number(order.total||0).toLocaleString()}.`;
   addOrderNotification("admin","",order.id,"🛍️ NEW ORDER",`${order.customer_name||"Customer"} (+${order.whatsapp||""}) placed ${order.product_name} × ${order.quantity} for D${Number(order.total||0).toLocaleString()}.`);
+  // Optional admin SMS alert for new orders. Configure BASSE_ADMIN_SMS_NUMBER in Render.
+  const adminNumber=String(process.env.BASSE_ADMIN_SMS_NUMBER||"").trim();
+  if(adminNumber){
+    const eventKey=crypto.createHash("sha256").update(["admin-new-order",String(order.id)].join("|")).digest("hex");
+    void sendBulkGateSms(adminNumber,adminMessage,{eventKey,orderId:String(order.id),messageType:"admin-new-order"})
+      .catch(e=>console.error("[bulkgate-admin-order-sms]",e.message));
+  }
 }
 function notifyCustomerOrder(order,title,message){
   if(!order?.whatsapp)return;
@@ -1530,7 +1610,7 @@ function notifyCustomerOrder(order,title,message){
   // SMS is additive: existing in-app/WhatsApp notification behavior remains unchanged.
   // Only short transactional notifications are sent; marketing SMS must use a separate compliant flow.
   const msg=String(message||title||"").replace(/[🛍️💳📦🚚]/gu,"").trim().slice(0,300);
-  const type=/PAYMENT CONFIRMED/i.test(title)?"payment":/ORDER RECEIVED/i.test(title)?"new-order":/DELIVERY|delivered|Driver|picked up|on the way/i.test(title+" "+message)?"delivery":"order-update";
+  const type=/PAYMENT CONFIRMED/i.test(title)?"payment":/ORDER RECEIVED/i.test(title)?"new-order":/REFUND/i.test(title)?"refund":/CANCEL/i.test(title)?"cancellation":/DELIVERY|delivered|Driver|picked up|on the way|ready for delivery/i.test(title+" "+message)?"delivery":"order-update";
   const eventKey=crypto.createHash("sha256").update([String(order.id),type,String(title||""),String(message||"")].join("|" )).digest("hex");
   void sendBulkGateSms(order.whatsapp,msg,{eventKey,orderId:String(order.id),messageType:type}).catch(e=>console.error("[bulkgate-sms]",e.message));
 }
