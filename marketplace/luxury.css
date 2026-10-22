@@ -141,7 +141,7 @@ body .chat-inbox-empty{padding:26px 12px;text-align:center;color:var(--lx-muted)
   html,body.basse-modal-open{background:var(--lx-ivory)!important}
   body:has(.modal.show .form-sheet) main,body:has(.modal.show .form-sheet) .top,body:has(.modal.show .form-sheet) .bottom,
   body:has(.modal.show .account-sheet) main,body:has(.modal.show .account-sheet) .top,body:has(.modal.show .account-sheet) .bottom{visibility:hidden!important}
-  body .modal.show:has(.form-sheet),body .modal.show:has(.account-sheet),body .modal.show:has(.messenger-home-sheet){background:var(--lx-ivory)!important;backdrop-filter:none!important;padding:0!important}
+  body .modal.show:has(.form-sheet),body .modal.show:has(.account-sheet),body .modal.show:has(.messenger-home-sheet){background:var(--lx-ivory)!important;backdrop-filter:none!important}
   body .modal.show .form-sheet,body .modal.show .account-sheet{background:var(--lx-ivory)!important;border:0!important;border-radius:0!important;margin-top:0!important;width:100%!important;box-shadow:none!important;padding-bottom:calc(24px + env(safe-area-inset-bottom))!important}
   body .modal.show .form-sheet h2{font-size:28px;line-height:1.1}
 }
@@ -182,5 +182,5 @@ body .chat-sheet .chat-send-btn{flex:0 0 46px;width:46px!important;height:46px!i
 body .chat-send-btn svg{width:22px;height:22px;fill:#fff}
 @media(max-width:760px){
   body:has(.modal.show .chat-sheet) main,body:has(.modal.show .chat-sheet) .top,body:has(.modal.show .chat-sheet) .bottom{visibility:hidden!important}
-  body .modal.show:has(.chat-sheet){background:#efeae2!important;backdrop-filter:none!important;padding:0!important}
+  body .modal.show:has(.chat-sheet){background:#efeae2!important;backdrop-filter:none!important}
 }
