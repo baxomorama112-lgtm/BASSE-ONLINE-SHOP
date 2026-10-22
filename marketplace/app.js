@@ -40,7 +40,7 @@ function renderProductGrid(ps, silent=false){
   const sameOrder=existingIds.length===ids.length && existingIds.every((id,i)=>id===ids[i]);
 
   if(!sameOrder){
-    grid.innerHTML=ps.length?ps.map((p,i)=>`<article class="product" data-id="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)} details" style="--card-index:${Math.min(i,9)}" onclick="buy(${p.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();buy(${p.id})}"><div class="pic"><img src="${p.image||""}" alt="${esc(p.name)}" loading="lazy" decoding="async"><span class="tag">${esc(p.category||"Product")}</span><span class="product-image-glint" aria-hidden="true"></span></div><div class="info"><h3>${esc(p.name)}</h3><div class="product-price-row"><div class="price">${money(p.price)}</div><span class="product-card-arrow" aria-hidden="true">↗</span></div><div class="product-view-link"><span>View details</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div></article>`).join(""):`<div class="empty-search"><div></div><h3>No products found</h3><p>Try another product name or category.</p></div>`;
+    grid.innerHTML=ps.length?ps.map((p,i)=>`<article class="product" data-id="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)} details" style="--card-index:${Math.min(i,9)}" onclick="buy(${p.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();buy(${p.id})}"><div class="pic"><img src="${p.image||""}" alt="${esc(p.name)}" loading="lazy" decoding="async"><span class="product-image-glint" aria-hidden="true"></span></div><div class="info"><h3>${esc(p.name)}</h3><div class="product-price-row"><div class="price">${money(p.price)}</div><span class="product-card-arrow" aria-hidden="true">↗</span></div><div class="product-view-link"><span>View details</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div></article>`).join(""):`<div class="empty-search"><div></div><h3>No products found</h3><p>Try another product name or category.</p></div>`;
     return;
   }
 
@@ -266,7 +266,7 @@ async function openStore(id){
     const initials=storeInitials(s.business_name);
     $("storeDetail").innerHTML=`<div class="store-detail-head"><div class="${storeCoverClass(s.id)} detail-cover"><div class="store-logo big">${s.logo_url?`<img src="${esc(s.logo_url)}" alt="${esc(s.business_name)} logo" loading="lazy">`:esc(initials)}</div></div><div class="store-detail-info"><small>VERIFIED BASSE STORE</small><h2>${esc(s.business_name)}</h2><p>${esc(s.description||s.category||"Local vendor")}</p><div class="store-meta"><span> ${esc(s.location||"Basse")}</span><span> ${s.products.length} products</span></div></div></div>
       <div class="store-products-head"><h3>Products</h3><span>${s.products.length} available</span></div>
-      <div class="store-products">${s.products.length?s.products.map(p=>`<article class="product" data-id="${p.id}" tabindex="0" role="button" onclick="buy(${p.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();buy(${p.id})}"><div class="pic"><img src="${p.image||""}" alt="${esc(p.name)}" loading="lazy" decoding="async"><span class="tag">${esc(p.category)}</span></div><div class="info"><h3>${esc(p.name)}</h3><div class="price">${money(p.price)}</div><button class="buy" type="button" onclick="event.stopPropagation();buy(${p.id})">VIEW PRODUCT →</button></div></article>`).join(""):`<div class="empty-search"><div></div><h3>No products yet</h3><p>This store has no approved products available right now.</p></div>`}</div>`;
+      <div class="store-products">${s.products.length?s.products.map(p=>`<article class="product" data-id="${p.id}" tabindex="0" role="button" onclick="buy(${p.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();buy(${p.id})}"><div class="pic"><img src="${p.image||""}" alt="${esc(p.name)}" loading="lazy" decoding="async"></div><div class="info"><h3>${esc(p.name)}</h3><div class="price">${money(p.price)}</div><button class="buy" type="button" onclick="event.stopPropagation();buy(${p.id})">VIEW PRODUCT →</button></div></article>`).join(""):`<div class="empty-search"><div></div><h3>No products yet</h3><p>This store has no approved products available right now.</p></div>`}</div>`;
   }catch(e){$("storeDetail").innerHTML=`<div class="empty-search"><div></div><h3>Store unavailable</h3><p>${esc(e.message||"Please try again.")}</p><button class="view-store-btn" onclick="openStore(${id})">TRY AGAIN</button></div>`}
 }
 function trackOrderPrompt(){
@@ -975,3 +975,26 @@ document.addEventListener("focusin",e=>{
 });
 document.addEventListener("focusout",()=>{document.body.classList.remove("basse-typing");setTimeout(syncVisualViewport,120)});
 
+/* ===== Product photo viewer: tap the picture to see it large; tap again to zoom; swipe for next photo ===== */
+(function(){
+  let v,idx=0,sx=0;
+  function list(){return Array.isArray(window.__productImages)?window.__productImages.filter(Boolean):[]}
+  function build(){
+    if(v)return v;v=document.createElement('div');v.id='imgViewer';v.className='img-viewer';v.hidden=true;
+    v.innerHTML='<button type="button" class="iv-close" aria-label="Close photo">×</button><button type="button" class="iv-nav iv-prev" aria-label="Previous photo">‹</button><div class="iv-stage"><img alt="Product photo"></div><button type="button" class="iv-nav iv-next" aria-label="Next photo">›</button><div class="iv-hint"><span class="iv-count"></span><span>Tap photo to zoom</span></div>';
+    document.body.appendChild(v);
+    v.querySelector('.iv-close').onclick=close;
+    v.querySelector('.iv-prev').onclick=()=>show(idx-1);v.querySelector('.iv-next').onclick=()=>show(idx+1);
+    const img=v.querySelector('img'),stage=v.querySelector('.iv-stage');
+    img.onclick=()=>{v.classList.toggle('zoom');stage.scrollTo(0,0)};
+    stage.addEventListener('click',e=>{if(e.target===stage)close()});
+    v.addEventListener('touchstart',e=>{sx=e.touches[0].clientX},{passive:true});
+    v.addEventListener('touchend',e=>{if(v.classList.contains('zoom'))return;const d=e.changedTouches[0].clientX-sx;if(Math.abs(d)>60)show(idx+(d<0?1:-1))},{passive:true});
+    document.addEventListener('keydown',e=>{if(v.hidden)return;if(e.key==='Escape')close();if(e.key==='ArrowRight')show(idx+1);if(e.key==='ArrowLeft')show(idx-1)});
+    return v;
+  }
+  function show(i){const l=list();if(!l.length)return;idx=(i+l.length)%l.length;const el=build();el.classList.remove('zoom');el.querySelector('img').src=l[idx];el.querySelector('.iv-count').textContent=l.length>1?(idx+1)+' / '+l.length:'';el.classList.toggle('single',l.length<2)}
+  function open(src){const l=list();const el=build();idx=Math.max(0,l.indexOf(src));el.hidden=false;document.documentElement.classList.add('iv-open');show(idx)}
+  function close(){if(!v)return;v.hidden=true;v.classList.remove('zoom');document.documentElement.classList.remove('iv-open')}
+  document.addEventListener('click',e=>{const m=e.target.closest&&e.target.closest('#mainProductImage');if(m){e.preventDefault();open(m.getAttribute('src'))}});
+})();
