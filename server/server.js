@@ -1504,9 +1504,9 @@ app.post('/api/tickets/qr', async (req,res)=>{
   }
 });
 app.get('/api/tickets/status/:code',(req,res)=>{
-  const t=db.prepare(`SELECT t.id,t.ticket_code,t.payment_status,t.ticket_status,t.checked_in_at,e.title AS event_title,tt.name AS ticket_type,tt.price FROM event_tickets t JOIN events e ON e.id=t.event_id JOIN event_ticket_types tt ON tt.id=t.ticket_type_id WHERE t.ticket_code=?`).get(cleanText(req.params.code,100));
+  const t=db.prepare(`SELECT t.id,t.ticket_code,t.payment_status,t.ticket_status,t.checked_in_at,e.title AS event_title,e.event_date,e.event_time,tt.name AS ticket_type,tt.price FROM event_tickets t JOIN events e ON e.id=t.event_id JOIN event_ticket_types tt ON tt.id=t.ticket_type_id WHERE t.ticket_code=?`).get(cleanText(req.params.code,100));
   if(!t)return res.status(404).json({error:'Ticket not found.'});
-  res.json({ticket:{code:t.ticket_code,status:t.ticket_status,paymentStatus:t.payment_status,eventTitle:t.event_title,ticketType:t.ticket_type,price:t.price,checkedInAt:t.checked_in_at}});
+  res.json({ticket:{code:t.ticket_code,status:t.ticket_status,paymentStatus:t.payment_status,eventTitle:t.event_title,eventDate:t.event_date,eventTime:t.event_time,ticketType:t.ticket_type,price:t.price,checkedInAt:t.checked_in_at}});
 });
 app.get('/api/admin/events/summary', guard, (req,res)=>{
   const events=db.prepare(`SELECT e.id,e.title,e.category,e.status,e.event_date,e.venue,

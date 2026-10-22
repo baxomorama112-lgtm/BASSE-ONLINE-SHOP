@@ -1,23 +1,23 @@
 /* BASSE luxury layer for secondary pages (tickets, digital services, organizer, download) */
-:root{--lx-ink:#0a1331;--lx-gold:#b8935a;--lx-gold-soft:#e9dcc3;--lx-ivory:#faf7f1;--lx-line:#e8e1d3;--lx-muted:#756f63;--lx-serif:"Cormorant Garamond","Playfair Display",Georgia,serif}
+:root{--lx-ink:#0a1331;--lx-gold:#1d55c9;--lx-gold-soft:#dbe6fb;--lx-ivory:#ffffff;--lx-line:#e5e9f0;--lx-muted:#667085;--lx-serif:"Cormorant Garamond","Playfair Display",Georgia,serif}
 body{background:var(--lx-ivory)!important;-webkit-font-smoothing:antialiased}
 h1,h2{font-family:var(--lx-serif)!important;font-weight:600!important;color:var(--lx-ink);letter-spacing:.005em!important}
-.top{background:rgba(250,247,241,.9)!important;backdrop-filter:blur(16px);border-bottom:1px solid var(--lx-line)!important}
-.card,.event-card,.category-section{background:#fffdf9!important;border:1px solid var(--lx-line)!important;box-shadow:0 1px 2px rgba(10,19,49,.04),0 14px 34px -20px rgba(10,19,49,.22)!important}
+.top{background:rgba(255,255,255,.9)!important;backdrop-filter:blur(16px);border-bottom:1px solid var(--lx-line)!important}
+.card,.event-card,.category-section{background:#ffffff!important;border:1px solid var(--lx-line)!important;box-shadow:0 1px 2px rgba(10,19,49,.04),0 14px 34px -20px rgba(10,19,49,.22)!important}
 button:not(.secondary):not(.ticket-tab):not([data-kind]){background:var(--lx-ink);color:#fff;border-radius:999px;letter-spacing:.06em;transition:background .3s,color .3s}
 button:not(.secondary):not(.ticket-tab):not([data-kind]):hover{background:var(--lx-gold);color:var(--lx-ink)}
 .secondary{border-radius:999px!important;background:#fff!important;color:var(--lx-ink)!important;border:1px solid var(--lx-line)!important}
 .ticket-tab{border-radius:999px!important;background:#fff!important;color:var(--lx-ink)!important;border:1px solid var(--lx-line)!important}
 .ticket-tab.active{background:var(--lx-ink)!important;color:var(--lx-gold-soft)!important;border-color:var(--lx-ink)!important}
 .eyebrow{color:var(--lx-gold)!important;letter-spacing:.2em!important}
-input,select,textarea{border-radius:12px!important}input:focus,select:focus,textarea:focus{border-color:var(--lx-gold)!important;outline:none!important;box-shadow:0 0 0 4px rgba(184,147,90,.16)!important}
+input,select,textarea{border-radius:12px!important}input:focus,select:focus,textarea:focus{border-color:var(--lx-gold)!important;outline:none!important;box-shadow:0 0 0 4px rgba(29,85,201,.16)!important}
 /* compact ticket categories */
 .category-section{padding:16px!important}
 .category-section .section-heading h2{font-size:26px!important;margin:3px 0 4px!important}
 .ticket-category-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:10px!important;margin-top:14px!important}
 .ticket-category-grid button{min-height:92px!important;padding:10px 6px!important;gap:4px!important;border-radius:16px!important;background:#fff!important;border:1px solid var(--lx-line)!important;color:var(--lx-ink)!important;letter-spacing:0!important}
 .ticket-category-grid button:hover{border-color:var(--lx-gold)!important;background:#fff!important;transform:translateY(-2px)}
-.ticket-category-grid .category-icon{width:36px!important;height:36px!important;border-radius:12px!important;background:#f3ecdd!important;border:0!important;color:var(--lx-ink)!important}
+.ticket-category-grid .category-icon{width:36px!important;height:36px!important;border-radius:12px!important;background:#eef3fc!important;border:0!important;color:var(--lx-ink)!important}
 .ticket-category-grid .category-icon svg{width:20px!important;height:20px!important}
 .ticket-category-grid b{font-size:13px!important}.ticket-category-grid small{font-size:10px!important;line-height:1.2}
 @media(max-width:600px){.ticket-category-grid small{display:none}.ticket-category-grid button{min-height:80px!important}}
