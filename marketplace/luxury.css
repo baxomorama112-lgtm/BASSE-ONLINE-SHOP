@@ -93,3 +93,55 @@ body .bottom .active small{border-bottom:1px solid var(--lx-gold)}
   body .product .price{font-size:18px!important}
 }
 @media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important;animation-duration:.01ms!important}}
+
+/* ===== v78.1 refinements ===== */
+/* 1. Compact category strip (one scrollable row instead of two tall rows) */
+body .categories{margin-top:18px!important;margin-bottom:8px!important}
+body .categories .section-title{flex-direction:row!important;flex-wrap:nowrap!important;align-items:flex-end!important;margin-bottom:10px!important}
+body .categories .section-title h2{font-size:clamp(22px,3vw,30px)!important}
+body .categories .section-title h2::after{margin-top:6px}
+body .category-subtitle{display:none!important}
+body .section-link{background:none!important;box-shadow:none!important;border-radius:0!important;border:0!important;border-bottom:1px solid var(--lx-gold)!important;padding:4px 0!important;min-height:0!important;height:auto!important;width:auto!important;white-space:nowrap;font-size:10px!important}
+body .cats{display:flex!important;grid-template-columns:none!important;flex-wrap:nowrap!important;overflow-x:auto!important;gap:8px!important;padding:2px 2px 10px!important;margin:0 -2px!important;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+body .cats::-webkit-scrollbar{display:none}
+body .cats button{flex:0 0 84px!important;width:84px!important;min-width:84px!important;height:auto!important;min-height:0!important;padding:8px 4px 7px!important;border-radius:16px!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:flex-start!important;gap:5px!important;scroll-snap-align:start;box-shadow:none!important}
+body .cats button img{width:44px!important;height:44px!important;border-radius:12px!important;object-fit:cover!important;margin:0!important}
+body .cats button b{font-size:10px!important;min-height:0!important;line-height:1.2!important;letter-spacing:.01em!important;white-space:nowrap!important}
+body .cats button.active{box-shadow:0 0 0 1px var(--lx-gold)!important;padding:8px 4px 7px!important}
+@media(min-width:900px){body .cats button{flex-basis:104px!important;width:104px!important;min-width:104px!important}body .cats button img{width:52px!important;height:52px!important}body .cats button b{font-size:12px!important}}
+
+/* 2. Messenger: compact, never wider than the screen */
+body .messenger-home-sheet{width:100%!important;max-width:100%!important;overflow-x:hidden!important;background:var(--lx-ivory)!important;padding:14px 14px calc(16px + env(safe-area-inset-bottom))!important}
+body .messenger-home-sheet .close{top:calc(12px + env(safe-area-inset-top))!important;right:14px!important;width:36px!important;height:36px!important;background:#fff!important;border:1px solid var(--lx-line)!important;font-size:20px!important}
+body .chat-messenger-head{display:flex!important;align-items:center;gap:12px;padding:calc(env(safe-area-inset-top) + 2px) 48px 14px 0!important;margin:0 0 14px!important;border-bottom:1px solid var(--lx-line)}
+body .chat-welcome-icon{flex:0 0 44px;width:44px!important;height:44px!important;border-radius:14px!important;background:var(--lx-ink)!important;color:var(--lx-gold-soft)!important;display:grid;place-items:center}
+body .chat-welcome-icon svg{width:22px;height:22px}
+body .chat-welcome-kicker{color:var(--lx-gold)!important;font-size:9px!important;letter-spacing:.2em!important;font-weight:600}
+body .chat-messenger-head h2{font-family:var(--lx-serif);font-size:28px!important;font-weight:600;line-height:1.05;margin:2px 0 3px!important}
+body .chat-messenger-head p{font-size:12px!important;color:var(--lx-muted)!important;margin:0!important}
+body .chat-start-grid{display:grid!important;grid-template-columns:1fr 1fr!important;gap:10px!important;margin:0 0 18px!important}
+body .chat-start-card{display:flex!important;flex-direction:column!important;align-items:flex-start!important;gap:3px!important;height:auto!important;min-height:0!important;padding:14px 12px!important;border-radius:16px!important;background:#fff!important;border:1px solid var(--lx-line)!important;box-shadow:var(--lx-shadow)!important;text-align:left!important}
+body .chat-card-icon{width:36px!important;height:36px!important;border-radius:12px!important;margin:0 0 6px!important;display:grid!important;place-items:center;background:#f3ecdd!important;color:var(--lx-ink)!important}
+body .chat-card-icon svg{width:19px!important;height:19px!important}
+body .chat-start-card b{font-size:14px!important;color:var(--lx-ink)}
+body .chat-start-card small{font-size:11px!important;line-height:1.35!important;color:var(--lx-muted)!important}
+body .chat-inbox-row{display:flex!important;align-items:center;gap:12px;width:100%!important;max-width:100%!important;min-width:0;overflow:hidden;margin:0 0 8px!important;padding:11px 12px!important;background:#fff!important;border:1px solid var(--lx-line)!important;border-radius:16px!important;box-shadow:none!important;text-align:left}
+body .chat-inbox-row:active{background:#faf5ea!important}
+body .chat-inbox-row .chat-avatar,body .chat-avatar{flex:0 0 44px;width:44px!important;height:44px!important;border-radius:50%!important;background:var(--lx-ink)!important;color:var(--lx-gold-soft)!important;font-family:var(--lx-serif);font-weight:700;font-size:18px!important;display:grid;place-items:center;overflow:hidden}
+body .chat-inbox-copy{flex:1 1 auto;min-width:0;display:block!important}
+body .chat-inbox-copy b{display:block;font-size:14px!important;color:var(--lx-ink)!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body .chat-inbox-copy small{display:block!important;max-width:100%;margin-top:2px!important;font-size:12px!important;color:var(--lx-muted)!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body .chat-chevron{flex:0 0 auto;color:var(--lx-gold)!important;font-size:22px}
+body .chat-row-unread{border-color:var(--lx-gold)!important;background:#fffaf0!important}
+body .chat-row-badge{flex:0 0 auto;background:var(--lx-gold)!important;color:var(--lx-ink)!important;border-radius:999px;min-width:20px;height:20px;padding:0 6px;display:grid;place-items:center;font-size:11px;font-weight:700}
+body .chat-inbox-empty{padding:26px 12px;text-align:center;color:var(--lx-muted);border:1px dashed var(--lx-line);border-radius:16px;background:#fff}
+
+/* 3. Forms (vendor / login / account): solid full-screen so the home page never shows through above the keyboard */
+@media(max-width:760px){
+  html,body.basse-modal-open{background:var(--lx-ivory)!important}
+  body:has(.modal.show .form-sheet) main,body:has(.modal.show .form-sheet) .top,body:has(.modal.show .form-sheet) .bottom,
+  body:has(.modal.show .account-sheet) main,body:has(.modal.show .account-sheet) .top,body:has(.modal.show .account-sheet) .bottom{visibility:hidden!important}
+  body .modal.show:has(.form-sheet),body .modal.show:has(.account-sheet),body .modal.show:has(.messenger-home-sheet){background:var(--lx-ivory)!important;backdrop-filter:none!important;padding:0!important}
+  body .modal.show .form-sheet,body .modal.show .account-sheet{background:var(--lx-ivory)!important;border:0!important;border-radius:0!important;margin-top:0!important;width:100%!important;box-shadow:none!important;padding-bottom:calc(24px + env(safe-area-inset-bottom))!important}
+  body .modal.show .form-sheet h2{font-size:28px;line-height:1.1}
+}
