@@ -1,16 +1,16 @@
 /* BASSE luxury layer for Admin / Vendor / Driver portals. Loaded after style.css; colors and shape only. */
-:root{--n:#0a1331;--g:#b8935a;--bg:#f7f4ee;--line:#e8e1d3;--muted:#756f63;
---navy:#0a1331;--gold:#b8935a;--vendor-navy:#0a1331;--vendor-gold:#b8935a;--vendor-line:#e8e1d3;
---driver-navy:#0a1331;--driver-gold:#b8935a;--basse-navy:#0a1331;--basse-yellow:#b8935a;--basse-line:#e8e1d3;--basse-surface:#f7f4ee;
+:root{--n:#0a1331;--g:#1d55c9;--bg:#f4f6fb;--line:#e5e9f0;--muted:#667085;
+--navy:#0a1331;--gold:#1d55c9;--vendor-navy:#0a1331;--vendor-gold:#1d55c9;--vendor-line:#e5e9f0;
+--driver-navy:#0a1331;--driver-gold:#1d55c9;--basse-navy:#0a1331;--basse-yellow:#1d55c9;--basse-line:#e5e9f0;--basse-surface:#f4f6fb;
 --pl-serif:"Cormorant Garamond",Georgia,serif}
-body{background:#f7f4ee!important;-webkit-font-smoothing:antialiased;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
-h1,h2{font-family:var(--pl-serif);font-weight:600;letter-spacing:.005em}
-.card,.sheet,.panel{background:#fffdf9!important;border:1px solid #e8e1d3!important;border-radius:18px!important;box-shadow:0 1px 2px rgba(10,19,49,.04),0 14px 34px -22px rgba(10,19,49,.25)!important}
+body{background:#f4f6fb!important;-webkit-font-smoothing:antialiased;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+h1,h2{font-weight:700;letter-spacing:-.005em}
+.card,.sheet,.panel{background:#ffffff!important;border:1px solid #e5e9f0!important;border-radius:18px!important;box-shadow:0 1px 2px rgba(10,19,49,.04),0 14px 34px -22px rgba(10,19,49,.25)!important}
 button,.btn,.wide{border-radius:12px;transition:background .25s,color .25s,box-shadow .25s,transform .2s}
 button:not(.nav):not(.secondary):not(.close):hover{box-shadow:0 8px 20px -10px rgba(10,19,49,.5)}
-.nav.active,.nav:hover{background:rgba(184,147,90,.16)!important;color:#fff!important;box-shadow:inset 3px 0 0 #b8935a}
-input,select,textarea{border-radius:11px!important;border:1px solid #e1d9c8!important;background:#fff}
-input:focus,select:focus,textarea:focus{outline:none!important;border-color:#b8935a!important;box-shadow:0 0 0 4px rgba(184,147,90,.16)!important}
-table{border-collapse:separate;border-spacing:0}th{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#756f63}
-:focus-visible{outline:2px solid #b8935a!important;outline-offset:2px}
+.nav.active,.nav:hover{background:rgba(29,85,201,.16)!important;color:#fff!important;box-shadow:inset 3px 0 0 #1d55c9}
+input,select,textarea{border-radius:11px!important;border:1px solid #dfe4ec!important;background:#fff}
+input:focus,select:focus,textarea:focus{outline:none!important;border-color:#1d55c9!important;box-shadow:0 0 0 4px rgba(29,85,201,.16)!important}
+table{border-collapse:separate;border-spacing:0}th{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#667085}
+:focus-visible{outline:2px solid #1d55c9!important;outline-offset:2px}
 @media(prefers-reduced-motion:reduce){*{transition-duration:.01ms!important;animation-duration:.01ms!important}}
