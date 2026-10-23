@@ -14,8 +14,8 @@ function ensureLeaflet(){
     const loadLeaflet=()=>load("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",loadMapLibre,()=>load("https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js",loadMapLibre,finish));
     if(window.L){finish()}else loadLeaflet();
   });return leafletPromise
-}function mapMarker(label,type){return L.divIcon({className:`basse-map-marker ${type}-marker`,html:`<span></span><b>${label}</b>`,iconSize:[90,34],iconAnchor:[12,30]})}
-function mapTiles(map){
+}function mapMarker(label,type){return BasseMap.icon(type,label)}
+function mapTilesOld(map){
   // Standard OpenStreetMap tiles; no API key required.
   return L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,keepBuffer:3,updateWhenIdle:true,updateWhenZooming:false,attribution:"© OpenStreetMap contributors"}).addTo(map);
 }
@@ -46,29 +46,20 @@ function initMap(d){
     const clat=Number(d.customer_lat),clng=Number(d.customer_lng);
     const map=L.map(el,{zoomControl:true,scrollWheelZoom:false,dragging:true,doubleClickZoom:false,boxZoom:false,keyboard:true,preferCanvas:true,fadeAnimation:false,zoomAnimation:false,markerZoomAnimation:false}).setView([clat,clng],15);
     mapTileLayer(map);
-    const customer=L.marker([clat,clng],{icon:L.divIcon({className:"basse-map-marker customer-marker",html:"<span></span><b>Customer</b>",iconSize:[82,30],iconAnchor:[12,28],zIndexOffset:500})}).addTo(map).bindPopup(" Customer delivery location");
+    const customer=L.marker([clat,clng],{icon:mapMarker("Customer","customer")}).addTo(map).bindPopup(" Customer delivery location");
     let driver=null,line=null;let initialFit=true;
-    if(hasGpsCoordinate(d.lat)&&hasGpsCoordinate(d.lng)){driver=L.marker([Number(d.lat),Number(d.lng)],{icon:L.divIcon({className:"basse-map-marker driver-marker",html:"<span></span><b>Driver</b>",iconSize:[70,30],iconAnchor:[12,28],zIndexOffset:1000})}).addTo(map).bindPopup(" Driver");line=L.polyline([[Number(d.lat),Number(d.lng)],[clat,clng]],{weight:4,dashArray:"8 8"}).addTo(map);map.fitBounds(L.latLngBounds([[Number(d.lat),Number(d.lng)],[clat,clng]]),{padding:[25,25],maxZoom:16});initialFit=false}
-    maps[d.id]={map,customer,driver,line,clat,clng,initialFit};
+    if(hasGpsCoordinate(d.lat)&&hasGpsCoordinate(d.lng)){driver=L.marker([Number(d.lat),Number(d.lng)],{icon:mapMarker("Driver","driver")}).addTo(map).bindPopup(" Driver");line=L.polyline([[Number(d.lat),Number(d.lng)],[clat,clng]],BasseMap.lineStyle).addTo(map);map.fitBounds(L.latLngBounds([[Number(d.lat),Number(d.lng)],[clat,clng]]),{padding:[25,25],maxZoom:16});initialFit=false}
+    maps[d.id]={map,customer,driver,line,clat,clng,initialFit};BasseMap.set(map,{c:[clat,clng],d:driver?[Number(d.lat),Number(d.lng)]:null});
     const resize=()=>{try{map.invalidateSize({pan:false})}catch{}};
     map.whenReady(()=>{resize();setTimeout(resize,150);setTimeout(resize,500)});requestAnimationFrame(resize);
   }catch(e){console.warn("Driver Leaflet map init failed",e);delete maps[d.id];initFallbackMap(d)}
 }
-function syncMapData(d){const m=maps[d.id];if(!m||!window.L)return;requestAnimationFrame(()=>{try{m.map.invalidateSize({pan:false})}catch{}});const lat=Number(d.lat),lng=Number(d.lng);if(Number.isFinite(lat)&&Number.isFinite(lng)){if(!m.driver)m.driver=L.marker([lat,lng],{icon:L.divIcon({className:"basse-map-marker driver-marker",html:"<span></span><b>Driver</b>",iconSize:[70,30],iconAnchor:[12,28]})}).addTo(m.map).bindPopup(" Driver");else m.driver.setLatLng([lat,lng]);if(!m.line)m.line=L.polyline([[lat,lng],[m.clat,m.clng]],{weight:4,dashArray:"8 8"}).addTo(m.map);else m.line.setLatLngs([[lat,lng],[m.clat,m.clng]]);if(m.initialFit){m.map.fitBounds(L.latLngBounds([[lat,lng],[m.clat,m.clng]]),{padding:[25,25],maxZoom:16});m.initialFit=false}}}
+function syncMapData(d){const m=maps[d.id];if(!m||!window.L)return;requestAnimationFrame(()=>{try{m.map.invalidateSize({pan:false})}catch{}});const lat=Number(d.lat),lng=Number(d.lng);if(Number.isFinite(lat)&&Number.isFinite(lng)){BasseMap.set(m.map,{c:[m.clat,m.clng],d:[lat,lng]});if(!m.driver)m.driver=L.marker([lat,lng],{icon:mapMarker("Driver","driver")}).addTo(m.map).bindPopup(" Driver");else m.driver.setLatLng([lat,lng]);if(!m.line)m.line=L.polyline([[lat,lng],[m.clat,m.clng]],BasseMap.lineStyle).addTo(m.map);else m.line.setLatLngs([[lat,lng],[m.clat,m.clng]]);if(m.initialFit){m.map.fitBounds(L.latLngBounds([[lat,lng],[m.clat,m.clng]]),{padding:[25,25],maxZoom:16});m.initialFit=false}}}
 function syncAllMaps(ds){const ids=new Set(ds.map(d=>String(d.id)));Object.keys(maps).forEach(k=>{if(!ids.has(String(k))){try{maps[k].map.remove()}catch{}delete maps[k]}});ds.forEach(d=>{if(hasGpsCoordinate(d.customer_lat)&&hasGpsCoordinate(d.customer_lng)){if(maps[d.id])syncMapData(d);else initMap(d)}})}
 function ensureDriverMaps(){if(!window.L)return;syncAllMaps(deliveries);Object.values(maps).forEach(m=>{try{m.map.invalidateSize({pan:false})}catch{}})}
-function mapTileLayer(map){
-  // Professional high-contrast Voyager basemap; no API key required.
-  const providers=[
-    ["https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",'© OpenStreetMap contributors © CARTO'],
-    ["https://tile.openstreetmap.org/{z}/{x}/{y}.png",'© OpenStreetMap contributors']
-  ];
-  let layer=L.tileLayer(providers[0][0],{maxZoom:19,keepBuffer:3,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[0][1],crossOrigin:true}).addTo(map);
-  let switched=false;layer.on("tileerror",()=>{if(switched)return;switched=true;try{map.removeLayer(layer)}catch{}layer=L.tileLayer(providers[1][0],{maxZoom:19,keepBuffer:3,updateWhenIdle:true,updateWhenZooming:false,attribution:providers[1][1],crossOrigin:true}).addTo(map)});
-  return layer;
-}
+function mapTileLayer(map){return BasseMap.tiles(map)}
 
-function updateDriverMap(id,lat,lng){if(!window.L){updateFallbackMap(id,lat,lng);return}const m=maps[id];if(!m)return;if(!m.driver)m.driver=L.marker([lat,lng],{icon:L.divIcon({className:"basse-map-marker driver-marker",html:"<span></span><b>Driver</b>",iconSize:[70,30],iconAnchor:[12,28]})}).addTo(m.map).bindPopup(" Driver");else m.driver.setLatLng([lat,lng]);if(!m.line)m.line=L.polyline([[lat,lng],[m.clat,m.clng]],{weight:4,dashArray:"8 8"}).addTo(m.map);else m.line.setLatLngs([[lat,lng],[m.clat,m.clng]]);m.initialFit=false}
+function updateDriverMap(id,lat,lng){if(!window.L){updateFallbackMap(id,lat,lng);return}const m=maps[id];if(!m)return;BasseMap.set(m.map,{c:[m.clat,m.clng],d:[lat,lng]});if(!m.driver)m.driver=L.marker([lat,lng],{icon:mapMarker("Driver","driver")}).addTo(m.map).bindPopup(" Driver");else m.driver.setLatLng([lat,lng]);if(!m.line)m.line=L.polyline([[lat,lng],[m.clat,m.clng]],BasseMap.lineStyle).addTo(m.map);else m.line.setLatLngs([[lat,lng],[m.clat,m.clng]]);m.initialFit=false}
 
 async function setStatus(id,status){try{await api("/api/driver/deliveries/"+id+"/status",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status})});if(status==="DELIVERED")stopGps();lastStructure="";await load();requestAnimationFrame(()=>setTimeout(ensureDriverMaps,100));if(status==="ON_THE_WAY")setTimeout(()=>{ensureDriverMaps();startGps(id)},180)}catch(e){alert(e.message)}}
 function startGps(id){if(!navigator.geolocation){alert("This phone does not support GPS.");return}stopGps();lastGpsSentAt=0;lastGpsSent={lat:null,lng:null};$("gpsState").textContent="Getting fresh GPS location…";activeGps=navigator.geolocation.watchPosition(async p=>{const lat=p.coords.latitude,lng=p.coords.longitude,accuracy=Number(p.coords.accuracy||0);const inGambia=lat>=13.02&&lat<=13.90&&lng>=-16.90&&lng<=-13.70;if(!inGambia){$("gpsState").textContent="GPS looks incorrect/outside The Gambia • enable Precise Location";return}if(accuracy>1500){$("gpsState").textContent=`GPS accuracy is weak (±${Math.round(accuracy)}m) • waiting for a better reading…`;return}updateDriverMap(id,lat,lng);const now=Date.now();const moved=lastGpsSent.lat===null||Math.abs(lat-lastGpsSent.lat)>0.00002||Math.abs(lng-lastGpsSent.lng)>0.00002;if(now-lastGpsSentAt<3000&&!moved)return;lastGpsSentAt=now;lastGpsSent={lat,lng};try{await api("/api/driver/deliveries/"+id+"/location",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({lat,lng,accuracy})});$("gpsState").textContent=`Location sharing is ON • GPS ±${Math.round(accuracy||0)}m`;}catch(e){$("gpsState").textContent=e.message||"GPS update failed"}},e=>{$("gpsState").textContent="GPS permission/location unavailable • enable Precise Location";},{enableHighAccuracy:true,maximumAge:0,timeout:20000})}

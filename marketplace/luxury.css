@@ -253,3 +253,30 @@ body .pd-price{font-size:30px!important;font-weight:800!important;color:var(--lx
 .pd-actions button:disabled{opacity:.5;cursor:not-allowed}
 .pd-actions button{white-space:nowrap}
 @media(max-width:430px){.pd-chat span{display:none}.pd-chat{width:52px;padding:0}.pd-actions button{font-size:13px;padding:0 12px}}
+
+/* ===== v85: Track Order (stepper + delivered card from the Uiverse snippets) ===== */
+body .tracking-sheet h2,body .tracking-sheet h3{font-family:var(--lx-sans)!important}
+body .tracking-sheet .live-map-wrap{margin:14px 0 12px}
+body .tracking-location-actions{display:grid!important;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0!important}
+body .tracking-location-actions button{min-height:48px;height:auto;padding:8px 10px;border-radius:14px;font-size:11.5px;font-weight:700;letter-spacing:.05em;line-height:1.25;white-space:normal;cursor:pointer}
+body .live-location-btn{background:var(--lx-blue)!important;color:#fff!important;border:0!important}
+body .live-location-refresh{background:#fff!important;color:var(--lx-ink)!important;border:1.5px solid var(--lx-ink)!important}
+body .stepper-box{display:block!important;background:#fff;border:1px solid var(--lx-line);border-radius:16px;padding:18px 16px;margin-top:12px}
+.stepper-step{display:flex;position:relative;margin-bottom:22px}.stepper-step:last-child{margin-bottom:0}
+.stepper-line{position:absolute;left:15px;top:34px;bottom:-22px;width:2px;background:#e2e8f0;z-index:1}
+.stepper-step:last-child .stepper-line{display:none}.stepper-completed .stepper-line{background:#0f172a}
+.stepper-circle{flex:0 0 32px;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-right:14px;z-index:2;font-size:13px;font-weight:700;background:#fff}
+.stepper-completed .stepper-circle{background:#0f172a;color:#fff}
+.stepper-active .stepper-circle{border:2px solid #0f172a;color:#0f172a;box-shadow:0 0 0 4px rgba(15,23,42,.08)}
+.stepper-pending .stepper-circle{border:2px solid #e2e8f0;color:#94a3b8}
+.stepper-content{flex:1;min-width:0;padding-top:3px}
+.stepper-title{font-weight:600;font-size:14px;margin-bottom:3px}
+.stepper-completed .stepper-title,.stepper-active .stepper-title{color:#0f172a}.stepper-pending .stepper-title{color:#94a3b8}
+.stepper-status{font-size:12px;display:inline-block;padding:2px 9px;border-radius:12px;margin-top:2px}
+.stepper-completed .stepper-status{background:#dcfce7;color:#166534}.stepper-active .stepper-status{background:#dbeafe;color:#1d4ed8}.stepper-pending .stepper-status{background:#f1f5f9;color:#64748b}
+.delivered-card{text-align:center;background:#fff;border:1px solid var(--lx-line);border-radius:16px;padding:20px 16px;margin-top:12px;box-shadow:0 20px 25px -18px rgba(10,19,49,.25)}
+.dc-image{display:flex;margin:0 auto;width:56px;height:56px;border-radius:50%;background:#e2feee;color:#12b76a;align-items:center;justify-content:center;animation:dcPulse .7s ease-in-out alternate-reverse infinite}
+.dc-title{margin-top:12px;color:#066e29;font-size:17px;font-weight:700}.dc-msg{margin:6px 0 0;color:#595b5f;font-size:13.5px;line-height:1.45}
+@keyframes dcPulse{from{transform:scale(1)}to{transform:scale(1.09)}}
+@media(prefers-reduced-motion:reduce){.dc-image{animation:none}}
+body .tracking-sheet .checkout-head{margin-bottom:14px}

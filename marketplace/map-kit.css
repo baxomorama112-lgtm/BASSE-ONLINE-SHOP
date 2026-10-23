@@ -1,0 +1,22 @@
+/* BASSE map kit styles: identical on customer, driver and admin */
+.driver-map,.admin-live-map,.customer-map{height:clamp(280px,46vh,420px)!important;min-height:280px;width:100%;border-radius:18px;position:relative}
+.bm-map{border-radius:18px;border:1px solid #e5e9f0;background:#e9edf3;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden;z-index:0}
+.bm-map .leaflet-tile{filter:none!important}
+.bm-map .leaflet-control-zoom{border:0!important;border-radius:12px;overflow:hidden;box-shadow:0 8px 20px -8px rgba(10,19,49,.4)}
+.bm-map .leaflet-control-zoom a{width:36px;height:36px;line-height:36px;font-size:20px;font-weight:500;color:#0a1331;background:#fff;border-bottom:1px solid #e5e9f0}
+.bm-map .leaflet-control-zoom a:last-child{border-bottom:0}.bm-map .leaflet-control-zoom a:hover{background:#f3f5f9}
+.bm-map .leaflet-control-attribution{font-size:10px;background:rgba(255,255,255,.88);border-radius:8px 0 0 0;color:#475467}
+.bm-hud{margin:10px!important}
+.bm-dist{background:#0a1331;color:#fff;font:700 12px/1 Inter,system-ui,sans-serif;padding:9px 13px;border-radius:999px;box-shadow:0 8px 20px -8px rgba(10,19,49,.6);white-space:nowrap}
+.bm-dist[hidden]{display:none}
+.bm-fit{width:36px;height:36px;margin:0 10px 26px 0!important;border:0;border-radius:12px;background:#fff;color:#0a1331;display:grid;place-items:center;cursor:pointer;box-shadow:0 8px 20px -8px rgba(10,19,49,.4);padding:0}
+.bm-fit:hover{background:#f3f5f9}.bm-fit svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.bm-icon{position:absolute}
+.bm-dot{position:absolute;left:-10px;top:-10px;width:20px;height:20px;border-radius:50%;border:3px solid #fff;box-shadow:0 3px 10px rgba(10,19,49,.45);box-sizing:border-box}
+.bm-customer .bm-dot{background:#1d55c9}
+.bm-driver .bm-dot{background:#12b76a;animation:bmPulse 1.8s ease-out infinite}
+.bm-tag{position:absolute;left:14px;top:-14px;white-space:nowrap;padding:5px 11px;border-radius:999px;background:#fff;color:#0a1331;font:700 12px/1 Inter,system-ui,sans-serif;border:1px solid #e5e9f0;box-shadow:0 4px 12px -4px rgba(10,19,49,.35)}
+.bm-driver .bm-tag{background:#0a1331;color:#fff;border-color:#0a1331}
+@keyframes bmPulse{0%{box-shadow:0 0 0 0 rgba(18,183,106,.55),0 3px 10px rgba(10,19,49,.45)}100%{box-shadow:0 0 0 18px rgba(18,183,106,0),0 3px 10px rgba(10,19,49,.45)}}
+.map-placeholder{display:grid;place-items:center;height:100%;text-align:center;color:#667085;font-size:13px;gap:4px;padding:20px;background:#f3f5f9;border-radius:18px}
+@media(prefers-reduced-motion:reduce){.bm-driver .bm-dot{animation:none}}

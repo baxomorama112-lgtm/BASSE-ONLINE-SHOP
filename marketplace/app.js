@@ -411,7 +411,11 @@ async function refreshTracking(id,initial){
     const statusEl=$("trackingStatus"),productEl=$("trackingProduct"),locationEl=$("trackingLocation"),timelineEl=$("trackingTimeline"),noteEl=$("trackingNote");
     if(!statusEl||!productEl||!locationEl||!timelineEl||!noteEl)return;
     statusEl.textContent=status.replaceAll("_"," ");productEl.textContent=`${d.order.product_name} × ${d.order.quantity}`;locationEl.textContent=(d.order.location||"Delivery location pending")+(hasCustomer?" ·  GPS location saved":"");
-    timelineEl.innerHTML=steps.map((x,i)=>`<div class="timeline-step ${i<=idx?"done":""}"><span>${i<=idx?"":"•"}</span><b>${x.replaceAll("_"," ")}</b></div>`).join("");
+    const STEP_LABEL={NEW:"Order placed",READY:"Packed & ready",ACCEPTED:"Driver accepted",PICKED_UP:"Picked up",ON_THE_WAY:"On the way",ARRIVED:"Arrived",DELIVERED:"Delivered"};
+    timelineEl.className="stepper-box";
+    timelineEl.innerHTML=steps.map((x,i)=>{const st=(i<idx||(status==="DELIVERED"&&i===idx))?"completed":(i===idx?"active":"pending");const label=st==="completed"?"Completed":(st==="active"?"In progress":"Pending");return `<div class="stepper-step stepper-${st}"><div class="stepper-line"></div><div class="stepper-circle">${st==="completed"?'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>':(i+1)}</div><div class="stepper-content"><div class="stepper-title">${STEP_LABEL[x]||x}</div><span class="stepper-status">${label}</span></div></div>`}).join("");
+    const oldDone=document.getElementById("deliveredCard");if(oldDone)oldDone.remove();
+    if(status==="DELIVERED")timelineEl.insertAdjacentHTML("beforebegin",`<div class="delivered-card" id="deliveredCard"><div class="dc-image"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><div class="dc-title">Order delivered</div><p class="dc-msg">Thank you for shopping with BASSE ONLINE SHOP.</p></div>`);
     const distance=hasCustomer&&hasDriver?trackingDistanceKm(Number(d.delivery.lat),Number(d.delivery.lng),Number(d.order.customer_lat),Number(d.order.customer_lng)):null;
     noteEl.innerHTML=hasDriver?`Driver: <b>${esc(d.delivery.driver_name||"Assigned driver")}</b> · ${distance!==null?`<b>${distance<1?Math.round(distance*1000)+" m":distance.toFixed(1)+" km"}</b> away · `:""}${d.delivery.last_seen?`last update ${new Date(d.delivery.last_seen).toLocaleTimeString()}`:"live"}`:(d.delivery?.driver_name?`Driver: <b>${esc(d.delivery.driver_name)}</b> · Waiting for GPS. Keep this screen open and tap the live-location button to refresh.`:"A driver will be assigned after your order is confirmed.");
     if(window.L)loadTrackingMap(d.order.customer_lat,d.order.customer_lng,d.delivery?.lat,d.delivery?.lng);
@@ -420,15 +424,9 @@ async function refreshTracking(id,initial){
   finally{trackingRefreshing=false}
 }
 function mapMarker(label,type){
-  return L.divIcon({className:`basse-map-marker ${type}-marker`,html:`<span></span><b>${label}</b>`,iconSize:[90,34],iconAnchor:[12,30]});
+  return BasseMap.icon(type,label);
 }
-function mapTiles(map){
-  // OpenStreetMap first: CARTO may show an API-key watermark without firing tileerror.
-  return L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
-    maxZoom:19,keepBuffer:2,updateWhenIdle:true,updateWhenZooming:false,
-    attribution:"© OpenStreetMap contributors",crossOrigin:true
-  }).addTo(map);
-}
+function mapTiles(map){return BasseMap.tiles(map)}
 function renderTrackingMapContent(customerLat,customerLng,driverLat,driverLng){
   const m=trackingMap;if(!m)return;
   const clat=Number(customerLat),clng=Number(customerLng),dlat=Number(driverLat),dlng=Number(driverLng);
@@ -443,9 +441,10 @@ function renderTrackingMapContent(customerLat,customerLng,driverLat,driverLng){
   }
   if(hc&&hd){
     const points=[[dlat,dlng],[clat,clng]];
-    if(!m.__line)m.__line=L.polyline(points,{weight:4,dashArray:"9 8"}).addTo(m);else m.__line.setLatLngs(points);
+    if(!m.__line)m.__line=L.polyline(points,BasseMap.lineStyle).addTo(m);else m.__line.setLatLngs(points);
     if(m.__initialFit){m.fitBounds(L.latLngBounds(points),{padding:[25,25],maxZoom:16});m.__initialFit=false}
   }else if(hc&&m.__initialFit){m.setView([clat,clng],15);m.__initialFit=false}
+  BasseMap.set(m,{c:hc?[clat,clng]:null,d:hd?[dlat,dlng]:null});
   requestAnimationFrame(()=>{try{m.invalidateSize({pan:false})}catch{}});
 }
 function showLiveDriverLocation(){
@@ -491,18 +490,19 @@ function loadTrackingMap(customerLat,customerLng,driverLat,driverLng){
   }
   const m=trackingMap;
   if(hasCustomer){
-    if(!m.__customer)m.__customer=L.marker([clat,clng],{icon:L.divIcon({className:"basse-map-marker customer-marker",html:"<span></span><b>Customer</b>",iconSize:[82,30],iconAnchor:[12,28],zIndexOffset:500})}).addTo(m).bindPopup(" Your delivery location");
+    if(!m.__customer)m.__customer=L.marker([clat,clng],{icon:mapMarker("Customer","customer")}).addTo(m).bindPopup(" Your delivery location");
     else m.__customer.setLatLng([clat,clng]);
   }
   if(hasDriver){
-    if(!m.__driver)m.__driver=L.marker([dlat,dlng],{icon:L.divIcon({className:"basse-map-marker driver-marker",html:"<span></span><b>Driver</b>",iconSize:[70,30],iconAnchor:[12,28],zIndexOffset:1200})}).addTo(m).bindPopup(" Driver — live");
+    if(!m.__driver)m.__driver=L.marker([dlat,dlng],{icon:mapMarker("Driver","driver")}).addTo(m).bindPopup(" Driver — live");
     else m.__driver.setLatLng([dlat,dlng]);
   }
   if(hasCustomer&&hasDriver){
     const points=[[dlat,dlng],[clat,clng]];
-    if(!m.__line)m.__line=L.polyline(points,{weight:4,dashArray:"9 8"}).addTo(m);else m.__line.setLatLngs(points);
+    if(!m.__line)m.__line=L.polyline(points,BasseMap.lineStyle).addTo(m);else m.__line.setLatLngs(points);
     if(m.__initialFit){m.fitBounds(L.latLngBounds(points),{padding:[25,25],maxZoom:16});m.__initialFit=false}
   }else if(hasCustomer&&m.__initialFit){m.setView([clat,clng],15);m.__initialFit=false}
+  BasseMap.set(m,{c:hasCustomer?[clat,clng]:null,d:hasDriver?[dlat,dlng]:null});
   requestAnimationFrame(()=>{try{m.invalidateSize({pan:false})}catch(e){}});
 }
 function stopTrackingPolling(){
